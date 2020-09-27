@@ -22,3 +22,7 @@ A tool for generating keys, addresses, and converting between various formats on
 ### WIF
 
 - Generate WIF
+
+### Tx
+
+- Get Transaction by ID (bob, raw, json and bmap formats available)

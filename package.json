@@ -2,13 +2,19 @@
   "name": "bitcoin",
   "displayName": "Bitcoin",
   "description": "Tools for working with Bitcoin (BSV)",
-  "version": "0.0.1",
+  "publisher": "Satchmo",
+  "version": "0.0.2",
+  "icon": "images/icon.png",
   "engines": {
     "vscode": "^1.49.0"
   },
   "categories": [
     "Other"
   ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/rohenaz/vscode-bitcoin.git"
+  },
   "activationEvents": [
     "onCommand:bitcoin.generatePublicKey",
     "onCommand:bitcoin.generatePrivateKey",
@@ -16,11 +22,24 @@
     "onCommand:bitcoin.addressFromPublicKey",
     "onCommand:bitcoin.addressFromPrivateKey",
     "onCommand:bitcoin.addressFromWIF",
+    "onCommand:bitcoin.getTx",
     "onCommand:bitcoin.publicKeyFromPrivateKey"
   ],
   "main": "./out/extension.js",
   "contributes": {
     "commands": [
+      {
+        "command": "bitcoin.addressFromWIF",
+        "title": "Address from WIF"
+      },
+      {
+        "command": "bitcoin.addressFromPublicKey",
+        "title": "Address from Public Key"
+      },
+      {
+        "command": "bitcoin.addressFromPrivateKey",
+        "title": "Address From Private Key"
+      },
       {
         "command": "bitcoin.generatePublicKey",
         "title": "Generate Public Key"
@@ -34,16 +53,8 @@
         "title": "Generate WIF"
       },
       {
-        "command": "bitcoin.addressFromWIF",
-        "title": "Address from WIF"
-      },
-      {
-        "command": "bitcoin.addressFromPublicKey",
-        "title": "Address from Public Key"
-      },
-      {
-        "command": "bitcoin.addressFromPrivateKey",
-        "title": "Address From Private Key"
+        "command": "bitcoin.getTx",
+        "title": "Fetch a Tx by Transaction ID"
       },
       {
         "command": "bitcoin.publicKeyFromPrivateKey",
@@ -73,6 +84,8 @@
     "vscode-test": "^1.4.0"
   },
   "dependencies": {
-    "bsv": "^2.0.0-beta.42"
+    "@types/node-fetch": "^2.5.7",
+    "bsv": "^2.0.0-beta.42",
+    "node-fetch": "^2.6.1"
   }
 }

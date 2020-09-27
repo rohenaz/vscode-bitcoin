@@ -1,6 +1,7 @@
 // The module 'vscode' contains the VS Code extensibility API
 // Import the module and reference it with the alias vscode in your code below
 import * as bsv from "bsv";
+import fetch from "node-fetch";
 import * as vscode from "vscode";
 // this method is called when your extension is activated
 // your extension is activated the very first time the command is executed
@@ -81,6 +82,58 @@ export function activate(context: vscode.ExtensionContext) {
         }
       }
     )
+  );
+
+  disposables.push(
+    vscode.commands.registerCommand("bitcoin.getTx", async () => {
+      const txId = await vscode.window.showInputBox({
+        value: "",
+        placeHolder:
+          "Ex: bdda96e3b09723135ecbe02e625b49cd5c4e273e3752710941f8598ecc4d9bfe",
+        validateInput: (text) => {
+          return text.length === 64 ? null : "Invalid Tx ID!";
+        },
+      });
+
+      const mode = await vscode.window.showInputBox({
+        value: "bmap",
+        placeHolder: "raw | bob | bmap | json ",
+        validateInput: (text) => {
+          return text === "raw" ||
+            text === "bob" ||
+            text === "bmap" ||
+            text === "json"
+            ? null
+            : "Invalid mode!";
+        },
+      });
+
+      try {
+        let res = await fetch("https://bmapjs.com/tx/" + txId + "/" + mode);
+        switch (mode) {
+          case "bob":
+          case "json":
+          case "bmap":
+            let json = await res.json();
+            vscode.env.clipboard.writeText(JSON.stringify(json, null, 2));
+
+            // Display a message box to the user
+            vscode.window.showInformationMessage(
+              "Copied! " + JSON.stringify(json)
+            );
+            break;
+          case "raw":
+            let text = await res.text();
+            vscode.env.clipboard.writeText(text);
+
+            // Display a message box to the user
+            vscode.window.showInformationMessage("Copied! " + text);
+            break;
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    })
   );
 
   disposables.push(
