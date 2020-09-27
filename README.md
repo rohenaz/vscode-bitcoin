@@ -2,6 +2,8 @@
 
 This extention provices convenience functions for working with Bitcoin addresses, transactions, and keys.
 
+![](./images/screencap.gif)
+
 ## Features
 
 ### Address
