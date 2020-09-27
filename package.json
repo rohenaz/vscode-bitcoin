@@ -3,7 +3,7 @@
   "displayName": "Bitcoin",
   "description": "Tools for working with Bitcoin (BSV)",
   "publisher": "Satchmo",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "icon": "images/icon.png",
   "engines": {
     "vscode": "^1.49.0"
@@ -27,7 +27,8 @@
   ],
   "main": "./dist/extension",
   "contributes": {
-    "commands": [{
+    "commands": [
+      {
         "command": "bitcoin.addressFromWIF",
         "title": "Address from WIF"
       },
