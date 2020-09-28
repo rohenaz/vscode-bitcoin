@@ -15,6 +15,20 @@ export function activate(context: vscode.ExtensionContext) {
   // The commandId parameter must match the command field in package.json
   let disposables = [];
 
+  const myScheme = "vsc-bitcoin";
+  const myProvider = new (class implements vscode.TextDocumentContentProvider {
+    // emitter and its event
+    onDidChangeEmitter = new vscode.EventEmitter<vscode.Uri>();
+    onDidChange = this.onDidChangeEmitter.event;
+
+    provideTextDocumentContent(uri: vscode.Uri): string {
+      return decodeURIComponent(uri.toString().slice(12));
+    }
+  })();
+  disposables.push(
+    vscode.workspace.registerTextDocumentContentProvider(myScheme, myProvider)
+  );
+
   disposables.push(
     vscode.commands.registerCommand("bitcoin.generatePublicKey", () => {
       let privKey = bsv.PrivKey.fromRandom();
@@ -110,24 +124,26 @@ export function activate(context: vscode.ExtensionContext) {
 
       try {
         let res = await fetch("https://bmapjs.com/tx/" + txId + "/" + mode);
+        let uri;
+        let doc;
         switch (mode) {
           case "bob":
           case "json":
           case "bmap":
             let json = await res.json();
-            vscode.env.clipboard.writeText(JSON.stringify(json, null, 2));
 
-            // Display a message box to the user
-            vscode.window.showInformationMessage(
-              "Copied! " + JSON.stringify(json)
+            uri = vscode.Uri.parse(
+              "vsc-bitcoin:" + JSON.stringify(json, null, 2)
             );
+            doc = await vscode.workspace.openTextDocument(uri); // calls back into the provider
+            await vscode.window.showTextDocument(doc, { preview: false });
             break;
           case "raw":
             let text = await res.text();
-            vscode.env.clipboard.writeText(text);
 
-            // Display a message box to the user
-            vscode.window.showInformationMessage("Copied! " + text);
+            uri = vscode.Uri.parse("vsc-bitcoin:" + text);
+            doc = await vscode.workspace.openTextDocument(uri); // calls back into the provider
+            await vscode.window.showTextDocument(doc, { preview: false });
             break;
         }
       } catch (e) {
