@@ -1,8 +1,10 @@
 # bitcoin README
 
-This extention provices convenience functions for working with Bitcoin addresses, transactions, and keys.
+This extention provides convenience functions for working with Bitcoin addresses, transactions, and keys.
 
-![](./images/screencap.gif)
+![](./images/address_from_private_key.gif)
+
+![](./images/bmap_from_txid.gif)
 
 ## Features
 
