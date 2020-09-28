@@ -3,7 +3,7 @@
   "displayName": "Bitcoin",
   "description": "Tools for working with Bitcoin (BSV)",
   "publisher": "Satchmo",
-  "version": "0.0.9",
+  "version": "0.0.10",
   "icon": "images/icon.png",
   "engines": {
     "vscode": "^1.49.0"
