@@ -43,6 +43,10 @@ This extention provides convenience functions for working with Bitcoin addresses
 
 - Get Transaction by ID (bob, raw, json and bmap formats available)
 
+### Utxo
+
+- Get UTXOs for Address
+
 ## Requirements
 
 none
@@ -59,19 +63,15 @@ none
 
 Users appreciate release notes as you update your extension.
 
-### 0.0.1
-
-Initial release
-
-### 0.0.11
-
-Added generate mnemonic, xPub, xPriv. Address from xPriv or xPub, and xPriv from mnemonic.
-
 ---
 
 ### For more information
 
 - [Bmap](http://bmapjs.com)
 - [Bitcoin SV](https://bitcoinsv.com/)
+
+### Network Dependencies
+
+- [Whats on chain](https://whatsonchain.com)
 
 **Enjoy!**

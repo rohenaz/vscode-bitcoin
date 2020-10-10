@@ -3,7 +3,7 @@
   "displayName": "Bitcoin",
   "description": "Tools for working with Bitcoin (BSV)",
   "publisher": "Satchmo",
-  "version": "0.0.11",
+  "version": "0.0.12",
   "icon": "images/icon.png",
   "engines": {
     "vscode": "^1.49.0"
@@ -30,7 +30,8 @@
     "onCommand:bitcoin.publicKeyFromPrivateKey",
     "onCommand:bitcoin.xPubFromxPriv",
     "onCommand:bitcoin.generateMnemonic",
-    "onCommand:bitcoin.extendedPrivateKeyFromMnemonic"
+    "onCommand:bitcoin.extendedPrivateKeyFromMnemonic",
+    "onCommand:bitcoin.getUtxosForAddress"
   ],
   "main": "./dist/extension",
   "contributes": {
@@ -66,6 +67,10 @@
       {
         "command": "bitcoin.generateHDPublicKey",
         "title": "Generate Extended Public Key"
+      },
+      {
+        "command": "bitcoin.getUtxosForAddress",
+        "title": "Get UTXOs for Address"
       },
       {
         "command": "bitcoin.xPubFromxPriv",

@@ -311,6 +311,48 @@ export function activate(context: vscode.ExtensionContext) {
   );
 
   disposables.push(
+    vscode.commands.registerCommand("bitcoin.getUtxosForAddress", async () => {
+      const address = await vscode.window.showInputBox({
+        value: "",
+        placeHolder: "Ex: 1DZFfpLerFc2GWA1UncMoQ4oCkWkWJdHVH",
+        validateInput: (text) => {
+          // ToDo: Validate address
+          return null;
+        },
+      });
+
+      try {
+        // https://api.whatsonchain.com/v1/bsv/<network>/address/<address>/unspent
+        let res = await fetch(
+          "https://api.whatsonchain.com/v1/bsv/main/address/" +
+            address +
+            "/unspent"
+        );
+
+        let txt = "";
+        let json = await res.json();
+
+        // This one opens a document in a new tab as an untitled editable doc
+        txt = JSON.stringify(json, null, 2);
+
+        vscode.workspace
+          .openTextDocument({
+            language: "text",
+            content: txt,
+          })
+          .then((doc) => {
+            vscode.window.showTextDocument(doc, {
+              preview: false,
+              preserveFocus: true,
+            });
+          });
+      } catch (e) {
+        console.error(e);
+      }
+    })
+  );
+
+  disposables.push(
     vscode.commands.registerCommand(
       "bitcoin.addressFromPrivateKey",
       async () => {
