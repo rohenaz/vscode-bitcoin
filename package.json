@@ -3,7 +3,7 @@
   "displayName": "Bitcoin",
   "description": "Tools for working with Bitcoin (BSV)",
   "publisher": "Satchmo",
-  "version": "0.0.10",
+  "version": "0.0.11",
   "icon": "images/icon.png",
   "engines": {
     "vscode": "^1.49.0"
@@ -16,18 +16,26 @@
     "url": "https://github.com/rohenaz/vscode-bitcoin.git"
   },
   "activationEvents": [
+    "onCommand:bitcoin.generateHDPublicKey",
+    "onCommand:bitcoin.generateHDPrivateKey",
     "onCommand:bitcoin.generatePublicKey",
     "onCommand:bitcoin.generatePrivateKey",
     "onCommand:bitcoin.generateWIF",
     "onCommand:bitcoin.addressFromPublicKey",
     "onCommand:bitcoin.addressFromPrivateKey",
+    "onCommand:bitcoin.addressFromHDPublicKey",
+    "onCommand:bitcoin.addressFromHDPrivateKey",
     "onCommand:bitcoin.addressFromWIF",
     "onCommand:bitcoin.getTx",
-    "onCommand:bitcoin.publicKeyFromPrivateKey"
+    "onCommand:bitcoin.publicKeyFromPrivateKey",
+    "onCommand:bitcoin.xPubFromxPriv",
+    "onCommand:bitcoin.generateMnemonic",
+    "onCommand:bitcoin.extendedPrivateKeyFromMnemonic"
   ],
   "main": "./dist/extension",
   "contributes": {
-    "commands": [{
+    "commands": [
+      {
         "command": "bitcoin.addressFromWIF",
         "title": "Address from WIF"
       },
@@ -40,12 +48,40 @@
         "title": "Address From Private Key"
       },
       {
+        "command": "bitcoin.addressFromHDPublicKey",
+        "title": "Address From Extended Public Key"
+      },
+      {
+        "command": "bitcoin.addressFromHDPrivateKey",
+        "title": "Address From Extended Private Key"
+      },
+      {
         "command": "bitcoin.generatePublicKey",
         "title": "Generate Public Key"
       },
       {
         "command": "bitcoin.generatePrivateKey",
         "title": "Generate Private Key"
+      },
+      {
+        "command": "bitcoin.generateHDPublicKey",
+        "title": "Generate Extended Public Key"
+      },
+      {
+        "command": "bitcoin.xPubFromxPriv",
+        "title": "Extended Public Key from Extended Private Key"
+      },
+      {
+        "command": "bitcoin.extendedPrivateKeyFromMnemonic",
+        "title": "Extended Private Key from Mnemonic"
+      },
+      {
+        "command": "bitcoin.generateHDPrivateKey",
+        "title": "Generate ExtendedPrivate Key"
+      },
+      {
+        "command": "bitcoin.generateMnemonic",
+        "title": "Generate Mnemonic"
       },
       {
         "command": "bitcoin.generateWIF",

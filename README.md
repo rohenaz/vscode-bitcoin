@@ -13,11 +13,23 @@ This extention provides convenience functions for working with Bitcoin addresses
 - Address from Private Key
 - Address from Public Key
 - Address from WIF
+- Derive Address from Extended Public Key
+- Derive Address from Extended Private Key
 
 ### Public Key
 
 - Public Key from Private Key
 - Generate Public Key
+
+### Mnemonic
+
+- Generate Mnemonic
+
+### Extended (HD) Keys
+
+- Generate Extended Public Key
+- Extended Public Key from Extended Private Key
+- Extended Private Key From Mnemonic
 
 ### Private
 
@@ -50,6 +62,10 @@ Users appreciate release notes as you update your extension.
 ### 0.0.1
 
 Initial release
+
+### 0.0.11
+
+Added generate mnemonic, xPub, xPriv. Address from xPriv or xPub, and xPriv from mnemonic.
 
 ---
 

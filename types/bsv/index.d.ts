@@ -230,42 +230,75 @@ declare module "bsv" {
     static fromObject(obj: object): Message;
   }
 
-  export class Mnemonic {
-    constructor(data: string | Array<string>, wordList?: Array<string>);
+  export class Bip39 {
+    constructor(
+      mnemonic?: string,
+      seed?: string | Array<string>,
+      wordList?: Array<string>
+    );
 
     readonly wordList: Array<string>;
     readonly phrase: string;
 
     toSeed(passphrase?: string): Buffer;
-    toHDPrivKey(passphrase: string, network: string | number): HDPrivKey;
+    toBip32(passphrase: string, network: string | number): Bip32;
     toString(): string;
     inspect(): string;
 
-    static fromRandom(wordlist?: Array<string>): Mnemonic;
-    static fromString(mnemonic: String, wordList?: Array<string>): Mnemonic;
+    static fromRandom(wordlist?: Array<string>): Bip39;
+    static fromString(mnemonic: String, wordList?: Array<string>): Bip39;
     static isValid(mnemonic: String, wordList?: Array<string>): boolean;
-    static fromSeed(seed: Buffer, wordlist: Array<string>): Mnemonic;
+    static fromSeed(seed: Buffer, wordlist: Array<string>): Bip39;
   }
 
-  export class HDPrivKey {
+  export class Bip32 {
     constructor(data?: string | Buffer | object);
-
-    readonly hdPubKey: HDPubKey;
+    // readonly Bip32: Bip32;
 
     readonly xprivkey: Buffer;
     readonly xpubkey: Buffer;
     readonly network: Networks.Network;
     readonly depth: number;
-    readonly privateKey: PrivKey;
-    readonly publicKey: PubKey;
+    readonly privKey: PrivKey;
+    readonly pubKey: PubKey;
     readonly fingerPrint: Buffer;
 
-    derive(arg: string | number, hardened?: boolean): HDPrivKey;
-    deriveChild(arg: string | number, hardened?: boolean): HDPrivKey;
-    deriveNonCompliantChild(
-      arg: string | number,
-      hardened?: boolean
-    ): HDPrivKey;
+    derive(arg: string | number, hardened?: boolean): Bip32;
+    deriveChild(arg: string | number, hardened?: boolean): Bip32;
+    deriveNonCompliantChild(arg: string | number, hardened?: boolean): Bip32;
+
+    toString(): string;
+    toObject(): object;
+    toJSON(): object;
+    toBuffer(): Buffer;
+    toHex(): string;
+    inspect(): string;
+    toPublic(): Bip32;
+
+    static fromRandom(): Bip32;
+    static fromString(str: string): Bip32;
+    static fromObject(obj: object): Bip32;
+    static fromSeed(hexa: string | Buffer): Bip32;
+    static fromBuffer(buf: Buffer): Bip32;
+    static fromHex(hex: string): Bip32;
+    static isValidPath(arg: string | number, hardened: boolean): boolean;
+    static isValidSerialized(
+      data: string | Buffer,
+      network?: string | Networks.Network
+    ): boolean;
+    static getSerializedError(
+      data: string | Buffer,
+      network?: string | Networks.Network
+    ): any | null;
+
+    // readonly xpubkey: Buffer;
+    // readonly network: Networks.Network;
+    // readonly depth: number;
+    // readonly publicKey: PubKey;
+    // readonly fingerPrint: Buffer;
+
+    derive(arg: string | number, hardened?: boolean): Bip32;
+    deriveChild(arg: string | number, hardened?: boolean): Bip32;
 
     toString(): string;
     toObject(): object;
@@ -274,16 +307,13 @@ declare module "bsv" {
     toHex(): string;
     inspect(): string;
 
-    static fromRandom(): HDPrivKey;
-    static fromString(str: string): HDPrivKey;
-    static fromObject(obj: object): HDPrivKey;
-    static fromSeed(
-      hexa: string | Buffer,
-      network: string | Networks.Network
-    ): HDPrivKey;
-    static fromBuffer(buf: Buffer): HDPrivKey;
-    static fromHex(hex: string): HDPrivKey;
-    static isValidPath(arg: string | number, hardened: boolean): boolean;
+    static fromString(str: string): Bip32;
+    static fromObject(obj: object): Bip32;
+    static fromBuffer(buf: Buffer): Bip32;
+    static fromHex(hex: string): Bip32;
+
+    static fromBip32(Bip32: Bip32): Bip32;
+    static isValidPath(arg: string | number): boolean;
     static isValidSerialized(
       data: string | Buffer,
       network?: string | Networks.Network
@@ -302,41 +332,6 @@ declare module "bsv" {
     };
 
     const mainnet: Mainnet;
-  }
-  export class HDPubKey {
-    constructor(arg: string | Buffer | object);
-
-    readonly xpubkey: Buffer;
-    readonly network: Networks.Network;
-    readonly depth: number;
-    readonly publicKey: PubKey;
-    readonly fingerPrint: Buffer;
-
-    derive(arg: string | number, hardened?: boolean): HDPubKey;
-    deriveChild(arg: string | number, hardened?: boolean): HDPubKey;
-
-    toString(): string;
-    toObject(): object;
-    toJSON(): object;
-    toBuffer(): Buffer;
-    toHex(): string;
-    inspect(): string;
-
-    static fromString(str: string): HDPubKey;
-    static fromObject(obj: object): HDPubKey;
-    static fromBuffer(buf: Buffer): HDPubKey;
-    static fromHex(hex: string): HDPubKey;
-
-    static fromHDPrivKey(hdPrivKey: HDPrivKey): HDPubKey;
-    static isValidPath(arg: string | number): boolean;
-    static isValidSerialized(
-      data: string | Buffer,
-      network?: string | Networks.Network
-    ): boolean;
-    static getSerializedError(
-      data: string | Buffer,
-      network?: string | Networks.Network
-    ): any | null;
   }
 
   export namespace Script {

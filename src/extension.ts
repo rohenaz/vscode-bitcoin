@@ -15,19 +15,127 @@ export function activate(context: vscode.ExtensionContext) {
   // The commandId parameter must match the command field in package.json
   let disposables = [];
 
-  // const myScheme = "vsc-bitcoin";
-  // const myProvider = new (class implements vscode.TextDocumentContentProvider {
-  //   // emitter and its event
-  //   onDidChangeEmitter = new vscode.EventEmitter<vscode.Uri>();
-  //   onDidChange = this.onDidChangeEmitter.event;
+  disposables.push(
+    vscode.commands.registerCommand("bitcoin.generateHDPublicKey", () => {
+      let bip32 = bsv.Bip32.fromRandom();
+      let publicKey = bip32.toPublic();
+      // The code you place here will be executed every time your command is executed
+      vscode.env.clipboard.writeText(publicKey.toString());
+      // Display a message box to the user
+      vscode.window.showInformationMessage("Copied! " + publicKey.toString());
+    })
+  );
 
-  //   provideTextDocumentContent(uri: vscode.Uri): string {
-  //     return decodeURIComponent(uri.fragment.toString());
-  //   }
-  // })();
-  // disposables.push(
-  //   vscode.workspace.registerTextDocumentContentProvider(myScheme, myProvider)
-  // );
+  disposables.push(
+    vscode.commands.registerCommand("bitcoin.generateHDPrivateKey", () => {
+      let bip32 = bsv.Bip32.fromRandom();
+
+      // The code you place here will be executed every time your command is executed
+      vscode.env.clipboard.writeText(bip32.toString());
+      // Display a message box to the user
+      vscode.window.showInformationMessage("Copied! " + bip32.toString());
+    })
+  );
+
+  disposables.push(
+    vscode.commands.registerCommand("bitcoin.xPubFromxPriv", async () => {
+      const xPriv = await vscode.window.showInputBox({
+        value: "",
+        placeHolder:
+          "Ex: xprv9s21ZrQH143K462rbNqftyGUvz4U1AnqQyWogzrw1GyWaDQT3aNbE5nA6ZXHwk3PpKFK1nVguAGeP6PSTDgXcqab7UBgGHGrfEyV1s9RkeH",
+        validateInput: (text) => {
+          return text.length !== 111 ? "Invalid public key!" : null;
+        },
+      });
+
+      if (xPriv) {
+        try {
+          let xPrivKey = bsv.Bip32.fromString(xPriv);
+          let xPubKey = xPrivKey.toPublic();
+          vscode.env.clipboard.writeText(xPubKey.toString());
+          // Display a message box to the user
+          vscode.window.showInformationMessage("Copied! " + xPubKey.toString());
+        } catch (e) {
+          console.error(e);
+        }
+      }
+    })
+  );
+
+  disposables.push(
+    vscode.commands.registerCommand(
+      "bitcoin.addressFromHDPublicKey",
+      async () => {
+        const xPub = await vscode.window.showInputBox({
+          value: "",
+          placeHolder:
+            "Ex: xpub661MyMwAqRbcGa7KhQNgG7DDV1txQdWgnCSQVPGYZcWVT1jbb7gqmt6dwrfjfqcNP4tsCoh2Hc4waN1xbiNDKQ9AdRxNvQ6tcsQb6oAeTJM",
+          validateInput: (text) => {
+            return text.length !== 111 ? "Invalid extended public key!" : null;
+          },
+        });
+
+        const path = await vscode.window.showInputBox({
+          value: "m/0/0",
+          placeHolder: "Ex: m/0/0",
+          validateInput: (text) => {
+            // ToDo - validate path
+            return null;
+          },
+        });
+
+        if (xPub && path) {
+          try {
+            let xPubKey = bsv.Bip32.fromString(xPub);
+            let address = bsv.Address.fromPubKey(xPubKey.derive(path).pubKey);
+            vscode.env.clipboard.writeText(address.toString());
+            // Display a message box to the user
+            vscode.window.showInformationMessage("Copied! " + address);
+          } catch (e) {
+            console.error(e);
+          }
+        }
+      }
+    )
+  );
+
+  disposables.push(
+    vscode.commands.registerCommand(
+      "bitcoin.addressFromHDPrivateKey",
+      async () => {
+        const xPriv = await vscode.window.showInputBox({
+          value: "",
+          placeHolder:
+            "Ex: xprv9s21ZrQH143K462rbNqftyGUvz4U1AnqQyWogzrw1GyWaDQT3aNbE5nA6ZXHwk3PpKFK1nVguAGeP6PSTDgXcqab7UBgGHGrfEyV1s9RkeH",
+          validateInput: (text) => {
+            return text.length !== 111 ? "Invalid public key!" : null;
+          },
+        });
+
+        const path = await vscode.window.showInputBox({
+          value: "m/0/0",
+          placeHolder: "Ex: m/0/0",
+          validateInput: (text) => {
+            // ToDo - validate path
+            return null;
+          },
+        });
+
+        if (xPriv && path) {
+          try {
+            let xPrivKey = bsv.Bip32.fromString(xPriv);
+            let address = bsv.Address.fromPubKey(xPrivKey.derive(path).pubKey);
+            vscode.env.clipboard.writeText(address.toString());
+
+            // Display a message box to the user
+            vscode.window.showInformationMessage("Copied! " + address);
+          } catch (e) {
+            console.error(e);
+          }
+        }
+      }
+    )
+  );
 
   disposables.push(
     vscode.commands.registerCommand("bitcoin.generatePublicKey", () => {
@@ -68,6 +176,50 @@ export function activate(context: vscode.ExtensionContext) {
         console.error(e);
       }
     })
+  );
+
+  disposables.push(
+    vscode.commands.registerCommand("bitcoin.generateMnemonic", () => {
+      // The code you place here will be executed every time your command is executed
+
+      try {
+        const mnemonic = bsv.Bip39.fromRandom().toString();
+        vscode.env.clipboard.writeText(mnemonic);
+        // Display a message box to the user
+        vscode.window.showInformationMessage("Copied! " + mnemonic);
+      } catch (e) {
+        console.error(e);
+      }
+    })
+  );
+
+  disposables.push(
+    vscode.commands.registerCommand(
+      "bitcoin.extendedPrivateKeyFromMnemonic",
+      async () => {
+        const mnemonic = await vscode.window.showInputBox({
+          value: "",
+          placeHolder:
+            "Ex: solid drastic bone type leopard law virtual share agree way bacon noise",
+          validateInput: (text) => {
+            return text.split(" ").length !== 12 ? "Invalid mnemonic!" : null;
+          },
+        });
+
+        if (mnemonic) {
+          try {
+            let bip39 = bsv.Bip39.fromString(mnemonic);
+            let xPriv = bsv.Bip32.fromSeed(bip39.toSeed());
+
+            vscode.env.clipboard.writeText(xPriv.toString());
+            // Display a message box to the user
+            vscode.window.showInformationMessage("Copied! " + xPriv.toString());
+          } catch (e) {
+            console.error(e);
+          }
+        }
+      }
+    )
   );
 
   disposables.push(
