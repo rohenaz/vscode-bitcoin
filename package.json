@@ -3,7 +3,7 @@
   "displayName": "Bitcoin",
   "description": "Tools for working with Bitcoin (BSV)",
   "publisher": "Satchmo",
-  "version": "0.0.12",
+  "version": "0.0.13",
   "icon": "images/icon.png",
   "engines": {
     "vscode": "^1.49.0"
@@ -31,74 +31,79 @@
     "onCommand:bitcoin.xPubFromxPriv",
     "onCommand:bitcoin.generateMnemonic",
     "onCommand:bitcoin.extendedPrivateKeyFromMnemonic",
-    "onCommand:bitcoin.getUtxosForAddress"
+    "onCommand:bitcoin.getUtxosForAddress",
+    "onCommand:bitcoin.decodeRawTx"
   ],
   "main": "./dist/extension",
   "contributes": {
     "commands": [
       {
         "command": "bitcoin.addressFromWIF",
-        "title": "Address from WIF"
+        "title": "Bitcoin: Address from WIF"
       },
       {
         "command": "bitcoin.addressFromPublicKey",
-        "title": "Address from Public Key"
+        "title": "Bitcoin: Address from Public Key"
       },
       {
         "command": "bitcoin.addressFromPrivateKey",
-        "title": "Address From Private Key"
+        "title": "Bitcoin: Address From Private Key"
       },
       {
         "command": "bitcoin.addressFromHDPublicKey",
-        "title": "Address From Extended Public Key"
+        "title": "Bitcoin: Address From Extended Public Key"
       },
       {
         "command": "bitcoin.addressFromHDPrivateKey",
-        "title": "Address From Extended Private Key"
+        "title": "Bitcoin: Address From Extended Private Key"
       },
       {
         "command": "bitcoin.generatePublicKey",
-        "title": "Generate Public Key"
+        "title": "Bitcoin: Generate Public Key"
       },
       {
         "command": "bitcoin.generatePrivateKey",
-        "title": "Generate Private Key"
+        "title": "Bitcoin: Generate Private Key"
       },
       {
         "command": "bitcoin.generateHDPublicKey",
-        "title": "Generate Extended Public Key"
+        "title": "Bitcoin: Generate Extended Public Key"
       },
       {
         "command": "bitcoin.getUtxosForAddress",
-        "title": "Get UTXOs for Address"
+        "title": "Bitcoin: Get UTXOs for Address"
       },
       {
         "command": "bitcoin.xPubFromxPriv",
-        "title": "Extended Public Key from Extended Private Key"
+        "title": "Bitcoin: Extended Public Key from Extended Private Key"
       },
       {
         "command": "bitcoin.extendedPrivateKeyFromMnemonic",
-        "title": "Extended Private Key from Mnemonic"
+        "title": "Bitcoin: Extended Private Key from Mnemonic"
       },
       {
         "command": "bitcoin.generateHDPrivateKey",
-        "title": "Generate ExtendedPrivate Key"
+        "title": "Bitcoin: Generate ExtendedPrivate Key"
       },
       {
         "command": "bitcoin.generateMnemonic",
-        "title": "Generate Mnemonic"
+        "title": "Bitcoin: Generate Mnemonic"
       },
       {
         "command": "bitcoin.generateWIF",
-        "title": "Generate WIF"
+        "title": "Bitcoin: Generate WIF"
       },
       {
         "command": "bitcoin.getTx",
-        "title": "Fetch a Tx by Transaction ID"
+        "title": "Bitcoin: Fetch a Tx by Transaction ID"
       },
       {
         "command": "bitcoin.publicKeyFromPrivateKey",
-        "title": "Public Key From Private Key"
+        "title": "Bitcoin: Public Key From Private Key"
+      },
+      {
+        "command": "bitcoin.decodeRawTx",
+        "title": "Bitcoin: Decode Raw Transaction"
       }
     ]
   },

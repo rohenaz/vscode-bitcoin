@@ -224,6 +224,55 @@ export function activate(context: vscode.ExtensionContext) {
 
   disposables.push(
     vscode.commands.registerCommand(
+      "bitcoin.decodeRawTx",
+      async () => {
+        const rawTxHex = await vscode.window.showInputBox({
+          value: "",
+          placeHolder:
+            "paste raw tx hex",
+          validateInput: (text) => {
+            // TODO: Validation
+            return null;
+          },
+        });
+
+        if (rawTxHex) {
+          try {
+            const txbuf = Buffer.from(rawTxHex, 'hex');
+
+            let txt = "";
+            let tx = bsv.Tx.fromBuffer(txbuf);
+            let json = tx.toJSON();
+
+            txt = JSON.stringify(json, null, 2);
+
+            vscode.workspace
+              .openTextDocument({
+                language: "text",
+                content: txt,
+              })
+              .then((doc) => {
+                vscode.window.showTextDocument(doc, {
+                  preview: false,
+                  preserveFocus: true,
+                });
+              });
+
+            // let pubKey = bsv.PubKey.fromString(publicKey);
+            // let address = bsv.Address.fromPubKey(pubKey).toString();
+            // vscode.env.clipboard.writeText(JSON.stringify(json));
+            // // Display a message box to the user
+            // vscode.window.showInformationMessage("Copied! " + json);
+          } catch (e) {
+            console.error(e);
+          }
+        }
+      }
+    )
+  );
+
+  disposables.push(
+    vscode.commands.registerCommand(
       "bitcoin.addressFromPublicKey",
       async () => {
         const publicKey = await vscode.window.showInputBox({

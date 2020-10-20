@@ -49,10 +49,10 @@ declare module "bsv" {
     }
   }
 
-  export namespace Transaction {
+  export namespace Tx {
     class UnspentOutput {
       static fromObject(o: object): UnspentOutput;
-
+      
       readonly address: Address;
       readonly txId: string;
       readonly outputIndex: number;
@@ -85,13 +85,15 @@ declare module "bsv" {
       readonly sequenceNumber: number;
       readonly script: Script;
       output?: Output;
-      isValidSignature(tx: Transaction, sig: any): boolean;
+      isValidSignature(tx: Tx, sig: any): boolean;
     }
   }
 
-  export class Transaction {
-    inputs: Transaction.Input[];
-    outputs: Transaction.Output[];
+  export class Tx {
+    static fromBuffer(txbuf: Buffer): Tx;
+    toJSON(): Object;
+    inputs: Tx.Input[];
+    outputs: Tx.Output[];
     readonly id: string;
     readonly hash: string;
     readonly inputAmount: number;
@@ -100,22 +102,23 @@ declare module "bsv" {
 
     constructor(serialized?: any);
 
-    from(utxos: Transaction.UnspentOutput | Transaction.UnspentOutput[]): this;
+    from(utxos: Tx.UnspentOutput | Tx.UnspentOutput[]): this;
+
     to(address: Address[] | Address | string, amount: number): this;
     change(address: Address | string): this;
     fee(amount: number): this;
     feePerKb(amount: number): this;
     sign(privateKey: PrivKey | string): this;
     applySignature(sig: crypto.Signature): this;
-    addInput(input: Transaction.Input): this;
-    addOutput(output: Transaction.Output): this;
+    addInput(input: Tx.Input): this;
+    addOutput(output: Tx.Output): this;
     addData(value: Buffer | string): this;
     lockUntilDate(time: Date | number): this;
     lockUntilBlockHeight(height: number): this;
 
     hasWitnesses(): boolean;
     getFee(): number;
-    getChangeOutput(): Transaction.Output | null;
+    getChangeOutput(): Tx.Output | null;
     getLockTime(): Date | number;
 
     verify(): string | boolean;
@@ -145,7 +148,7 @@ declare module "bsv" {
   export class Block {
     hash: string;
     height: number;
-    transactions: Transaction[];
+    Txs: Tx[];
     header: {
       time: number;
       prevHash: string;
@@ -381,7 +384,7 @@ declare module "bsv" {
       verify: (
         inputScript: Script,
         outputScript: Script,
-        txn: Transaction,
+        txn: Tx,
         nin: Number,
         flags: any,
         satoshisBN: crypto.BN
