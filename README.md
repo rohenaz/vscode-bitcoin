@@ -2,6 +2,8 @@
 
 This extention provides convenience functions for working with Bitcoin addresses, transactions, and keys.
 
+![](./images/decode_raw_tx.gif)
+
 ![](./images/address_from_private_key.gif)
 
 ![](./images/bmap_from_txid.gif)
@@ -42,6 +44,7 @@ This extention provides convenience functions for working with Bitcoin addresses
 ### Tx
 
 - Get Transaction by ID (bob, raw, json and bmap formats available)
+- Decode Raw Transaction
 
 ### Utxo
 
