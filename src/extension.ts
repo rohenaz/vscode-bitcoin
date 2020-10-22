@@ -1,5 +1,6 @@
 // The module 'vscode' contains the VS Code extensibility API
 // Import the module and reference it with the alias vscode in your code below
+import * as Shapeshifter from "@libitx/shapeshifter.js";
 import * as bsv from "bsv";
 import fetch from "node-fetch";
 import * as vscode from "vscode";
@@ -257,12 +258,6 @@ export function activate(context: vscode.ExtensionContext) {
                   preserveFocus: true,
                 });
               });
-
-            // let pubKey = bsv.PubKey.fromString(publicKey);
-            // let address = bsv.Address.fromPubKey(pubKey).toString();
-            // vscode.env.clipboard.writeText(JSON.stringify(json));
-            // // Display a message box to the user
-            // vscode.window.showInformationMessage("Copied! " + json);
           } catch (e) {
             console.error(e);
           }
@@ -458,6 +453,100 @@ export function activate(context: vscode.ExtensionContext) {
       }
     })
   );
+  
+  disposables.push(
+    vscode.commands.registerCommand(
+      "bitcoin.rawTxToTxo",
+      async () => {
+        const rawTxHex = await vscode.window.showInputBox({
+          value: "",
+          placeHolder:
+            "paste raw tx hex",
+          validateInput: (text) => {
+            // TODO: Validation
+            return null;
+          },
+        });
+
+        if (rawTxHex) {
+
+
+          try { 
+            let obj = Shapeshifter.toTxo(rawTxHex);
+            // const txbuf = Buffer.from(rawTxHex, 'hex');
+
+            // let txt = "";
+            // let tx = bsv.Tx.fromBuffer(txbuf);
+            // let json = tx.toJSON();
+
+            let txt = JSON.stringify(obj, null, 2);
+
+            vscode.workspace
+              .openTextDocument({
+                language: "text",
+                content: txt,
+              })
+              .then((doc) => {
+                vscode.window.showTextDocument(doc, {
+                  preview: false,
+                  preserveFocus: true,
+                });
+              });
+          } catch (e) {
+            console.error(e);
+          }
+        }
+      }
+    )
+  );
+
+  
+  disposables.push(
+    vscode.commands.registerCommand(
+      "bitcoin.rawTxToBob",
+      async () => {
+        const rawTxHex = await vscode.window.showInputBox({
+          value: "",
+          placeHolder:
+            "paste raw tx hex",
+          validateInput: (text) => {
+            // TODO: Validation
+            return null;
+          },
+        });
+
+        if (rawTxHex) {
+
+
+          try { 
+            let obj = Shapeshifter.toBob(rawTxHex);
+            // const txbuf = Buffer.from(rawTxHex, 'hex');
+
+            // let txt = "";
+            // let tx = bsv.Tx.fromBuffer(txbuf);
+            // let json = tx.toJSON();
+
+            let txt = JSON.stringify(obj, null, 2);
+
+            vscode.workspace
+              .openTextDocument({
+                language: "text",
+                content: txt,
+              })
+              .then((doc) => {
+                vscode.window.showTextDocument(doc, {
+                  preview: false,
+                  preserveFocus: true,
+                });
+              });
+          } catch (e) {
+            console.error(e);
+          }
+        }
+      }
+    )
+  );
+
 
   disposables.push(
     vscode.commands.registerCommand(
