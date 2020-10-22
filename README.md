@@ -45,6 +45,8 @@ This extention provides convenience functions for working with Bitcoin addresses
 
 - Get Transaction by ID (bob, raw, json and bmap formats available)
 - Decode Raw Transaction
+- Raw Transaction to Bob
+- Raw Transaction to Txo
 
 ### Utxo
 
@@ -77,4 +79,7 @@ Users appreciate release notes as you update your extension.
 
 - [Whats on chain](https://whatsonchain.com)
 
-**Enjoy!**
+### Lib dependencies
+
+- [Shapeshifter](https://github.com/libitx/shapeshifter.js)
+  **Enjoy!**

@@ -1,4 +1,6 @@
 declare module "@libitx/shapeshifter.js" {
-  function toBob(rawTxHex: string): Object ;
-  function toTxo(rawTxHex: string): Object ;
+  export default class Shapeshifter {
+    static toBob(rawTxHex: string): Object ;
+    static toTxo(rawTxHex: string): Object ;  
+  }
 }

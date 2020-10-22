@@ -1,6 +1,6 @@
 // The module 'vscode' contains the VS Code extensibility API
 // Import the module and reference it with the alias vscode in your code below
-import * as Shapeshifter from "@libitx/shapeshifter.js";
+import Shapeshifter from "@libitx/shapeshifter.js";
 import * as bsv from "bsv";
 import fetch from "node-fetch";
 import * as vscode from "vscode";
@@ -499,7 +499,6 @@ export function activate(context: vscode.ExtensionContext) {
       }
     )
   );
-
   
   disposables.push(
     vscode.commands.registerCommand(
@@ -516,8 +515,6 @@ export function activate(context: vscode.ExtensionContext) {
         });
 
         if (rawTxHex) {
-
-
           try { 
             let obj = Shapeshifter.toBob(rawTxHex);
             // const txbuf = Buffer.from(rawTxHex, 'hex');
@@ -546,7 +543,6 @@ export function activate(context: vscode.ExtensionContext) {
       }
     )
   );
-
 
   disposables.push(
     vscode.commands.registerCommand(
