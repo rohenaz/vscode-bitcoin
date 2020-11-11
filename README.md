@@ -41,6 +41,10 @@ This extention provides convenience functions for working with Bitcoin addresses
 
 - Generate WIF
 
+### Script
+
+- Script to ASM
+
 ### Tx
 
 - Get Transaction by ID (bob, raw, json and bmap formats available)
