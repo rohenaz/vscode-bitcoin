@@ -3,7 +3,7 @@
   "displayName": "Bitcoin",
   "description": "Tools for working with Bitcoin (BSV)",
   "publisher": "Satchmo",
-  "version": "0.0.14",
+  "version": "0.0.15",
   "icon": "images/icon.png",
   "engines": {
     "vscode": "^1.49.0"
@@ -16,29 +16,34 @@
     "url": "https://github.com/rohenaz/vscode-bitcoin.git"
   },
   "activationEvents": [
-    "onCommand:bitcoin.generateHDPublicKey",
-    "onCommand:bitcoin.generateHDPrivateKey",
-    "onCommand:bitcoin.generatePublicKey",
-    "onCommand:bitcoin.generatePrivateKey",
-    "onCommand:bitcoin.generateWIF",
-    "onCommand:bitcoin.addressFromPublicKey",
-    "onCommand:bitcoin.addressFromPrivateKey",
-    "onCommand:bitcoin.addressFromHDPublicKey",
+    "onCommand:bitcoin.asmFromScript",
     "onCommand:bitcoin.addressFromHDPrivateKey",
+    "onCommand:bitcoin.addressFromHDPublicKey",
+    "onCommand:bitcoin.addressFromPrivateKey",
+    "onCommand:bitcoin.addressFromPublicKey",
     "onCommand:bitcoin.addressFromWIF",
-    "onCommand:bitcoin.getTx",
-    "onCommand:bitcoin.publicKeyFromPrivateKey",
-    "onCommand:bitcoin.xPubFromxPriv",
-    "onCommand:bitcoin.generateMnemonic",
-    "onCommand:bitcoin.extendedPrivateKeyFromMnemonic",
-    "onCommand:bitcoin.getUtxosForAddress",
     "onCommand:bitcoin.decodeRawTx",
+    "onCommand:bitcoin.extendedPrivateKeyFromMnemonic",
+    "onCommand:bitcoin.generateHDPrivateKey",
+    "onCommand:bitcoin.generateHDPublicKey",
+    "onCommand:bitcoin.generateMnemonic",
+    "onCommand:bitcoin.generatePrivateKey",
+    "onCommand:bitcoin.generatePublicKey",
+    "onCommand:bitcoin.generateWIF",
+    "onCommand:bitcoin.getTx",
+    "onCommand:bitcoin.getUtxosForAddress",
+    "onCommand:bitcoin.publicKeyFromPrivateKey",
+    "onCommand:bitcoin.rawTxToBob",
     "onCommand:bitcoin.rawTxToTxo",
-    "onCommand:bitcoin.rawTxToBob"
+    "onCommand:bitcoin.xPubFromxPriv"
   ],
   "main": "./dist/extension",
   "contributes": {
     "commands": [
+      {
+        "command": "bitcoin.asmFromScript",
+        "title": "Bitcoin: ASM from Script"
+      },
       {
         "command": "bitcoin.addressFromWIF",
         "title": "Bitcoin: Address from WIF"

@@ -393,7 +393,7 @@ declare module "bsv" {
   }
 
   export class Script {
-    constructor(data: string | object);
+    constructor();
 
     set(obj: object): this;
 
@@ -444,6 +444,18 @@ declare module "bsv" {
     getSignatureOperationsCount(accurate: boolean): number;
 
     toAddress(network?: string): Address;
+
+    static fromString(data: string): Script;
+    fromString(data: string): Script
+
+    static fromBitcoindString(data: string): Script;
+    fromBitcoindString(data: string): Script
+
+    static fromBuffer(data: Buffer): Script;
+    fromBuffer(data: Buffer): Script
+    
+    toAsmString(): string;
+
   }
 
   export interface Util {

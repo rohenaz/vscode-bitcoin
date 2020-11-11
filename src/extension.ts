@@ -265,6 +265,37 @@ export function activate(context: vscode.ExtensionContext) {
       }
     )
   );
+  
+  disposables.push(
+    vscode.commands.registerCommand(
+      "bitcoin.asmFromScript",
+      async () => {
+        const scriptHex = await vscode.window.showInputBox({
+          value: "",
+          placeHolder:
+            "Ex: 006a0c74657374206d65737361676522313550636948473232534e4c514a584d6f53556157566937575371633768436676610d424954434f494e5f45434453412131553151733836707847724e55796a37673752346d386b3879346b6d78766f756f4c5847774a696635464b72367250704b5967685a374637526d6177303071356e576f364e694a4f756a652b3657424f4d367164384d6c566e625772326d7272412b61614461744878617652384a54636b7053667831524a316f3d",
+          validateInput: (text) => {
+            return null; // text.length !== 66 ? "Invalid script!" : null;
+          },
+        });
+
+        console.log("script hex", scriptHex);
+        if (scriptHex) {
+          try {
+            let buff = Buffer.from(scriptHex, 'hex');
+            let script  = new bsv.Script().fromBuffer(buff);
+            console.log('script', script);
+            let asmString = script.toAsmString();
+            vscode.env.clipboard.writeText(asmString);
+            // Display a message box to the user
+            vscode.window.showInformationMessage("Copied! " + asmString);
+          } catch (e) {
+            console.error(e);
+          }
+        }
+      }
+    )
+  );
 
   disposables.push(
     vscode.commands.registerCommand(
@@ -353,6 +384,9 @@ export function activate(context: vscode.ExtensionContext) {
       }
     })
   );
+
+
+  
 
   disposables.push(
     vscode.commands.registerCommand("bitcoin.getUtxosForAddress", async () => {
