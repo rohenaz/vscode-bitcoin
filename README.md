@@ -41,10 +41,16 @@ This extention provides convenience functions for working with Bitcoin addresses
 
 - Generate WIF
 
+### Script
+
+- Script to ASM
+
 ### Tx
 
 - Get Transaction by ID (bob, raw, json and bmap formats available)
 - Decode Raw Transaction
+- Raw Transaction to Bob
+- Raw Transaction to Txo
 
 ### Utxo
 
@@ -64,7 +70,9 @@ none
 
 ## Release Notes
 
-Users appreciate release notes as you update your extension.
+v0.0.15 - Added Script to ASM
+v0.0.14 - Added Raw tx to Txo and raw Tx to Bob
+v0.0.13 - Added Decode raw Tx
 
 ---
 
@@ -76,5 +84,10 @@ Users appreciate release notes as you update your extension.
 ### Network Dependencies
 
 - [Whats on chain](https://whatsonchain.com)
+  (API providing utxos and tx data for some commands)
 
-**Enjoy!**
+### Lib dependencies
+
+- [Shapeshifter](https://github.com/libitx/shapeshifter.js)
+
+  **Enjoy!**

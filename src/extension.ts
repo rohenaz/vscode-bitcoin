@@ -1,5 +1,6 @@
 // The module 'vscode' contains the VS Code extensibility API
 // Import the module and reference it with the alias vscode in your code below
+import Shapeshifter from "@libitx/shapeshifter.js";
 import * as bsv from "bsv";
 import fetch from "node-fetch";
 import * as vscode from "vscode";
@@ -257,12 +258,37 @@ export function activate(context: vscode.ExtensionContext) {
                   preserveFocus: true,
                 });
               });
+          } catch (e) {
+            console.error(e);
+          }
+        }
+      }
+    )
+  );
+  
+  disposables.push(
+    vscode.commands.registerCommand(
+      "bitcoin.asmFromScript",
+      async () => {
+        const scriptHex = await vscode.window.showInputBox({
+          value: "",
+          placeHolder:
+            "Ex: 006a0c74657374206d65737361676522313550636948473232534e4c514a584d6f53556157566937575371633768436676610d424954434f494e5f45434453412131553151733836707847724e55796a37673752346d386b3879346b6d78766f756f4c5847774a696635464b72367250704b5967685a374637526d6177303071356e576f364e694a4f756a652b3657424f4d367164384d6c566e625772326d7272412b61614461744878617652384a54636b7053667831524a316f3d",
+          validateInput: (text) => {
+            return null; // text.length !== 66 ? "Invalid script!" : null;
+          },
+        });
 
-            // let pubKey = bsv.PubKey.fromString(publicKey);
-            // let address = bsv.Address.fromPubKey(pubKey).toString();
-            // vscode.env.clipboard.writeText(JSON.stringify(json));
-            // // Display a message box to the user
-            // vscode.window.showInformationMessage("Copied! " + json);
+        console.log("script hex", scriptHex);
+        if (scriptHex) {
+          try {
+            let buff = Buffer.from(scriptHex, 'hex');
+            let script  = new bsv.Script().fromBuffer(buff);
+            console.log('script', script);
+            let asmString = script.toAsmString();
+            vscode.env.clipboard.writeText(asmString);
+            // Display a message box to the user
+            vscode.window.showInformationMessage("Copied! " + asmString);
           } catch (e) {
             console.error(e);
           }
@@ -358,6 +384,9 @@ export function activate(context: vscode.ExtensionContext) {
       }
     })
   );
+
+
+  
 
   disposables.push(
     vscode.commands.registerCommand("bitcoin.getUtxosForAddress", async () => {
@@ -457,6 +486,96 @@ export function activate(context: vscode.ExtensionContext) {
         }
       }
     })
+  );
+  
+  disposables.push(
+    vscode.commands.registerCommand(
+      "bitcoin.rawTxToTxo",
+      async () => {
+        const rawTxHex = await vscode.window.showInputBox({
+          value: "",
+          placeHolder:
+            "paste raw tx hex",
+          validateInput: (text) => {
+            // TODO: Validation
+            return null;
+          },
+        });
+
+        if (rawTxHex) {
+
+
+          try { 
+            let obj = Shapeshifter.toTxo(rawTxHex);
+            // const txbuf = Buffer.from(rawTxHex, 'hex');
+
+            // let txt = "";
+            // let tx = bsv.Tx.fromBuffer(txbuf);
+            // let json = tx.toJSON();
+
+            let txt = JSON.stringify(obj, null, 2);
+
+            vscode.workspace
+              .openTextDocument({
+                language: "text",
+                content: txt,
+              })
+              .then((doc) => {
+                vscode.window.showTextDocument(doc, {
+                  preview: false,
+                  preserveFocus: true,
+                });
+              });
+          } catch (e) {
+            console.error(e);
+          }
+        }
+      }
+    )
+  );
+  
+  disposables.push(
+    vscode.commands.registerCommand(
+      "bitcoin.rawTxToBob",
+      async () => {
+        const rawTxHex = await vscode.window.showInputBox({
+          value: "",
+          placeHolder:
+            "paste raw tx hex",
+          validateInput: (text) => {
+            // TODO: Validation
+            return null;
+          },
+        });
+
+        if (rawTxHex) {
+          try { 
+            let obj = Shapeshifter.toBob(rawTxHex);
+            // const txbuf = Buffer.from(rawTxHex, 'hex');
+
+            // let txt = "";
+            // let tx = bsv.Tx.fromBuffer(txbuf);
+            // let json = tx.toJSON();
+
+            let txt = JSON.stringify(obj, null, 2);
+
+            vscode.workspace
+              .openTextDocument({
+                language: "text",
+                content: txt,
+              })
+              .then((doc) => {
+                vscode.window.showTextDocument(doc, {
+                  preview: false,
+                  preserveFocus: true,
+                });
+              });
+          } catch (e) {
+            console.error(e);
+          }
+        }
+      }
+    )
   );
 
   disposables.push(
