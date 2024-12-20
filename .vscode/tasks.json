@@ -4,7 +4,7 @@
 	"version": "2.0.0",
 	"tasks": [{
 		"type": "npm",
-		"script": "webpack",
+		"script": "dev",
 		"problemMatcher": "$tsc-watch",
 		"isBackground": true,
 		"presentation": {

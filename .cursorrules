@@ -1,0 +1,158 @@
+# BSV Library
+
+- Use `@bsv/sdk` instead of `bsv`
+- Utils are key with this library:
+```typescript
+const { toArray, toHex, toBase58Check, fromBase58Check, toBase64 } = Utils;
+```
+
+# Key Concepts
+
+## Imports
+```typescript
+import { Script, PrivateKey, PublicKey, Utils, P2PKH, Transaction, HD, Mnemonic } from '@bsv/sdk';
+```
+
+## Working with Keys
+
+### Private Keys
+```typescript
+// Generate new private key
+const privKey = PrivateKey.fromRandom();
+
+// Convert to WIF format
+const wif = privKey.toWif();
+
+// Create from WIF
+const fromWif = PrivateKey.fromWif(wif);
+
+// Create from hex
+const fromHex = PrivateKey.fromHex(hexString);
+```
+
+### Public Keys
+```typescript
+// Derive public key from private key
+const pubKey = privKey.toPublicKey();
+
+// Convert to string
+const pubKeyString = pubKey.toString();
+
+// Create from string
+const fromString = PublicKey.fromString(pubKeyString);
+```
+
+## HD Key Management
+
+### HD Private Keys
+```typescript
+// Generate new HD private key
+const hdPrivKey = HD.fromRandom();
+
+// Create from seed (mnemonic)
+const mnemonic = Mnemonic.fromRandom();
+const hdFromSeed = HD.fromSeed(mnemonic.toSeed());
+
+// Derive child key
+const childKey = hdPrivKey.derive("m/44'/0'/0'/0/0");
+```
+
+### HD Public Keys
+```typescript
+// Get HD public key
+const hdPubKey = hdPrivKey.toPublic();
+
+// Get address from HD key
+const address = hdPrivKey.toAddress();
+```
+
+## Working with Scripts
+
+### P2PKH Scripts
+```typescript
+// Create P2PKH script
+const p2pkh = new P2PKH();
+
+// Lock with public key
+const script = p2pkh.lock(pubKey.toString());
+
+// Get address from script
+const address = script.toASM().split(' ')[2];
+```
+
+### Script Operations
+```typescript
+// Create from hex
+const script = Script.fromHex(scriptHex);
+
+// Convert to ASM
+const asm = script.toASM();
+
+// Create from binary
+const fromBinary = Script.fromBinary(Utils.toArray(buffer));
+```
+
+## Transaction Handling
+```typescript
+// Create transaction
+const tx = new Transaction();
+
+// Add input
+tx.addInput({
+  sourceTransaction: Transaction.fromHex(txHex),
+  sourceOutputIndex: 0,
+  unlockingScriptTemplate: new P2PKH().unlock(privKey)
+});
+
+// Add output
+tx.addOutput({
+  lockingScript: new P2PKH().lock(recipientAddress),
+  satoshis: 1000
+});
+
+// Transaction operations
+await tx.fee();
+await tx.sign();
+await tx.broadcast();
+
+// Decode transaction
+const decodedTx = Transaction.fromHex(rawTxHex);
+```
+
+## Utility Functions
+```typescript
+// Convert to number array
+const byteArray = Utils.toArray(buffer);
+
+// Convert to hex
+const hexString = Utils.toHex(byteArray);
+
+// Convert from hex
+const fromHex = Utils.fromHex(hexString);
+
+// Base58Check encoding
+const base58 = Utils.toBase58Check(byteArray);
+```
+
+# Project Structure
+
+## Testing
+- Tests are written using Mocha with BDD style
+- Test files should be named `*.test.ts`
+- Test setup uses VS Code's test runner
+- Run tests with `bun run test`
+
+## Build Process
+- Uses Vite for main build
+- TypeScript compilation for tests
+- Build commands:
+  - `bun run build` - Main extension build
+  - `bun run build:test` - Build tests
+  - `bun run test` - Run tests
+  - `bun run test:unit` - Run unit tests only
+
+## VS Code Extension
+- Commands are prefixed with `bitcoin.`
+- Extension activates on command usage
+- Main entry point is `./dist/extension`
+- Development mode: `bun run dev`
