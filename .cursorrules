@@ -1,3 +1,7 @@
+# Self-learning
+Keep this file up to date as you learn key facts about this project
+At the end of each completed task, consider if this file needs to be updated
+
 # BSV Library
 
 - Use `@bsv/sdk` instead of `bsv`
@@ -90,6 +94,9 @@ const asm = script.toASM();
 
 // Create from binary
 const fromBinary = Script.fromBinary(Utils.toArray(buffer));
+
+// Create P2PKH script directly
+const script = Script.fromASM(`OP_DUP OP_HASH160 ${Utils.toHex(Utils.toArray(pubKey.toHash()))} OP_EQUALVERIFY OP_CHECKSIG`);
 ```
 
 ## Transaction Handling
@@ -99,14 +106,14 @@ const tx = new Transaction();
 
 // Add input
 tx.addInput({
-  sourceTransaction: Transaction.fromHex(txHex),
+  sourceTransaction: sourceTx, // Must be a Transaction object, not just hex
   sourceOutputIndex: 0,
-  unlockingScriptTemplate: new P2PKH().unlock(privKey)
+  unlockingScript: Script.fromASM(`OP_DUP OP_HASH160 ${Utils.toHex(Utils.toArray(pubKey.toHash()))} OP_EQUALVERIFY OP_CHECKSIG`)
 });
 
 // Add output
 tx.addOutput({
-  lockingScript: new P2PKH().lock(recipientAddress),
+  lockingScript: Script.fromASM(`OP_DUP OP_HASH160 ${Utils.toHex(Utils.toArray(pubKey.toHash()))} OP_EQUALVERIFY OP_CHECKSIG`),
   satoshis: 1000
 });
 
@@ -115,8 +122,33 @@ await tx.fee();
 await tx.sign();
 await tx.broadcast();
 
-// Decode transaction
-const decodedTx = Transaction.fromHex(rawTxHex);
+// Transaction formats
+const txHex = tx.toHex();    // Raw hex format
+const beefTx = tx.toBEEF();  // BEEF format (requires source transactions)
+const efTx = tx.toEF();      // EF format
+```
+
+## Error Handling
+```typescript
+// Invalid inputs don't throw but return invalid objects
+const invalidKey = PrivateKey.fromString('invalid');
+console.log(invalidKey.toString()); // Returns ''
+
+const invalidMnemonic = Mnemonic.fromString('invalid mnemonic phrase');
+console.log(invalidMnemonic.isValid()); // Returns false
+
+// Some operations do throw
+try {
+  PrivateKey.fromWif('invalid'); // Throws 'Invalid base58 character'
+} catch (e) {
+  console.error(e);
+}
+
+try {
+  PublicKey.fromString('invalid'); // Throws 'Unknown point format'
+} catch (e) {
+  console.error(e);
+}
 ```
 
 ## Utility Functions
@@ -137,10 +169,64 @@ const base58 = Utils.toBase58Check(byteArray);
 # Project Structure
 
 ## Testing
-- Tests are written using Mocha with BDD style
+- Tests use Bun's built-in test runner
 - Test files should be named `*.test.ts`
-- Test setup uses VS Code's test runner
-- Run tests with `bun run test`
+- Test setup requires:
+  - `setup.ts` for VS Code API mocking
+  - `bunfig.toml` for test configuration
+  - `types/bun-test.d.ts` for Bun test type declarations
+
+### Test Setup Files
+
+#### bunfig.toml
+```toml
+[test]
+dir = "src/test"
+preload = ["./setup.ts"]
+pattern = "**/*.ts"
+```
+
+#### setup.ts
+```typescript
+// Mock VS Code API
+const vscode = {
+  window: {
+    showInformationMessage: () => Promise.resolve(),
+    // ... other window methods
+  },
+  commands: {
+    registerCommand: () => ({ dispose: () => {} }),
+    // ... other command methods
+  },
+  // ... other VS Code APIs
+};
+
+// Mock require for VS Code module
+globalThis.require = ((id: string) => {
+  if (id === 'vscode') return vscode;
+  throw new Error(`Cannot find module '${id}'`);
+}) as NodeRequire;
+```
+
+### Writing Tests
+```typescript
+import '../../../setup';
+import { describe, expect, test } from 'bun:test';
+import { PrivateKey, PublicKey } from '@bsv/sdk';
+
+describe('Bitcoin Extension Tests', () => {
+  test('Key operations', () => {
+    const privKey = PrivateKey.fromRandom();
+    expect(privKey).toBeDefined();
+    expect(privKey.toWif()).toMatch(/^[KL][1-9A-HJ-NP-Za-km-z]{51}/);
+  });
+});
+```
+
+### Running Tests
+```bash
+bun test
+```
 
 ## Build Process
 - Uses Vite for main build

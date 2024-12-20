@@ -131,9 +131,7 @@
     "lint:fix": "biome check --apply .",
     "format": "biome format . --write",
     "check": "biome check --apply .",
-    "pretest": "bun run build:test",
-    "test": "node ./out/test/runTest.js",
-    "test:unit": "mocha out/test/suite/extension.test.js",
+    "test": "bun test src/test/suite/extension.test.ts",
     "package": "vsce package",
     "publish": "vsce publish",
     "clean": "rm -rf dist node_modules *.vsix out"
@@ -141,13 +139,11 @@
   "devDependencies": {
     "@biomejs/biome": "1.5.3",
     "@types/glob": "^7.2.0",
-    "@types/mocha": "^10.0.10",
     "@types/node": "^20.17.10",
     "@types/vscode": "^1.96.0",
     "@vscode/test-electron": "^2.4.1",
     "@vscode/vsce": "^2.24.0",
     "glob": "^7.2.3",
-    "mocha": "^11.0.1",
     "typescript": "^5.7.2",
     "vite": "^6.0.5"
   },

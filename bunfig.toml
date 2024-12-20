@@ -1,0 +1,9 @@
+[test]
+# Specify the directory containing test files
+dir = "src/test"
+# Use TypeScript for tests
+preload = ["./setup.ts"]
+# Only run source files
+pattern = "**/*.ts"
+# Exclude compiled files
+exclude = ["**/*.js"]
