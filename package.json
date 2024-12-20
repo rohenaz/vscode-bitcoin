@@ -5,6 +5,7 @@
   "publisher": "Satchmo",
   "version": "0.1.0",
   "icon": "images/icon.png",
+  "type": "module",
   "engines": {
     "vscode": "^1.49.0"
   },
@@ -15,29 +16,7 @@
     "type": "git",
     "url": "https://github.com/rohenaz/vscode-bitcoin.git"
   },
-  "activationEvents": [
-    "onCommand:bitcoin.asmFromScript",
-    "onCommand:bitcoin.addressFromHDPrivateKey",
-    "onCommand:bitcoin.addressFromHDPublicKey",
-    "onCommand:bitcoin.addressFromPrivateKey",
-    "onCommand:bitcoin.addressFromPublicKey",
-    "onCommand:bitcoin.addressFromWIF",
-    "onCommand:bitcoin.decodeRawTx",
-    "onCommand:bitcoin.extendedPrivateKeyFromMnemonic",
-    "onCommand:bitcoin.generateHDPrivateKey",
-    "onCommand:bitcoin.generateHDPublicKey",
-    "onCommand:bitcoin.generateMnemonic",
-    "onCommand:bitcoin.generatePrivateKey",
-    "onCommand:bitcoin.generatePublicKey",
-    "onCommand:bitcoin.generateWIF",
-    "onCommand:bitcoin.getTx",
-    "onCommand:bitcoin.getUtxosForAddress",
-    "onCommand:bitcoin.publicKeyFromPrivateKey",
-    "onCommand:bitcoin.rawTxToBob",
-    "onCommand:bitcoin.rawTxToTxo",
-    "onCommand:bitcoin.xPubFromxPriv"
-  ],
-  "main": "./dist/extension",
+  "main": "./dist/extension.js",
   "contributes": {
     "commands": [
       {
@@ -149,8 +128,9 @@
   },
   "dependencies": {
     "@bsv/sdk": "^1.2.18",
-    "@libitx/shapeshifter.js": "^0.1.1",
     "@types/node-fetch": "^2.6.12",
+    "bmapjs": "^0.4.0-beta.59",
+    "bpu-ts": "^0.0.26",
     "core-js": "^3.39.0",
     "node-fetch": "^2.7.0"
   }

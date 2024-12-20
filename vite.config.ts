@@ -5,7 +5,7 @@ export default defineConfig({
   build: {
     lib: {
       entry: resolve(__dirname, 'src/extension.ts'),
-      formats: ['cjs'],
+      formats: ['es'],
       fileName: () => 'extension.js',
     },
     rollupOptions: {
@@ -14,12 +14,12 @@ export default defineConfig({
         'node:path',
         'node:fs',
         'node-fetch',
-        '@libitx/shapeshifter.js',
         '@bsv/sdk',
+        'bpu-ts',
+        'bmapjs',
       ],
       output: {
-        sourcemap: true,
-        format: 'cjs',
+        format: 'es',
         exports: 'named',
       },
     },

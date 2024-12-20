@@ -1,70 +1,55 @@
-declare module '@libitx/shapeshifter.js' {
-  interface TxoOutput {
-    satoshis: number;
-    script: string;
-  }
-
-  interface TxoInput {
-    txid: string;
-    vout: number;
-    script: string;
-    sequence?: number;
-  }
-
-  interface TxoTransaction {
+declare module 'shapeshifter.js' {
+  export interface TxoFormat {
     txid: string;
     version: number;
-    inputs: TxoInput[];
-    outputs: TxoOutput[];
-    locktime?: number;
+    locktime: number;
+    vin: Array<{
+      txid: string;
+      vout: number;
+      scriptSig: {
+        hex: string;
+        asm: string;
+      };
+      sequence: number;
+    }>;
+    vout: Array<{
+      value: number;
+      n: number;
+      scriptPubKey: {
+        hex: string;
+        asm: string;
+        addresses: string[];
+        type: string;
+      };
+    }>;
   }
 
-  interface BobCell {
-    op: number;
-    ops: string;
-    h: string;
-    b?: string;
-    s?: string;
-    ii?: number;
-    ls?: number;
-  }
-
-  interface BobTape {
-    cell: BobCell[];
-  }
-
-  interface BobTransactionInput {
-    i: number;
-    e: {
-      h: string;
-      i: number;
-      a?: string;
-    };
-    tape: BobTape[];
-  }
-
-  interface BobTransactionOutput {
-    i: number;
-    e: {
-      v: number;
-      a?: string;
-    };
-    tape: BobTape[];
-  }
-
-  interface BobTransaction {
+  export interface BobFormat {
     tx: {
       h: string;
     };
-    in: BobTransactionInput[];
-    out: BobTransactionOutput[];
+    in: Array<{
+      i: number;
+      s: string;
+      e: {
+        h: string;
+        i: number;
+        s: string;
+      };
+    }>;
+    out: Array<{
+      i: number;
+      s: string;
+      e: {
+        v: number;
+        i: number;
+        s: string;
+      };
+    }>;
   }
 
-  interface ShapeshifterStatic {
-    toBob(rawTxHex: string): BobTransaction;
-    toTxo(rawTxHex: string): TxoTransaction;
+  export default class Shapeshifter {
+    static toTxo(rawTxHex: string): TxoFormat;
+    static toBob(rawTxHex: string): BobFormat;
   }
-
-  const Shapeshifter: ShapeshifterStatic;
-  export default Shapeshifter;
-}
+} 
