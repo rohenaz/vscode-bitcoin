@@ -21,7 +21,7 @@ const { toArray, toHex, toBase58Check, fromBase58Check, toBase64 } = Utils;
 - Command folder structure:
   ```
   src/commands/commandName/
-    ├── index.ts       # Command implementation
+    ├── index.ts(x)       # Command implementation
     └── command.test.ts # Tests for the command
   ```
 - Command implementation should be a single exported function

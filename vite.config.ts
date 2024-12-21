@@ -3,7 +3,7 @@ import { defineConfig } from 'vite';
 export default defineConfig({
   build: {
     lib: {
-      entry: './src/extension.ts',
+      entry: './src/extension.tsx',
       formats: ['cjs'],
       fileName: () => 'extension.js',
     },
@@ -15,6 +15,7 @@ export default defineConfig({
         'bpu-ts',
         'bmapjs',
         'core-js',
+        'typed-html',
         /node:.*/, // Externalize all Node.js built-in modules
       ],
       output: {
@@ -33,6 +34,6 @@ export default defineConfig({
     reportCompressedSize: true,
   },
   resolve: {
-    extensions: ['.ts', '.js'],
+    extensions: ['.tsx', '.ts', '.js'],
   },
 });

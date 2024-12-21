@@ -1,28 +1,41 @@
-import { describe, expect, mock, test } from 'bun:test';
-import { convertData } from '.';
-import type { OutputManager } from '../../output';
-import vscode from '../../test/setup';
-import { type DataFormat, detectFormat } from '../../utils';
-
-// Create a minimal mock that only implements what we need
-const mockOutput = {
-  handleOutput: mock(() => Promise.resolve()),
-} as unknown as OutputManager;
+import { describe, expect, test } from 'bun:test';
+import { type DataFormat, convertData, detectFormat } from '../../utils';
 
 // Data conversion tests
 describe('Data Conversion', () => {
   test('Format detection', () => {
-    // Test hex detection
-    expect(detectFormat('48656c6c6f')).toBe('hex');
+    // Test hex detection (should be undefined since it's ambiguous)
+    expect(detectFormat('48656c6c6f')).toBeUndefined();
     expect(detectFormat('not-hex-123')).toBeUndefined();
+    expect(detectFormat('123')).toBeUndefined(); // Odd length hex
+    expect(detectFormat('48656c6c6f00')).toBeUndefined();
+    expect(detectFormat('0123456789abcdef')).toBeUndefined();
 
-    // Test base64 detection
-    expect(detectFormat('SGVsbG8=')).toBe('base64');
+    // Test base64 detection (should be undefined since it's ambiguous)
+    expect(detectFormat('SGVsbG8=')).toBeUndefined();
     expect(detectFormat('not-base64!')).toBeUndefined();
+    expect(detectFormat('SGVsbG8')).toBeUndefined();
+    expect(detectFormat('SGVsbG8===')).toBeUndefined();
+    expect(detectFormat('A+/=')).toBeUndefined();
 
-    // Test binary array detection
+    // Test binary array detection (should be definite)
     expect(detectFormat('[72,101,108,108,111]')).toBe('binary');
     expect(detectFormat('[1,2,invalid]')).toBeUndefined();
+    expect(detectFormat('[1,2,3]')).toBe('binary');
+    expect(detectFormat('[]')).toBeUndefined();
+    expect(detectFormat('[256]')).toBeUndefined();
+    expect(detectFormat('[-1]')).toBeUndefined();
+
+    // Test UTF-8 detection (should be definite for clear text)
+    expect(detectFormat('Hello, world!')).toBe('utf8');
+    expect(detectFormat('not-hex-123')).toBeUndefined();
+    expect(detectFormat('Test 123')).toBe('utf8');
+    expect(detectFormat('123-456')).toBeUndefined();
+    expect(detectFormat('abc123')).toBeUndefined();
+    expect(detectFormat('Test@123')).toBeUndefined();
+    expect(detectFormat('Hello!')).toBe('utf8');
+    expect(detectFormat('Test_123')).toBeUndefined();
+    expect(detectFormat('123_test')).toBeUndefined();
   });
 
   test('Hex conversions', () => {
@@ -59,13 +72,19 @@ describe('Data Conversion', () => {
 
   test('Error handling', () => {
     // Invalid hex
-    expect(() => convertData('not-hex', 'hex', 'base64')).toThrow();
+    expect(() => convertData('not-hex', 'hex', 'base64')).toThrow(
+      'Invalid hex string',
+    );
 
     // Invalid base64
-    expect(() => convertData('not-base64!', 'base64', 'hex')).toThrow();
+    expect(() => convertData('not-base64!', 'base64', 'hex')).toThrow(
+      'Invalid base64 string',
+    );
 
     // Invalid binary array
-    expect(() => convertData('[1,2,invalid]', 'binary', 'hex')).toThrow();
+    expect(() => convertData('[1,2,invalid]', 'binary', 'hex')).toThrow(
+      'Invalid binary array',
+    );
 
     // Test with invalid format by casting (to test runtime behavior)
     expect(() => convertData('48656c6c6f', 'hex', 'xyz' as DataFormat)).toThrow(

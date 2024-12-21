@@ -246,7 +246,10 @@ export class WorkspaceManager {
    * @param mimeType Optional MIME type for the content
    * @returns The URI of the saved file, or undefined if conversion failed
    */
-  async detectAndConvertContent(base64Data: string, mimeType?: string): Promise<Uri | undefined> {
+  async detectAndConvertContent(
+    base64Data: string,
+    mimeType?: string,
+  ): Promise<Uri | undefined> {
     try {
       // Convert base64 to byte array using Utils.toArray
       const bytes = Utils.toArray(base64Data);
@@ -306,16 +309,20 @@ export class WorkspaceManager {
       // If no extension determined from MIME type, try to detect from content
       if (!extension) {
         // Check for common file signatures
-        if (bytes[0] === 0xFF && bytes[1] === 0xD8 && bytes[2] === 0xFF) {
+        if (bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) {
           extension = '.jpg';
         } else if (
           bytes[0] === 0x89 &&
           bytes[1] === 0x50 &&
-          bytes[2] === 0x4E &&
+          bytes[2] === 0x4e &&
           bytes[3] === 0x47
         ) {
           extension = '.png';
-        } else if (bytes[0] === 0x47 && bytes[1] === 0x49 && bytes[2] === 0x46) {
+        } else if (
+          bytes[0] === 0x47 &&
+          bytes[1] === 0x49 &&
+          bytes[2] === 0x46
+        ) {
           extension = '.gif';
         } else {
           // Try to detect text content

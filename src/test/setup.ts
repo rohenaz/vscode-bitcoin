@@ -70,9 +70,11 @@ const mockCommands = [
   'bitcoin.generateWIF',
   'bitcoin.getTx',
   'bitcoin.publicKeyFromPrivateKey',
+  'bitcoin.publicKeyFromWIF',
   'bitcoin.decodeRawTx',
   'bitcoin.rawTxToBob',
   'bitcoin.convertData',
+  'bitcoin.openConversionTool',
   'bitcoin.showKeyVault',
   'bitcoin.test',
   'bitcoin.detectAndConvert',
@@ -81,6 +83,7 @@ const mockCommands = [
   'bitcoin.decrypt',
   'bitcoin.lookupBapProfile',
   'bitcoin.fetchOrdinalsInscription',
+  'bitcoin.resetWelcomeScreen',
 ];
 
 // Mock EventEmitter class

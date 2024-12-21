@@ -46,10 +46,31 @@ This extension provides convenient tools for working with Bitcoin (BSV) addresse
 
 ### Data Conversion
 - Convert between different data formats:
+  - UTF-8 text
   - Hex
   - Base64
-  - Binary
+  - Binary Array
+- Advanced Conversion Tool with:
+  - Format auto-detection
+  - Live preview
+  - Copy to clipboard
+  - Support for all formats
+  - Input validation
 - Detect and convert content types (images, etc.)
+
+The Advanced Conversion Tool can be accessed in three ways:
+1. From the Command Palette: "Bitcoin: Open Conversion Tool"
+2. From the Welcome Screen: Click "Advanced Conversion Tool" under Data Conversion
+3. From the context menu: Right-click on selected text and choose "Bitcoin > Open Conversion Tool"
+
+Features of the Advanced Conversion Tool:
+- **Format Auto-detection**: Automatically detects the format of your input
+- **Live Preview**: See the converted output immediately
+- **Copy Button**: One-click copy of the converted result
+- **Input Validation**: Validates input format before conversion
+- **Multiple Formats**: Convert between UTF-8, hex, base64, and binary array
+- **Error Handling**: Clear error messages for invalid inputs
+- **VS Code Theme Integration**: Matches your VS Code theme
 
 ### Output Management
 Each command's output can be configured to:

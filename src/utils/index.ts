@@ -1,134 +1,133 @@
 import { Utils } from '@bsv/sdk';
 const { toArray, toHex, toBase64 } = Utils;
+import { Buffer } from 'buffer';
 
 /**
- * Checks if a string is valid hex.
+ * The supported data formats we can detect and convert between.
  */
-export function isHex(str: string): boolean {
-  return /^[0-9A-Fa-f]*$/.test(str);
-}
+export type DataFormat = 'hex' | 'base64' | 'binary' | 'utf8';
 
 /**
- * Checks if a string is valid base64 (using atob/btoa).
- */
-export function isBase64(str: string): boolean {
-  try {
-    return btoa(atob(str)) === str;
-  } catch {
-    return false;
-  }
-}
-
-/**
- * Detects if the input is a JSON-encoded array of bytes (0-255).
+ * Checks if input is a valid binary array: "[1,2,3]"
  */
 function isBinaryArray(input: string): boolean {
+  if (!input.startsWith('[') || !input.endsWith(']')) return false;
   try {
     const arr = JSON.parse(input);
-    return (
-      Array.isArray(arr) &&
-      arr.every((n: unknown) => typeof n === 'number' && n >= 0 && n <= 255)
+    if (!Array.isArray(arr) || arr.length === 0) return false;
+    return arr.every(
+      (n) => typeof n === 'number' && Number.isInteger(n) && n >= 0 && n <= 255,
     );
   } catch {
     return false;
   }
 }
 
-export type DataFormat = 'hex' | 'base64' | 'binary';
-
 /**
- * Determines the data format: hex, base64, binary, or undefined.
+ * Determines the data format, falling back to undefined for ambiguous cases
  */
 export function detectFormat(input: string): DataFormat | undefined {
-  // Check if it's a binary array string
-  if (input.startsWith('[') && input.endsWith(']')) {
-    try {
-      const arr = JSON.parse(input);
-      if (
-        Array.isArray(arr) &&
-        arr.every((n) => typeof n === 'number' && n >= 0 && n <= 255)
-      ) {
-        return 'binary';
-      }
-    } catch {}
+  if (!input || input.trim().length === 0) return undefined;
+
+  // Check for binary array (most specific format)
+  if (isBinaryArray(input)) return 'binary';
+
+  // Check for clear text (must be obviously text)
+  if (
+    /[a-zA-Z]/.test(input) &&
+    /[a-zA-Z][,!?.\s]|[,!?.\s][a-zA-Z]/.test(input) &&
+    !/^[0-9A-Fa-f]+$/.test(input) &&
+    !/^[A-Za-z0-9+/=]+$/.test(input) &&
+    !/^[0-9-]+$/.test(input) &&
+    !/^[a-zA-Z]+[0-9]+$/.test(input) &&
+    !/^[0-9]+[a-zA-Z]+$/.test(input) &&
+    !input.includes('[') &&
+    !input.includes(']')
+  ) {
+    return 'utf8';
   }
 
-  // Check if it's hex
-  if (isHex(input)) {
-    return 'hex';
+  // For hex and base64, just validate the format and let user decide if ambiguous
+  try {
+    // Try hex first (if it's valid hex length and chars)
+    if (input.length % 2 === 0 && /^[0-9A-Fa-f]+$/.test(input)) {
+      return undefined;
+    }
+
+    // Try base64 (if it's valid base64 chars and padding)
+    if (/^[A-Za-z0-9+/]*={0,2}$/.test(input)) {
+      return undefined;
+    }
+  } catch {
+    // Fall through
   }
 
-  // Check if it's base64
-  if (isBase64(input)) {
-    return 'base64';
-  }
-
+  // Fall back to undefined for anything ambiguous
   return undefined;
 }
 
 /**
- * Converts data between hex, base64, or binary representations.
+ * Converts data between formats using Buffer
  */
 export function convertData(
   input: string,
   fromFormat: DataFormat,
   toFormat: DataFormat,
 ): string {
-  console.log('Converting data:', {
-    input: input.slice(0, 100),
-    fromFormat,
-    toFormat,
-  });
-  let bytes: number[];
+  if (fromFormat === toFormat) return input;
 
-  // Convert input to bytes
+  let buffer: Buffer;
+
+  // Convert input to Buffer
   switch (fromFormat) {
-    case 'hex':
-      if (!isHex(input)) {
+    case 'utf8': {
+      buffer = Buffer.from(input, 'utf8');
+      break;
+    }
+    case 'hex': {
+      // Just validate basic hex format
+      if (input.length % 2 !== 0 || !/^[0-9A-Fa-f]+$/.test(input)) {
         throw new Error('Invalid hex string');
       }
-      console.log('Converting from hex using toArray');
-      bytes = toArray(input, 'hex');
-      console.log('Bytes from hex:', bytes.slice(0, 10));
+      buffer = Buffer.from(input, 'hex');
       break;
-
-    case 'base64':
-      if (!isBase64(input)) {
+    }
+    case 'base64': {
+      // Must be valid base64 chars and padding
+      if (!/^[A-Za-z0-9+/]*={0,2}$/.test(input)) {
         throw new Error('Invalid base64 string');
       }
-      console.log('Converting from base64 using toArray');
-      bytes = toArray(input, 'base64');
-      console.log('Bytes from base64:', bytes.slice(0, 10));
-      break;
-
-    case 'binary':
-      if (!isBinaryArray(input)) {
-        throw new Error('Invalid binary array');
+      // Add padding if missing
+      let paddedInput = input;
+      while (paddedInput.length % 4 !== 0) {
+        paddedInput += '=';
       }
-      console.log('Parsing binary array');
-      bytes = JSON.parse(input);
-      console.log('Bytes from binary:', bytes.slice(0, 10));
+      try {
+        buffer = Buffer.from(paddedInput, 'base64');
+      } catch {
+        throw new Error('Invalid base64 string');
+      }
       break;
-
+    }
+    case 'binary': {
+      if (!isBinaryArray(input)) throw new Error('Invalid binary array');
+      buffer = Buffer.from(JSON.parse(input));
+      break;
+    }
     default:
       throw new Error(`Unsupported input format: ${fromFormat}`);
   }
 
-  // Convert bytes to desired output format
-  let result: string;
+  // Convert Buffer to output format
   switch (toFormat) {
+    case 'utf8':
+      return buffer.toString('utf8');
     case 'hex':
-      result = toHex(bytes);
-      console.log('Converted to hex:', result.slice(0, 100));
-      return result;
+      return buffer.toString('hex');
     case 'base64':
-      result = toBase64(bytes);
-      console.log('Converted to base64:', result.slice(0, 100));
-      return result;
+      return buffer.toString('base64');
     case 'binary':
-      result = JSON.stringify(bytes);
-      console.log('Converted to binary:', result.slice(0, 100));
-      return result;
+      return JSON.stringify(Array.from(buffer));
     default:
       throw new Error(`Unsupported output format: ${toFormat}`);
   }

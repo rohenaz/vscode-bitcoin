@@ -25,14 +25,18 @@ describe('decodeFile', () => {
     let validateFn: ((text: string) => string | null) | undefined;
     vscode.window = {
       ...originalWindow,
-      showInputBox: async (options?: { prompt?: string; value?: string; validateInput?: (text: string) => string | null }) => {
+      showInputBox: async (options?: {
+        prompt?: string;
+        value?: string;
+        validateInput?: (text: string) => string | null;
+      }) => {
         validateFn = options?.validateInput;
         return undefined;
       },
     };
 
     await handleDecodeFileCommand(mockOutput);
-    
+
     expect(validateFn).toBeDefined();
     if (validateFn) {
       expect(validateFn('')).toBe('Input cannot be empty');
@@ -82,6 +86,8 @@ describe('decodeFile', () => {
       showInputBox: async () => invalidInput,
     };
 
-    await expect(handleDecodeFileCommand(mockOutput)).rejects.toThrow('Unable to detect input format');
+    await expect(handleDecodeFileCommand(mockOutput)).rejects.toThrow(
+      'Unable to detect input format',
+    );
   });
 });

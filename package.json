@@ -22,7 +22,8 @@
     "commands": [
       {
         "command": "bitcoin.convertData",
-        "title": "Bitcoin: Convert Data Format (Hex/Base64/Binary)"
+        "title": "Convert Data",
+        "category": "Bitcoin"
       },
       {
         "command": "bitcoin.test",
@@ -147,8 +148,9 @@
     "menus": {
       "editor/context": [
         {
+          "when": "editorHasSelection",
           "submenu": "bitcoin.contextMenu",
-          "when": "editorHasSelection"
+          "group": "bitcoin@1"
         }
       ],
       "bitcoin.contextMenu": [
@@ -226,6 +228,7 @@
   "devDependencies": {
     "@biomejs/biome": "1.5.3",
     "@types/glob": "^7.2.0",
+    "@types/is-base64": "^1.1.3",
     "@types/node": "^20.17.10",
     "@types/node-fetch": "^2.6.12",
     "@types/vscode": "^1.93.0",
@@ -240,8 +243,11 @@
   "extensionKind": ["workspace"],
   "dependencies": {
     "@bsv/sdk": "^1.2.19",
+    "is-base64": "^1.1.0",
+    "is-hex": "^1.1.3",
     "js-1sat-ord": "^0.1.79",
     "node-fetch": "^2.7.0",
+    "typed-html": "^3.0.1",
     "vscode": "^1.1.37"
   },
   "optionalDependencies": {

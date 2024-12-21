@@ -74,14 +74,20 @@ export class OutputManager {
     }
   }
 
-  public async detectAndConvert(data: string, mimeType?: string): Promise<void> {
+  public async detectAndConvert(
+    data: string,
+    mimeType?: string,
+  ): Promise<void> {
     try {
-      const uri = await this.workspaceManager.detectAndConvertContent(data, mimeType);
+      const uri = await this.workspaceManager.detectAndConvertContent(
+        data,
+        mimeType,
+      );
       if (uri) {
         const openFile = 'Open File';
         const result = await vsApi.window.showInformationMessage(
           `File saved: ${uri.fsPath}`,
-          openFile
+          openFile,
         );
         if (result === openFile) {
           await vsApi.env.openExternal(uri);

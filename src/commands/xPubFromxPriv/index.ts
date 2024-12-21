@@ -2,7 +2,9 @@ import { HD } from '@bsv/sdk';
 import type { OutputManager } from '../../output';
 import vsApi from '../../vsShim';
 
-export async function handleXPubFromXPrivCommand(outputManager: OutputManager) {
+export async function handleXPubFromXPrivCommand(
+  _outputManager: OutputManager,
+) {
   const xPriv = await vsApi.window.showInputBox({
     value: '',
     placeHolder: 'Ex: xprv9s21ZrQH143K...',
