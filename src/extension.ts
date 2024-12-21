@@ -41,7 +41,7 @@ import { convertData, detectFormat, type DataFormat } from './utils';
 const { fromBase58Check } = Utils;
 
 function registerCommand(
-  context: vsApi.ExtensionContext,
+  context: ExtensionContext,
   outputManager: OutputManager,
   command: string,
   handler: () => Promise<
@@ -237,7 +237,7 @@ const fetchInscriptionContent = async (
   return response.text();
 };
 
-export async function activate(context: vsApi.ExtensionContext) {
+export async function activate(context: ExtensionContext) {
   console.log('Bitcoin extension activating...');
 
   // Show welcome screen on first activation, but skip in tests

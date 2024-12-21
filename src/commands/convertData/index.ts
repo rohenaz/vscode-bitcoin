@@ -1,4 +1,3 @@
-import vsApi from './vsShim';
 import type { OutputManager } from '../../output';
 import { detectFormat } from '../../utils';
 import { Utils } from '@bsv/sdk';
