@@ -8,7 +8,7 @@ import { handleAddressFromPrivateKeyCommand } from './commands/addressFromPrivat
 import { addressFromPublicKey } from './commands/addressFromPublicKey';
 import { addressFromWIF } from './commands/addressFromWIF';
 import { asmFromScript } from './commands/asmFromScript';
-import { openConversionTool } from './commands/convertData';
+import { openConversionTool } from './commands/convertData/index';
 import { handleDecodeFileCommand } from './commands/decodeFile';
 import { handleDecodeRawTxCommand } from './commands/decodeRawTx';
 import { extendedPrivateKeyFromMnemonic } from './commands/extendedPrivateKeyFromMnemonic';

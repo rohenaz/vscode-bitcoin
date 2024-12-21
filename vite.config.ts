@@ -16,6 +16,8 @@ export default defineConfig({
         'bmapjs',
         'core-js',
         'typed-html',
+        'bun-types',
+        'bun:test',
         /node:.*/, // Externalize all Node.js built-in modules
       ],
       output: {
