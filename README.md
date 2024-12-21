@@ -40,14 +40,99 @@ This extension provides convenient tools for working with Bitcoin (BSV) addresse
   - JSON format
 - Decode raw transactions
 - Convert raw transaction to BOB format
-- Convert raw transaction to TXO format
 
 ### UTXO Management
 - Fetch UTXOs for any address
 
+### Data Conversion
+- Convert between different data formats:
+  - Hex
+  - Base64
+  - Binary
+- Detect and convert content types (images, etc.)
+
+### Output Management
+Each command's output can be configured to:
+- Copy to clipboard (default)
+- Open in a new text file
+- Save to workspace folder
+
+The workspace folder (`.bitcoin` by default) organizes outputs into categories:
+```
+.bitcoin/
+├─ addresses/      # Generated addresses
+├─ conversions/    # Format conversion results
+├─ keys/          # Generated keys (no private data)
+├─ media/         # Converted images and binary content
+├─ scripts/       # Script operations output
+├─ transactions/  # Transaction data
+└─ utxos/         # UTXO lists
+```
+
+Configure these preferences in VS Code settings under "Bitcoin Extension":
+```json
+{
+  "bitcoin.outputPreference": {
+    "convertData": "workspace",    // "clipboard", "file", or "workspace"
+    // ... settings for each command
+  },
+  "bitcoin.workspace": {
+    "path": ".bitcoin",           // Workspace folder path
+    "detectContentType": true,    // Auto-detect binary content types
+    "organizeFolders": true       // Use category subfolders
+  }
+}
+```
+
+### Workspace Management
+The extension now includes a dedicated workspace for managing Bitcoin-related files. By default, it creates a `.bitcoin` directory in your workspace root where it organizes:
+
+- Transaction data
+- Keys and addresses
+- Media files (images, documents)
+- Other Bitcoin-related content
+
+Files are automatically organized into subfolders by type and named using appropriate identifiers (e.g., transaction IDs) to maintain a clean workspace structure.
+
+### Content Detection and Conversion
+The extension can automatically detect and convert various types of content:
+
+- Base64-encoded data
+- Images (JPEG, PNG)
+- JSON data
+- XML documents
+- Other binary formats
+
+When content type cannot be automatically detected, the extension will prompt you to specify the format.
+
+### Output Options
+You can configure how the extension handles command output:
+
+- **Clipboard**: Copy results to clipboard (default)
+- **File Dialog**: Save to a location of your choice
+- **Workspace**: Automatically save in the `.bitcoin` workspace
+
+## Configuration
+
+### Workspace Settings
+```json
+{
+  "bitcoin.workspace.path": ".bitcoin",
+  "bitcoin.workspace.detectContentType": true,
+  "bitcoin.workspace.organizeFolders": true,
+  "bitcoin.outputPreference": "clipboard"
+}
+```
+
+- `workspace.path`: Path to the Bitcoin workspace directory (relative to workspace root)
+- `workspace.detectContentType`: Automatically detect content types when saving files
+- `workspace.organizeFolders`: Organize files into subfolders by type
+- `outputPreference`: Where to output results (clipboard, file dialog, or workspace)
+
 ## Requirements
 
-No special requirements. The extension includes all necessary dependencies.
+- VS Code version 1.93.0 or higher
+- No other special requirements. The extension includes all necessary dependencies.
 
 ## Installation
 
@@ -63,49 +148,33 @@ No special requirements. The extension includes all necessary dependencies.
 ## Development
 
 ### Build Commands
-- `bun run build` - Build the extension
+- `bun run build` - Build the extension using Vite
 - `bun run dev` - Build in watch mode
 - `bun run test` - Run test suite
 - `bun run package` - Package for distribution
+- `bun run clean` - Clean build artifacts
+- `bun run lint` - Run linter
+- `bun run format` - Format code
 
 ### Testing
-Tests are written using Mocha with BDD style. Run tests with:
+Tests are written using Bun's test runner with BDD style. Run tests with:
 ```bash
-bun run test
+bun test
 ```
 
 ## Dependencies
 
-### Core Library
+### Core Libraries
 - [@bsv/sdk](https://github.com/bitcoin-sv/bsv-sdk) - Modern Bitcoin SV development kit
+- [bpu-ts](https://github.com/rohenaz/bpu-ts) - Bitcoin Protocol Parser in TypeScript
+- [bmapjs](https://github.com/rohenaz/bmapjs) - Bitcoin Metadata Application Protocol
 
 ### Network Services
 - [WhatsOnChain](https://whatsonchain.com) - API for UTXOs and transaction data
 
-### Utility Libraries
-- [Shapeshifter](https://github.com/libitx/shapeshifter.js) - Transaction format conversion
+## Changelog
 
-## Release Notes
-
-### 0.1.0
-- Major upgrade to build system and dependencies:
-  - Migrated from webpack to Vite for improved build performance
-  - Switched from `bsv` to `@bsv/sdk` for better TypeScript support and modern APIs
-  - Added comprehensive test suite using Mocha
-  - Improved error handling and type safety
-  - Updated all dependencies to latest versions
-  - Added proper TypeScript configurations
-  - Improved development workflow with watch mode
-
-### 0.0.15
-- Added Script to ASM conversion
-
-### 0.0.14
-- Added Raw tx to TXO conversion
-- Added Raw tx to BOB conversion
-
-### 0.0.13
-- Added Raw transaction decoder
+See [CHANGELOG.md](CHANGELOG.md) for a detailed list of changes.
 
 ## Contributing
 
@@ -128,3 +197,35 @@ bun run test
 - [BMAP](http://bmapjs.com)
 
 **Enjoy!**
+
+### Secure Key Management
+The extension includes a secure key vault for managing sensitive cryptographic keys:
+
+- **Encrypted Storage**: Keys are stored in VS Code's secure storage, not in the workspace
+- **Key Types**: Supports private keys, public keys, WIF, HD keys, and mnemonics
+- **Search & Filter**: Quickly find keys by type, label, or content
+- **Secure Copying**: Copy keys to clipboard without saving to disk
+- **Key Organization**: View all keys in a searchable table with type indicators
+- **Automatic Storage**: Generated keys are automatically saved to the vault
+- **Easy Cleanup**: Delete individual keys or clear all stored keys
+
+To access the key vault:
+1. Open Command Palette (`Ctrl+Shift+P` / `Cmd+Shift+P`)
+2. Type "Bitcoin: Show Key Vault"
+
+![Key Vault](./images/key_vault.png)
+
+The key vault provides:
+- Color-coded badges for different key types
+- Truncated key display for security
+- One-click copy to clipboard
+- Creation timestamps
+- Search functionality
+- Bulk deletion option
+
+### Security Features
+- Keys are stored in VS Code's encrypted storage
+- Keys never touch the disk unless explicitly exported
+- Automatic `.gitignore` management for `.bitcoin` workspace
+- Warning if `.bitcoin` workspace isn't git-ignored
+- Secure clipboard operations for sensitive data

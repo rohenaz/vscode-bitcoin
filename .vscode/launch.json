@@ -15,7 +15,7 @@
 			"outFiles": [
 				"${workspaceFolder}/dist/**/*.js"
 			],
-			"preLaunchTask": "npm: dev"
+			"preLaunchTask": "bun: dev"
 		},
 		{
 			"name": "Extension Tests",
@@ -28,7 +28,7 @@
 			"outFiles": [
 				"${workspaceFolder}/dist/test/**/*.js"
 			],
-			"preLaunchTask": "npm: test"
+			"preLaunchTask": "bun: test"
 		}
 	]
 }

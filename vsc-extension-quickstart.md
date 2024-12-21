@@ -1,130 +1,83 @@
-# Welcome to Bitcoin VS Code Extension
+# Bitcoin Extension Quick Start Guide
 
-This guide will help you get started with the Bitcoin VS Code extension for working with Bitcoin (BSV) functionality.
+## Features
 
-## Getting Started
+### Basic Operations
+* Generate Bitcoin keys and addresses
+* Convert between different data formats
+* Work with transactions and scripts
+* Fetch blockchain data
 
-1. Install the extension from VS Code marketplace or build from source
-2. Open the Command Palette (`Cmd+Shift+P` / `Ctrl+Shift+P`)
-3. Type "Bitcoin:" to see all available commands
+### Workspace Management
+The extension creates a `.bitcoin` workspace in your project to organize Bitcoin-related files:
 
-## Features Overview
+* **Location**: `.bitcoin` directory in your workspace root
+* **Organization**: Files are automatically sorted into subfolders by type
+* **Naming**: Files use appropriate identifiers (e.g., transaction IDs)
 
-### Working with Keys
+### Content Detection
+Convert and save various types of content:
 
-Generate various types of keys:
-```typescript
-// Generate a private key
-Command: "Bitcoin: Generate Private Key"
+1. Open the Command Palette (`Ctrl+Shift+P` / `Cmd+Shift+P`)
+2. Type "Bitcoin: Detect and Convert Content"
+3. Enter your base64-encoded data
+4. The extension will:
+   * Detect the content type automatically
+   * Prompt for type selection if needed
+   * Save the file with appropriate extension
 
-// Generate a public key
-Command: "Bitcoin: Generate Public Key"
+### Output Options
+Configure how command results are handled:
 
-// Generate WIF format
-Command: "Bitcoin: Generate WIF"
+1. Open VS Code settings
+2. Search for "Bitcoin"
+3. Choose your preferred output method:
+   * **Clipboard**: Copy to clipboard (default)
+   * **File**: Save via file dialog
+   * **Workspace**: Auto-save to `.bitcoin` workspace
 
-// Generate HD keys
-Command: "Bitcoin: Generate Extended Public Key"
-Command: "Bitcoin: Generate Extended Private Key"
-```
+## Configuration
 
-### Address Generation
-
-Create addresses from different key formats:
-```typescript
-// From private key
-Command: "Bitcoin: Address From Private Key"
-
-// From public key
-Command: "Bitcoin: Address from Public Key"
-
-// From WIF
-Command: "Bitcoin: Address from WIF"
-
-// From HD keys
-Command: "Bitcoin: Address From Extended Public Key"
-Command: "Bitcoin: Address From Extended Private Key"
-```
-
-### Transaction Operations
-
-Work with transactions in various formats:
-```typescript
-// Fetch transaction
-Command: "Bitcoin: Fetch a Tx by Transaction ID"
-// Supports: raw, BOB, BMAP, and JSON formats
-
-// Decode transactions
-Command: "Bitcoin: Decode Raw Transaction"
-Command: "Bitcoin: Raw Tx to Bob"
-Command: "Bitcoin: Raw Tx to Txo"
-```
-
-### Script Operations
-
-Work with Bitcoin scripts:
-```typescript
-// Convert script to ASM
-Command: "Bitcoin: ASM from Script"
-```
-
-### UTXO Management
-
-```typescript
-// Get UTXOs for an address
-Command: "Bitcoin: Get UTXOs for Address"
+### Workspace Settings
+```json
+{
+  "bitcoin.workspace.path": ".bitcoin",
+  "bitcoin.workspace.detectContentType": true,
+  "bitcoin.workspace.organizeFolders": true,
+  "bitcoin.outputPreference": "clipboard"
+}
 ```
 
 ## Development
 
-### Setup
-1. Clone the repository
-2. Install dependencies:
-   ```bash
-   bun install
-   ```
-3. Open in VS Code:
-   ```bash
-   code .
-   ```
+### Building the Extension
+* Run `bun install` to install dependencies
+* Run `bun run build` to compile
+* Press `F5` to run in debug mode
 
-### Build and Test
-- Build: `bun run build`
-- Watch Mode: `bun run dev`
-- Run Tests: `bun run test`
+### Testing
+* Run `bun test` to execute test suite
+* Tests are located in `src/test`
 
 ### Making Changes
-1. The main extension code is in `src/extension.ts`
-2. Tests are in `src/test/suite/extension.test.ts`
-3. Build with `bun run build` before testing changes
-
-### Debugging
-1. Press F5 to start debugging
-2. Set breakpoints in your code
-3. Use the Debug Console to see output
-4. Use the Command Palette in the new window to test commands
-
-## Extension Settings
-
-Currently, no additional settings are required. All functionality is available through commands.
+1. Modify source files in `src/`
+2. Run `bun run build` to compile
+3. Press `F5` to test changes
+4. Use `bun test` to verify functionality
 
 ## Troubleshooting
 
-1. Make sure you have the latest version of VS Code
-2. Check the Output panel for any error messages
-3. Ensure you're using the latest version of `@bsv/sdk`
-4. For network operations, check your internet connection
+### Common Issues
+* **Command not found**: Ensure extension is activated
+* **Save failed**: Check workspace permissions
+* **Content detection failed**: Try specifying type manually
+
+### Getting Help
+* Check the [README](README.md) for detailed documentation
+* File issues on GitHub for bugs
+* Contact maintainers for support
 
 ## Resources
-
-- [Extension API Documentation](https://code.visualstudio.com/api)
-- [BSV SDK Documentation](https://github.com/bitcoin-sv/bsv-sdk)
-- [WhatsOnChain API](https://developers.whatsonchain.com/)
-
-## Contributing
-
-See the [CONTRIBUTING.md](CONTRIBUTING.md) file for guidelines on contributing to this extension.
-
-## Support
-
-If you encounter any issues, please file them on the [GitHub repository](https://github.com/rohenaz/vscode-bitcoin/issues).
+* [Extension API](https://code.visualstudio.com/api)
+* [Bitcoin Documentation](https://developer.bitcoin.org/)
+* [BSV SDK Documentation](https://github.com/bitcoin-sv/bsv-sdk)

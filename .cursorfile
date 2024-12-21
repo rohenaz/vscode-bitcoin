@@ -1,0 +1,24 @@
+# VS Code Version
+- Must use VS Code engine version 1.93.0 for proper command registration and visibility
+- Use `@types/vscode` version that matches the engine version
+
+# BSV Library
+// ... existing code ... 
+
+# Encryption
+
+## Commands
+- `bitcoin.encrypt` - Encrypt selected text or entire document
+- `bitcoin.decrypt` - Decrypt selected text or entire document
+
+## Key Management
+- Keys are generated using BSV's PrivateKey.fromRandom()
+- Keys can be imported using WIF format
+- Store keys securely - they are required for decryption
+- Encrypted files are stored in the `.bitcoin/encrypted` directory
+
+## Implementation Details
+- Uses AES-256-CBC encryption
+- IV is randomly generated and prepended to encrypted data
+- Encryption key is derived from BSV private key
+- Data is base64 encoded for storage

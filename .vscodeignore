@@ -11,3 +11,19 @@ dist/**/*.map
 biome.json
 vite.config.ts
 bun.lockb
+.cursorrules
+bunfig.toml
+assistant_snippet_*.txt
+
+# Keep only the necessary images
+images/icon.png
+!images/icon.png
+images/*.gif
+
+# Development files
+.github/**
+.git/**
+.DS_Store
+*.vsix
+*.log
+*.tgz

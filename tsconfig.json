@@ -2,7 +2,7 @@
   "compilerOptions": {
     "module": "commonjs",
     "target": "ES2020",
-    "lib": ["ES2020"],
+    "lib": ["esnext"],
     "sourceMap": true,
     "rootDir": ".",
     "strict": true,
@@ -11,11 +11,21 @@
     "noUnusedParameters": true,
     "baseUrl": ".",
     "paths": {
-      "vscode": ["./setup"],
-      "*": ["node_modules/*"]
+      "vscode": ["./setup"]
     },
-    "esModuleInterop": true
+    "types": ["@types/vscode", "node", "bun-types"],
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true
   },
-  "include": ["src/**/*", "test/**/*", "setup.ts", "types/**/*"],
-  "exclude": ["node_modules", ".vscode-test"]
+  "include": [
+    "src/**/*",
+    "test/**/*",
+    "setup.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    ".vscode-test"
+  ]
 }

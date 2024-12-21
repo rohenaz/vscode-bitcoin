@@ -10,6 +10,10 @@ At the end of each completed task, consider if this file needs to be updated
 const { toArray, toHex, toBase58Check, fromBase58Check, toBase64 } = Utils;
 ```
 
+# Rules
+- never use the 'any' type
+- dont assume, CHECK! you have access to the command line and you can look things up rather than make assumptions
+
 # Key Concepts
 
 ## Imports
@@ -166,15 +170,13 @@ const fromHex = Utils.fromHex(hexString);
 const base58 = Utils.toBase58Check(byteArray);
 ```
 
-# Project Structure
-
 ## Testing
 - Tests use Bun's built-in test runner
 - Test files should be named `*.test.ts`
 - Test setup requires:
   - `setup.ts` for VS Code API mocking
   - `bunfig.toml` for test configuration
-  - `types/bun-test.d.ts` for Bun test type declarations
+  - `@types/vscode@1.93.0` for type definitions
 
 ### Test Setup Files
 
@@ -184,28 +186,6 @@ const base58 = Utils.toBase58Check(byteArray);
 dir = "src/test"
 preload = ["./setup.ts"]
 pattern = "**/*.ts"
-```
-
-#### setup.ts
-```typescript
-// Mock VS Code API
-const vscode = {
-  window: {
-    showInformationMessage: () => Promise.resolve(),
-    // ... other window methods
-  },
-  commands: {
-    registerCommand: () => ({ dispose: () => {} }),
-    // ... other command methods
-  },
-  // ... other VS Code APIs
-};
-
-// Mock require for VS Code module
-globalThis.require = ((id: string) => {
-  if (id === 'vscode') return vscode;
-  throw new Error(`Cannot find module '${id}'`);
-}) as NodeRequire;
 ```
 
 ### Writing Tests
@@ -228,17 +208,119 @@ describe('Bitcoin Extension Tests', () => {
 bun test
 ```
 
-## Build Process
-- Uses Vite for main build
-- TypeScript compilation for tests
-- Build commands:
-  - `bun run build` - Main extension build
-  - `bun run build:test` - Build tests
-  - `bun run test` - Run tests
-  - `bun run test:unit` - Run unit tests only
+# VS Code Extension Development
 
-## VS Code Extension
-- Commands are prefixed with `bitcoin.`
-- Extension activates on command usage
-- Main entry point is `./dist/extension`
-- Development mode: `bun run dev`
+## Setup
+- Extension requires `@types/vscode@1.93.0` for type definitions
+- Use `setup.ts` for mocking VS Code API in tests
+- Never use real VS Code API calls in tests
+
+## Mock Implementation
+```typescript
+// Basic VS Code mock structure
+const vscode = {
+  window: {
+    showInformationMessage: async () => {},
+    showErrorMessage: async () => {},
+    showInputBox: async () => '',
+    showQuickPick: async () => '',
+    createWebviewPanel: () => ({
+      webview: {
+        html: '',
+        onDidReceiveMessage: () => ({ dispose: () => {} }),
+        postMessage: () => Promise.resolve(),
+      },
+      onDidDispose: () => ({ dispose: () => {} }),
+      reveal: () => {},
+      dispose: () => {},
+    }),
+    showTextDocument: async () => {},
+    activeTextEditor: {
+      document: {
+        getText: () => '',
+        uri: { fsPath: '' },
+      },
+      selection: {
+        isEmpty: true,
+      },
+    }
+  },
+  workspace: {
+    workspaceFolders: [{
+      uri: { fsPath: '/test/workspace' },
+      name: 'test',
+      index: 0
+    }],
+    openTextDocument: async () => ({
+      getText: () => '',
+      save: () => Promise.resolve(),
+    }),
+    getConfiguration: () => ({
+      get: (key: string) => {
+        switch (key) {
+          case 'workspace.path':
+            return '.bitcoin';
+          case 'workspace.detectContentType':
+            return true;
+          case 'workspace.organizeFolders':
+            return true;
+          default:
+            return undefined;
+        }
+      }
+    }),
+    fs: {
+      writeFile: async () => {},
+      readFile: async () => new Uint8Array(),
+      createDirectory: async () => {},
+    }
+  },
+  commands: {
+    registerCommand: () => ({ dispose: () => {} }),
+    executeCommand: async () => {},
+  },
+  Uri: {
+    file: (path: string) => ({ fsPath: path }),
+    parse: (path: string) => ({ fsPath: path }),
+  },
+  env: {
+    clipboard: {
+      writeText: async () => {},
+      readText: async () => '',
+    },
+  },
+};
+```
+
+## Extension Commands
+- All commands are prefixed with `bitcoin.`
+- Current command count: 28
+- Key commands:
+  - `bitcoin.asmFromScript` - Convert script to ASM format
+  - `bitcoin.addressFromWIF` - Get address from WIF
+  - `bitcoin.addressFromPublicKey` - Get address from public key
+  - `bitcoin.generatePrivateKey` - Generate new private key
+  - `bitcoin.generateMnemonic` - Generate new mnemonic
+  - `bitcoin.convertData` - Convert between formats
+  - `bitcoin.rawTxToBob` - Convert raw tx to BOB format
+
+## Testing Best Practices
+- Use `bun test` for running tests
+- Mock all VS Code API calls
+- Test both success and error cases
+- Verify command registration
+- Check error handling
+- Test data conversions
+- Validate transaction operations
+
+# Workspace Management
+- Uses `.bitcoin` directory for storing files
+- Organizes files by content type
+- Handles file naming and paths
+- Supports content type detection
+
+# API Integration
+- Use proper error handling for API calls
+- Validate responses
+- Handle rate limiting
+- Cache responses when appropriate

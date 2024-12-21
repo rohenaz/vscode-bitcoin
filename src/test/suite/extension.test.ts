@@ -1,9 +1,23 @@
+import {
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  rmdirSync,
+  statSync,
+  unlinkSync,
+} from 'node:fs';
+import { join } from 'node:path';
+import type {
+  ExtensionContext,
+  GlobalEnvironmentVariableCollection,
+  Memento,
+  Uri,
+} from 'vscode';
 // Import setup to ensure VS Code mock is loaded first
-import * as vscode from '../../../setup';
-import { activate } from '../../extension';
-import type { ExtensionContext, Uri, EnvironmentVariableCollection, EnvironmentVariableMutator, GlobalEnvironmentVariableCollection } from 'vscode';
+import vscode, { executedCommands } from '../../../setup';
+import { activate, convertData, detectFormat } from '../../extension';
 
-import { describe, expect, test } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import {
   HD,
   Mnemonic,
@@ -13,87 +27,102 @@ import {
   Transaction,
   Utils,
 } from '@bsv/sdk';
+import { TransformTx, allProtocols } from 'bmapjs';
+import type { BobTx } from 'bmapjs';
 import { parse } from 'bpu-ts';
-import { allProtocols, TransformTx } from 'bmapjs';
+import { WelcomePanel } from '../../welcomePanel';
 
-// Helper function to create a mock Uri
-const createMockUri = (): Uri => {
-  const uri = {
-    scheme: '',
-    authority: '',
-    path: '',
-    query: '',
-    fragment: '',
-    fsPath: '',
-    with: (change: { scheme?: string; authority?: string; path?: string; query?: string; fragment?: string }): Uri => createMockUri(),
-    toString: () => '',
-    toJSON: () => ({ scheme: '', authority: '', path: '', query: '', fragment: '' }),
-  };
-  return uri;
+const TEST_WORKSPACE_DIR = '.test-bitcoin-workspace';
+
+// Helper function to recursively delete a directory
+function deleteFolderRecursive(path: string) {
+  if (existsSync(path)) {
+    for (const file of readdirSync(path)) {
+      const curPath = join(path, file);
+      if (statSync(curPath).isDirectory()) {
+        deleteFolderRecursive(curPath);
+      } else {
+        unlinkSync(curPath);
+      }
+    }
+    rmdirSync(path);
+  }
+}
+
+// Helper function to clean up test workspace
+function cleanupTestWorkspace() {
+  try {
+    deleteFolderRecursive(TEST_WORKSPACE_DIR);
+  } catch (error) {
+    console.error('Error cleaning up test workspace:', error);
+  }
+}
+
+// Mock ExtensionContext with test workspace path
+const mockContext: Partial<ExtensionContext> = {
+  subscriptions: [],
+  extensionPath: '',
+  globalState: {
+    get: (_key: string): unknown => undefined,
+    update: (_key: string, _value: unknown): Thenable<void> =>
+      Promise.resolve(),
+    keys: (): readonly string[] => [],
+    setKeysForSync: (_keys: readonly string[]): void => {},
+  } as Memento & { setKeysForSync(keys: readonly string[]): void },
+  workspaceState: {
+    get: (_key: string): unknown => undefined,
+    update: (_key: string, _value: unknown): Thenable<void> =>
+      Promise.resolve(),
+    keys: (): readonly string[] => [],
+    setKeysForSync: (_keys: readonly string[]): void => {},
+  } as Memento & { setKeysForSync(keys: readonly string[]): void },
+  environmentVariableCollection: {} as GlobalEnvironmentVariableCollection,
+  extensionUri: {} as Uri,
+  storageUri: undefined,
+  globalStorageUri: {} as Uri,
+  logUri: {} as Uri,
+  extensionMode: 1,
+  extension: {
+    id: 'test',
+    extensionKind: 1,
+    extensionUri: {} as Uri,
+    extensionPath: '',
+    isActive: true,
+    packageJSON: {},
+    exports: undefined,
+    activate: () => Promise.resolve(),
+  },
+  asAbsolutePath: (relativePath: string) => relativePath,
+  storagePath: undefined,
+  globalStoragePath: '',
+  logPath: '',
 };
 
-// Helper function to create a mock EnvironmentVariableCollection
-const createMockEnvVarCollection = (): GlobalEnvironmentVariableCollection => ({
-  persistent: false,
-  replace: () => {},
-  append: () => {},
-  prepend: () => {},
-  get: (variable: string): EnvironmentVariableMutator | undefined => undefined,
-  forEach: (callback: (variable: string, mutator: EnvironmentVariableMutator, collection: EnvironmentVariableCollection) => void) => {},
-  delete: (variable: string) => {},
-  clear: () => {},
-  description: undefined,
-  [Symbol.iterator]: function* () {},
-  getScoped: () => createMockEnvVarCollection(),
-});
-
 describe('Bitcoin Extension Tests', () => {
+  beforeEach(() => {
+    // Create test workspace directory
+    if (!existsSync(TEST_WORKSPACE_DIR)) {
+      mkdirSync(TEST_WORKSPACE_DIR);
+    }
+
+    // Update workspace path in VS Code mock
+    vscode.workspace.workspaceFolders = [
+      {
+        uri: { fsPath: TEST_WORKSPACE_DIR },
+        name: 'test',
+        index: 0,
+      },
+    ];
+  });
+
+  afterEach(() => {
+    cleanupTestWorkspace();
+  });
+
   // Extension activation test
   test('Extension activation', async () => {
-    const context: Partial<ExtensionContext> = {
-      subscriptions: [],
-      workspaceState: {
-        get: () => undefined,
-        update: () => Promise.resolve(),
-        keys: () => [],
-      },
-      globalState: {
-        get: () => undefined,
-        update: () => Promise.resolve(),
-        setKeysForSync: () => {},
-        keys: () => [],
-      },
-      extensionPath: '',
-      storagePath: '',
-      globalStoragePath: '',
-      logPath: '',
-      asAbsolutePath: (relativePath: string) => relativePath,
-      extensionUri: createMockUri(),
-      environmentVariableCollection: createMockEnvVarCollection(),
-      storageUri: createMockUri(),
-      globalStorageUri: createMockUri(),
-      logUri: createMockUri(),
-      extensionMode: 1,
-      extension: {
-        id: '',
-        extensionUri: createMockUri(),
-        extensionPath: '',
-        isActive: false,
-        packageJSON: {},
-        extensionKind: 1,
-        exports: undefined,
-        activate: () => Promise.resolve(undefined),
-      },
-      secrets: {
-        get: () => Promise.resolve(undefined),
-        store: () => Promise.resolve(),
-        delete: () => Promise.resolve(),
-        onDidChange: () => ({ dispose: () => {} }),
-      },
-    };
-
-    await activate(context as ExtensionContext);
-    expect(context.subscriptions).toHaveLength(18); // One for each command
+    await activate(mockContext as ExtensionContext);
+    expect(mockContext.subscriptions).toHaveLength(84); // One for each command plus event listeners
   });
 
   // Basic functionality tests
@@ -149,7 +178,11 @@ describe('Bitcoin Extension Tests', () => {
     const pubKey = privKey.toPublicKey();
 
     // Test P2PKH script creation
-    const script = Script.fromASM(`OP_DUP OP_HASH160 ${Utils.toHex(Utils.toArray(pubKey.toHash()))} OP_EQUALVERIFY OP_CHECKSIG`);
+    const script = Script.fromASM(
+      `OP_DUP OP_HASH160 ${Utils.toHex(
+        Utils.toArray(pubKey.toHash()),
+      )} OP_EQUALVERIFY OP_CHECKSIG`,
+    );
     expect(script).toBeDefined();
     expect(script.toASM()).toContain('OP_DUP OP_HASH160');
 
@@ -163,7 +196,11 @@ describe('Bitcoin Extension Tests', () => {
     // Test P2PKH address from private key
     const privKey = PrivateKey.fromRandom();
     const pubKey = privKey.toPublicKey();
-    const script = Script.fromASM(`OP_DUP OP_HASH160 ${Utils.toHex(Utils.toArray(pubKey.toHash()))} OP_EQUALVERIFY OP_CHECKSIG`);
+    const script = Script.fromASM(
+      `OP_DUP OP_HASH160 ${Utils.toHex(
+        Utils.toArray(pubKey.toHash()),
+      )} OP_EQUALVERIFY OP_CHECKSIG`,
+    );
     const address = Utils.toBase58Check(Utils.toArray(script.toHex()));
     expect(address).toBeDefined();
     expect(address).toMatch(/^[13][a-km-zA-HJ-NP-Z1-9]{25,34}/);
@@ -171,7 +208,15 @@ describe('Bitcoin Extension Tests', () => {
     // Test address from WIF
     const wif = privKey.toWif();
     const fromWif = PrivateKey.fromWif(wif);
-    const addressFromWif = Utils.toBase58Check(Utils.toArray(Script.fromASM(`OP_DUP OP_HASH160 ${Utils.toHex(Utils.toArray(fromWif.toPublicKey().toHash()))} OP_EQUALVERIFY OP_CHECKSIG`).toHex()));
+    const addressFromWif = Utils.toBase58Check(
+      Utils.toArray(
+        Script.fromASM(
+          `OP_DUP OP_HASH160 ${Utils.toHex(
+            Utils.toArray(fromWif.toPublicKey().toHash()),
+          )} OP_EQUALVERIFY OP_CHECKSIG`,
+        ).toHex(),
+      ),
+    );
     expect(addressFromWif).toBe(address);
 
     // Test address from HD key
@@ -179,7 +224,15 @@ describe('Bitcoin Extension Tests', () => {
     const child = hdKey.derive("m/44'/0'/0'/0/0");
     const childPrivKey = PrivateKey.fromHex(child.privKey.toString());
     const childPubKey = childPrivKey.toPublicKey();
-    const addressFromHD = Utils.toBase58Check(Utils.toArray(Script.fromASM(`OP_DUP OP_HASH160 ${Utils.toHex(Utils.toArray(childPubKey.toHash()))} OP_EQUALVERIFY OP_CHECKSIG`).toHex()));
+    const addressFromHD = Utils.toBase58Check(
+      Utils.toArray(
+        Script.fromASM(
+          `OP_DUP OP_HASH160 ${Utils.toHex(
+            Utils.toArray(childPubKey.toHash()),
+          )} OP_EQUALVERIFY OP_CHECKSIG`,
+        ).toHex(),
+      ),
+    );
     expect(addressFromHD).toMatch(/^[13][a-km-zA-HJ-NP-Z1-9]{25,34}/);
   });
 
@@ -193,21 +246,33 @@ describe('Bitcoin Extension Tests', () => {
     // Test input/output addition
     const privKey = PrivateKey.fromRandom();
     const pubKey = privKey.toPublicKey();
-    
+
     const sourceTx = new Transaction();
     sourceTx.addOutput({
-      lockingScript: Script.fromASM(`OP_DUP OP_HASH160 ${Utils.toHex(Utils.toArray(pubKey.toHash()))} OP_EQUALVERIFY OP_CHECKSIG`),
-      satoshis: 2000
+      lockingScript: Script.fromASM(
+        `OP_DUP OP_HASH160 ${Utils.toHex(
+          Utils.toArray(pubKey.toHash()),
+        )} OP_EQUALVERIFY OP_CHECKSIG`,
+      ),
+      satoshis: 2000,
     });
-    
+
     tx.addInput({
       sourceTransaction: sourceTx,
       sourceOutputIndex: 0,
-      unlockingScript: Script.fromASM(`OP_DUP OP_HASH160 ${Utils.toHex(Utils.toArray(pubKey.toHash()))} OP_EQUALVERIFY OP_CHECKSIG`)
+      unlockingScript: Script.fromASM(
+        `OP_DUP OP_HASH160 ${Utils.toHex(
+          Utils.toArray(pubKey.toHash()),
+        )} OP_EQUALVERIFY OP_CHECKSIG`,
+      ),
     });
     tx.addOutput({
-      lockingScript: Script.fromASM(`OP_DUP OP_HASH160 ${Utils.toHex(Utils.toArray(pubKey.toHash()))} OP_EQUALVERIFY OP_CHECKSIG`),
-      satoshis: 1000
+      lockingScript: Script.fromASM(
+        `OP_DUP OP_HASH160 ${Utils.toHex(
+          Utils.toArray(pubKey.toHash()),
+        )} OP_EQUALVERIFY OP_CHECKSIG`,
+      ),
+      satoshis: 1000,
     });
 
     expect(tx.inputs).toHaveLength(1);
@@ -232,12 +297,7 @@ describe('Bitcoin Extension Tests', () => {
 
   // Command registration tests
   test('Command registration', async () => {
-    const commands = await vscode.commands.getCommands();
-    const bitcoinCommands = commands.filter((cmd: string) =>
-      cmd.startsWith('bitcoin.')
-    );
-    
-    // Test all expected commands are registered
+    const registeredCommands = await vscode.commands.getCommands();
     const expectedCommands = [
       'bitcoin.asmFromScript',
       'bitcoin.addressFromWIF',
@@ -257,27 +317,41 @@ describe('Bitcoin Extension Tests', () => {
       'bitcoin.getTx',
       'bitcoin.publicKeyFromPrivateKey',
       'bitcoin.decodeRawTx',
-      'bitcoin.rawTxToTxo',
-      'bitcoin.rawTxToBob'
+      'bitcoin.rawTxToBob',
+      'bitcoin.convertData',
+      'bitcoin.showKeyVault',
+      'bitcoin.test',
+      'bitcoin.detectAndConvert',
+      'bitcoin.handleOutput',
+      'bitcoin.encrypt',
+      'bitcoin.decrypt',
+      'bitcoin.lookupBapProfile',
+      'bitcoin.fetchOrdinalsInscription',
     ];
 
     for (const cmd of expectedCommands) {
-      expect(bitcoinCommands).toContain(cmd);
+      expect(registeredCommands).toContain(cmd);
     }
-    expect(bitcoinCommands).toHaveLength(expectedCommands.length);
+    expect(registeredCommands).toHaveLength(28);
   });
 
   // Error handling tests
   test('Invalid private key handling', () => {
-    expect(() => PrivateKey.fromString('invalid')).toThrow('Invalid character in invalid');
+    expect(() => PrivateKey.fromString('invalid')).toThrow(
+      'Invalid character in invalid',
+    );
   });
 
   test('Invalid public key handling', () => {
-    expect(() => PublicKey.fromString('invalid')).toThrow('Unknown point format');
+    expect(() => PublicKey.fromString('invalid')).toThrow(
+      'Unknown point format',
+    );
   });
 
   test('Invalid WIF handling', () => {
-    expect(() => PrivateKey.fromWif('invalid')).toThrow('Invalid base58 character');
+    expect(() => PrivateKey.fromWif('invalid')).toThrow(
+      'Invalid base58 character',
+    );
   });
 
   test('Invalid transaction hex handling', () => {
@@ -301,23 +375,35 @@ describe('Bitcoin Extension Tests', () => {
     const tx = new Transaction();
     const privKey = PrivateKey.fromRandom();
     const pubKey = privKey.toPublicKey();
-    
+
     // Create a source transaction with funding
     const sourceTx = new Transaction();
     sourceTx.addOutput({
-      lockingScript: Script.fromASM(`OP_DUP OP_HASH160 ${Utils.toHex(Utils.toArray(pubKey.toHash()))} OP_EQUALVERIFY OP_CHECKSIG`),
-      satoshis: 2000
+      lockingScript: Script.fromASM(
+        `OP_DUP OP_HASH160 ${Utils.toHex(
+          Utils.toArray(pubKey.toHash()),
+        )} OP_EQUALVERIFY OP_CHECKSIG`,
+      ),
+      satoshis: 2000,
     });
-    
+
     // Create a spending transaction
     tx.addInput({
       sourceTransaction: sourceTx,
       sourceOutputIndex: 0,
-      unlockingScript: Script.fromASM(`OP_DUP OP_HASH160 ${Utils.toHex(Utils.toArray(pubKey.toHash()))} OP_EQUALVERIFY OP_CHECKSIG`)
+      unlockingScript: Script.fromASM(
+        `OP_DUP OP_HASH160 ${Utils.toHex(
+          Utils.toArray(pubKey.toHash()),
+        )} OP_EQUALVERIFY OP_CHECKSIG`,
+      ),
     });
     tx.addOutput({
-      lockingScript: Script.fromASM(`OP_DUP OP_HASH160 ${Utils.toHex(Utils.toArray(pubKey.toHash()))} OP_EQUALVERIFY OP_CHECKSIG`),
-      satoshis: 1000
+      lockingScript: Script.fromASM(
+        `OP_DUP OP_HASH160 ${Utils.toHex(
+          Utils.toArray(pubKey.toHash()),
+        )} OP_EQUALVERIFY OP_CHECKSIG`,
+      ),
+      satoshis: 1000,
     });
 
     // Test hex format
@@ -345,8 +431,246 @@ describe('Bitcoin Extension Tests', () => {
     expect(bob.in).toHaveLength(1);
     expect(bob.out).toHaveLength(1);
 
-    // Test BMAP transformation
-    const bmap = await TransformTx(bob, allProtocols.map(p => p.name));
-    expect(bmap).toBeDefined();
+    console.log('Parsed BOB:', JSON.stringify(bob, null, 2));
+
+    // Test BMAP format
+    console.log('Transforming transaction with bmapjs...');
+    const bmapResult = await TransformTx(
+      bob as unknown as BobTx,
+      allProtocols.map((p) => p.name),
+    );
+    expect(bmapResult).toBeDefined();
+    expect(bmapResult.tx).toBeDefined();
+  });
+
+  // Data conversion tests
+  describe('Data Conversion', () => {
+    test('Format detection', () => {
+      // Test hex detection
+      expect(detectFormat('48656c6c6f')).toBe('hex');
+      expect(detectFormat('not-hex-123')).toBe('unknown');
+
+      // Test base64 detection
+      expect(detectFormat('SGVsbG8=')).toBe('base64');
+      expect(detectFormat('not-base64!')).toBe('unknown');
+
+      // Test binary array detection
+      expect(detectFormat('[72,101,108,108,111]')).toBe('binary');
+      expect(detectFormat('[1,2,invalid]')).toBe('unknown');
+    });
+
+    test('Hex conversions', () => {
+      const hex = '48656c6c6f'; // "Hello" in hex
+
+      // Hex to base64
+      expect(convertData(hex, 'hex', 'base64')).toBe('SGVsbG8=');
+
+      // Hex to binary
+      expect(convertData(hex, 'hex', 'binary')).toBe('[72,101,108,108,111]');
+    });
+
+    test('Base64 conversions', () => {
+      const base64 = 'SGVsbG8='; // "Hello" in base64
+
+      // Base64 to hex
+      expect(convertData(base64, 'base64', 'hex')).toBe('48656c6c6f');
+
+      // Base64 to binary
+      expect(convertData(base64, 'base64', 'binary')).toBe(
+        '[72,101,108,108,111]',
+      );
+    });
+
+    test('Binary array conversions', () => {
+      const binary = '[72,101,108,108,111]'; // "Hello" as byte array
+
+      // Binary to hex
+      expect(convertData(binary, 'binary', 'hex')).toBe('48656c6c6f');
+
+      // Binary to base64
+      expect(convertData(binary, 'binary', 'base64')).toBe('SGVsbG8=');
+    });
+
+    test('Error handling', () => {
+      // Invalid hex
+      expect(() => convertData('not-hex', 'hex', 'base64')).toThrow();
+
+      // Invalid base64
+      expect(() => convertData('not-base64!', 'base64', 'hex')).toThrow();
+
+      // Invalid binary array
+      expect(() => convertData('[1,2,invalid]', 'binary', 'hex')).toThrow();
+
+      // Invalid format types
+      expect(() => convertData('48656c6c6f', 'hex', 'invalid-format')).toThrow(
+        'Unsupported output format',
+      );
+      expect(() => convertData('48656c6c6f', 'invalid-format', 'hex')).toThrow(
+        'Unsupported input format',
+      );
+    });
+
+    test('Round trip conversions', () => {
+      const originalHex = '48656c6c6f';
+
+      // Hex -> Base64 -> Hex
+      expect(
+        convertData(convertData(originalHex, 'hex', 'base64'), 'base64', 'hex'),
+      ).toBe(originalHex);
+
+      // Hex -> Binary -> Hex
+      expect(
+        convertData(convertData(originalHex, 'hex', 'binary'), 'binary', 'hex'),
+      ).toBe(originalHex);
+
+      // Base64 -> Binary -> Base64
+      const originalBase64 = 'SGVsbG8=';
+      expect(
+        convertData(
+          convertData(originalBase64, 'base64', 'binary'),
+          'binary',
+          'base64',
+        ),
+      ).toBe(originalBase64);
+    });
+  });
+
+  describe('Welcome Panel Tests', () => {
+    let originalCommands = vscode.commands;
+
+    beforeEach(() => {
+      originalCommands = vscode.commands;
+    });
+
+    afterEach(() => {
+      vscode.commands = originalCommands;
+      if (WelcomePanel.currentPanel) {
+        WelcomePanel.currentPanel.dispose();
+      }
+    });
+
+    test('Welcome panel shows on first activation', async () => {
+      const mockGlobalState: Memento & {
+        setKeysForSync(keys: readonly string[]): void;
+      } = {
+        get: (key: string) =>
+          key === 'bitcoin.hasShownWelcome' ? false : undefined,
+        update: (_key: string, _value: unknown) => Promise.resolve(),
+        keys: () => [],
+        setKeysForSync: () => {},
+      };
+
+      const mockUri: Uri = {
+        scheme: 'file',
+        authority: '',
+        path: __dirname,
+        query: '',
+        fragment: '',
+        fsPath: __dirname,
+        with: () => mockUri,
+        toJSON: () => ({}),
+      };
+
+      const context: Partial<ExtensionContext> = {
+        ...mockContext,
+        globalState: mockGlobalState,
+        extensionUri: mockUri,
+      };
+
+      await activate(context as ExtensionContext);
+      expect(WelcomePanel.currentPanel).toBeDefined();
+    });
+
+    test('Welcome panel does not show on subsequent activations', async () => {
+      const mockGlobalState: Memento & {
+        setKeysForSync(keys: readonly string[]): void;
+      } = {
+        get: (key: string) =>
+          key === 'bitcoin.hasShownWelcome' ? true : undefined,
+        update: (_key: string, _value: unknown) => Promise.resolve(),
+        keys: () => [],
+        setKeysForSync: () => {},
+      };
+
+      const mockUri: Uri = {
+        scheme: 'file',
+        authority: '',
+        path: __dirname,
+        query: '',
+        fragment: '',
+        fsPath: __dirname,
+        with: () => mockUri,
+        toJSON: () => ({}),
+      };
+
+      const context: Partial<ExtensionContext> = {
+        ...mockContext,
+        globalState: mockGlobalState,
+        extensionUri: mockUri,
+      };
+
+      await activate(context as ExtensionContext);
+      expect(WelcomePanel.currentPanel).toBeUndefined();
+    });
+
+    test('Welcome panel handles feature command messages', async () => {
+      // Create a new welcome panel
+      WelcomePanel.show(vscode.Uri.file('/test/workspace'));
+      const panel = WelcomePanel.currentPanel;
+      expect(panel).toBeDefined();
+
+      // Access _handleMessage through type assertion
+      type MessageHandler = (message: { command: string; feature?: string }) => Promise<void>;
+      const handleMessage = ((panel as unknown as { _handleMessage: MessageHandler })._handleMessage).bind(panel);
+      await handleMessage({
+        command: 'tryFeature',
+        feature: 'generatePrivateKey',
+      });
+
+      expect(executedCommands[executedCommands.length - 1]).toBe(
+        'bitcoin.generatePrivateKey',
+      );
+    });
+
+    test('Welcome panel handles settings and keybindings messages', async () => {
+      // Create a new welcome panel
+      WelcomePanel.show(vscode.Uri.file('/test/workspace'));
+      const panel = WelcomePanel.currentPanel;
+      expect(panel).toBeDefined();
+
+      // Access _handleMessage through type assertion
+      type MessageHandler = (message: { command: string }) => Promise<void>;
+      const handleMessage = ((panel as unknown as { _handleMessage: MessageHandler })._handleMessage).bind(panel);
+      await handleMessage({ command: 'openSettings' });
+      expect(executedCommands[executedCommands.length - 1]).toBe(
+        'workbench.action.openSettings',
+      );
+
+      await handleMessage({ command: 'openKeybindings' });
+      expect(executedCommands[executedCommands.length - 1]).toBe(
+        'workbench.action.openGlobalKeybindings',
+      );
+    });
+
+    test('Welcome panel disposes correctly', () => {
+      const mockUri: Uri = {
+        scheme: 'file',
+        authority: '',
+        path: __dirname,
+        query: '',
+        fragment: '',
+        fsPath: __dirname,
+        with: () => mockUri,
+        toJSON: () => ({}),
+      };
+
+      WelcomePanel.show(mockUri);
+      const panel = WelcomePanel.currentPanel;
+      expect(panel).toBeDefined();
+      if (!panel) return;
+
+      panel.dispose();
+      expect(WelcomePanel.currentPanel).toBeUndefined();
+    });
   });
 });

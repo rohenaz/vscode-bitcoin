@@ -1,13 +1,14 @@
 {
   "name": "bitcoin",
   "displayName": "Bitcoin",
-  "description": "Tools for working with Bitcoin (BSV)",
+  "description": "Bitcoin utilities for VS Code",
   "publisher": "Satchmo",
   "version": "0.1.0",
   "icon": "images/icon.png",
-  "type": "module",
+  "type": "commonjs",
   "engines": {
-    "vscode": "^1.49.0"
+    "vscode": "^1.93.0",
+    "node": "^16.0.0"
   },
   "categories": [
     "Other"
@@ -19,6 +20,14 @@
   "main": "./dist/extension.js",
   "contributes": {
     "commands": [
+      {
+        "command": "bitcoin.convertData",
+        "title": "Bitcoin: Convert Data Format (Hex/Base64/Binary)"
+      },
+      {
+        "command": "bitcoin.test",
+        "title": "Bitcoin: Test Command"
+      },
       {
         "command": "bitcoin.asmFromScript",
         "title": "Bitcoin: ASM from Script"
@@ -92,14 +101,71 @@
         "title": "Bitcoin: Decode Raw Transaction"
       },
       {
-        "command": "bitcoin.rawTxToTxo",
-        "title": "Bitcoin: Raw Tx to Txo"
-      },
-      {
         "command": "bitcoin.rawTxToBob",
         "title": "Bitcoin: Raw Tx to Bob"
+      },
+      {
+        "command": "bitcoin.detectAndConvert",
+        "title": "Bitcoin: Detect and Convert Content",
+        "category": "Bitcoin"
+      },
+      {
+        "command": "bitcoin.showKeyVault",
+        "title": "Bitcoin: Show Key Vault",
+        "category": "Bitcoin"
+      },
+      {
+        "command": "bitcoin.encrypt",
+        "title": "Bitcoin: Encrypt Data",
+        "category": "Bitcoin"
+      },
+      {
+        "command": "bitcoin.decrypt",
+        "title": "Bitcoin: Decrypt Data",
+        "category": "Bitcoin"
+      },
+      {
+        "command": "bitcoin.lookupBapProfile",
+        "title": "Bitcoin: Lookup BAP Profile",
+        "category": "Bitcoin"
+      },
+      {
+        "command": "bitcoin.resetWelcomeScreen",
+        "title": "Bitcoin: Reset Welcome Screen",
+        "category": "Bitcoin"
       }
-    ]
+    ],
+    "configuration": {
+      "title": "Bitcoin",
+      "properties": {
+        "bitcoin.workspace.path": {
+          "type": "string",
+          "default": ".bitcoin",
+          "description": "Path to the Bitcoin workspace directory (relative to workspace root)"
+        },
+        "bitcoin.workspace.detectContentType": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically detect content types when saving files"
+        },
+        "bitcoin.workspace.organizeFolders": {
+          "type": "boolean",
+          "default": true,
+          "description": "Organize files into subfolders by type"
+        },
+        "bitcoin.outputPreference": {
+          "type": "string",
+          "enum": ["clipboard", "file", "workspace"],
+          "default": "clipboard",
+          "description": "Where to output results (clipboard, file dialog, or workspace)"
+        },
+        "bitcoin.bapIndexerUrl": {
+          "type": "string",
+          "default": "https://api.sigmaidentity.com",
+          "description": "URL of the BAP identity indexer API"
+        }
+      }
+    }
   },
   "scripts": {
     "vscode:prepublish": "bun run build",
@@ -119,19 +185,24 @@
     "@biomejs/biome": "1.5.3",
     "@types/glob": "^7.2.0",
     "@types/node": "^20.17.10",
-    "@types/vscode": "^1.96.0",
+    "@types/node-fetch": "^2.6.12",
+    "@types/vscode": "^1.93.0",
     "@vscode/test-electron": "^2.4.1",
-    "@vscode/vsce": "^2.24.0",
+    "@vscode/vsce": "^3.2.1",
+    "bun-types": "^1.1.41",
     "glob": "^7.2.3",
     "typescript": "^5.7.2",
     "vite": "^6.0.5"
   },
+  "extensionDependencies": [],
+  "extensionKind": ["workspace"],
   "dependencies": {
-    "@bsv/sdk": "^1.2.18",
-    "@types/node-fetch": "^2.6.12",
-    "bmapjs": "^0.4.0-beta.59",
-    "bpu-ts": "^0.0.26",
-    "core-js": "^3.39.0",
-    "node-fetch": "^2.7.0"
+    "@bsv/sdk": "^1.2.19",
+    "node-fetch": "^2.7.0",
+    "vscode": "^1.1.37"
+  },
+  "optionalDependencies": {
+    "bmapjs": "^0.4.0-beta.61",
+    "bpu-ts": "^0.0.26"
   }
 }

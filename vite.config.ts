@@ -1,35 +1,38 @@
-import { resolve } from 'node:path';
 import { defineConfig } from 'vite';
 
 export default defineConfig({
   build: {
     lib: {
-      entry: resolve(__dirname, 'src/extension.ts'),
-      formats: ['es'],
+      entry: './src/extension.ts',
+      formats: ['cjs'],
       fileName: () => 'extension.js',
     },
     rollupOptions: {
       external: [
         'vscode',
-        'node:path',
-        'node:fs',
-        'node-fetch',
         '@bsv/sdk',
+        'node-fetch',
         'bpu-ts',
         'bmapjs',
+        'core-js',
+        /node:.*/, // Externalize all Node.js built-in modules
       ],
       output: {
-        format: 'es',
-        exports: 'named',
+        format: 'cjs',
+        manualChunks: undefined,
+        inlineDynamicImports: true,
+        entryFileNames: '[name].js',
+        chunkFileNames: '[name].js',
+        assetFileNames: '[name].[ext]',
       },
     },
     sourcemap: true,
     outDir: 'dist',
-    minify: false,
+    minify: true,
+    target: 'node16',
+    reportCompressedSize: true,
   },
   resolve: {
-    alias: {
-      '@': resolve(__dirname, './src'),
-    },
+    extensions: ['.ts', '.js'],
   },
 });

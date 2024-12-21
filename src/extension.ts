@@ -1,257 +1,606 @@
+import * as path from 'node:path';
 import {
   HD,
   Mnemonic,
+  P2PKH,
   PrivateKey,
   PublicKey,
   Script,
   Transaction,
   Utils,
 } from '@bsv/sdk';
-
-const { toArray, toBase58Check } = Utils;
-// The module 'vscode' contains the VS Code extensibility API
-// Import the module and reference it with the alias vscode in your code below
+import { BMAP, type BobTx, TransformTx, allProtocols } from 'bmapjs';
 import { parse } from 'bpu-ts';
 import fetch from 'node-fetch';
 import * as vscode from 'vscode';
-// this method is called when your extension is activated
-// your extension is activated the very first time the command is executed
-export function activate(context: vscode.ExtensionContext) {
-  // Use the console to output diagnostic information (console.log) and errors (console.error)
-  // This line of code will only be executed once when your extension is activated
-  console.log('Congratulations, your extension "bitcoin" is now active!');
+import { BapPanel } from './bapPanel';
+import { BapService } from './bapService';
+import { EncryptionService } from './encryption';
+import { KeyPanel } from './keyPanel';
+import { KeyVault } from './keyVault';
+import { OutputManager } from './output';
+import { WelcomePanel } from './welcomePanel';
+import { WorkspaceManager } from './workspace';
 
-  // The command has been defined in the package.json file
-  // Now provide the implementation of the command with registerCommand
-  // The commandId parameter must match the command field in package.json
-  const disposables = [];
+const { toArray, toHex, toBase64 } = Utils;
+const { fromBase58Check } = Utils;
 
-  disposables.push(
-    vscode.commands.registerCommand('bitcoin.generateHDPublicKey', () => {
+// Helper functions for data conversion
+export function isHex(str: string): boolean {
+  return /^[0-9A-Fa-f]*$/.test(str);
+}
+
+export function isBase64(str: string): boolean {
+  try {
+    return btoa(atob(str)) === str;
+  } catch (e) {
+    return false;
+  }
+}
+
+export function detectFormat(
+  input: string,
+): 'hex' | 'base64' | 'binary' | 'unknown' {
+  // Check if it's a binary array string
+  if (input.startsWith('[') && input.endsWith(']')) {
+    try {
+      const arr = JSON.parse(input);
+      if (
+        Array.isArray(arr) &&
+        arr.every((n) => typeof n === 'number' && n >= 0 && n <= 255)
+      ) {
+        return 'binary';
+      }
+    } catch {}
+  }
+
+  // Check if it's hex
+  if (isHex(input)) {
+    return 'hex';
+  }
+
+  // Check if it's base64
+  if (isBase64(input)) {
+    return 'base64';
+  }
+
+  return 'unknown';
+}
+
+export function convertData(
+  input: string,
+  fromFormat: string,
+  toFormat: string,
+): string {
+  let bytes: number[];
+
+  // First convert input to byte array using toArray
+  switch (fromFormat) {
+    case 'hex':
+      try {
+        if (!isHex(input)) {
+          throw new Error('Invalid hex string');
+        }
+        bytes = toArray(Buffer.from(input, 'hex'));
+      } catch (e) {
+        throw new Error('Invalid hex input');
+      }
+      break;
+    case 'base64':
+      try {
+        if (!isBase64(input)) {
+          throw new Error('Invalid base64 string');
+        }
+        bytes = toArray(Buffer.from(input, 'base64'));
+      } catch (e) {
+        throw new Error('Invalid base64 input');
+      }
+      break;
+    case 'binary':
+      try {
+        const arr = JSON.parse(input);
+        if (
+          !Array.isArray(arr) ||
+          !arr.every((n) => typeof n === 'number' && n >= 0 && n <= 255)
+        ) {
+          throw new Error('Invalid binary array');
+        }
+        bytes = arr;
+      } catch (e) {
+        throw new Error('Invalid binary array input');
+      }
+      break;
+    default:
+      throw new Error('Unsupported input format');
+  }
+
+  // Then convert byte array to desired output format using Utils functions
+  switch (toFormat) {
+    case 'hex':
+      return toHex(bytes);
+    case 'base64':
+      return toBase64(bytes);
+    case 'binary':
+      return JSON.stringify(bytes);
+    default:
+      throw new Error('Unsupported output format');
+  }
+}
+
+function registerCommand(
+  context: vscode.ExtensionContext,
+  outputManager: OutputManager,
+  command: string,
+  handler: () => Promise<
+    { data: string; type: string; name?: string } | undefined
+  >,
+): void {
+  const disposable = vscode.commands.registerCommand(command, async () => {
+    try {
+      const result = await handler();
+      if (result) {
+        await outputManager.handleOutput(
+          result.data,
+          command.replace('bitcoin.', ''),
+          result.type,
+          result.name,
+        );
+      }
+    } catch (error) {
+      vscode.window.showErrorMessage(
+        `Command failed: ${
+          error instanceof Error ? error.message : 'Unknown error'
+        }`,
+      );
+    }
+  });
+  context.subscriptions.push(disposable);
+}
+
+interface Utxo {
+  txid: string;
+  vout: number;
+  satoshis: number;
+  script: string;
+}
+
+const API_HOST = 'https://ordinals.gorillapool.io/api';
+
+const fetchPayUtxos = async (
+  address: string,
+  scriptEncoding: 'hex' | 'base64' | 'asm' = 'base64',
+): Promise<Utxo[]> => {
+  const payUrl = `${API_HOST}/txos/address/${address}/unspent?bsv20=false`;
+  console.log({ payUrl });
+  const payRes = await fetch(payUrl);
+  if (payRes.status === 404) {
+    return []; // No UTXOs found for this address
+  }
+  if (!payRes.ok) {
+    const error = await payRes
+      .json()
+      .catch(() => ({ message: payRes.statusText }));
+    // If it's a checksum mismatch, it might be a BAP ID
+    if (error.message === 'Checksum mismatch') {
+      throw new Error(
+        'Invalid address format. If this is a BAP ID, please use the BAP lookup command instead.',
+      );
+    }
+    throw new Error(
+      `Error fetching pay utxos: ${payRes.status} ${
+        error.message || payRes.statusText
+      }`,
+    );
+  }
+  let payUtxos = await payRes.json();
+  // exclude all 1 satoshi utxos and locked utxos
+  payUtxos = payUtxos.filter(
+    (u: Utxo & { lock?: { address: string; until: number } }) =>
+      u.satoshis !== 1 && !u.lock,
+  );
+
+  // Get pubkey hash from address
+  const pubKeyHash = fromBase58Check(address);
+  const p2pkhScript = new P2PKH().lock(pubKeyHash.data);
+  payUtxos = payUtxos.map((utxo: Partial<Utxo>) => ({
+    txid: utxo.txid,
+    vout: utxo.vout,
+    satoshis: utxo.satoshis,
+    script:
+      scriptEncoding === 'hex' || scriptEncoding === 'base64'
+        ? Buffer.from(p2pkhScript.toBinary()).toString(scriptEncoding)
+        : p2pkhScript.toASM(),
+  }));
+  return payUtxos as Utxo[];
+};
+
+export type ImageContentType =
+  | 'image/png'
+  | 'image/jpeg'
+  | 'image/gif'
+  | 'image/svg+xml'
+  | 'image/webp';
+
+export type TokenInscription = {
+  p: 'bsv-20';
+  amt: string;
+  op: 'transfer' | 'mint' | 'deploy+mint' | 'burn';
+  dec?: string;
+};
+
+export interface TransferTokenInscription extends TokenInscription {
+  p: 'bsv-20';
+  amt: string;
+  op: 'transfer' | 'burn';
+}
+
+export interface TransferBSV20Inscription extends TransferTokenInscription {
+  tick: string;
+}
+
+export interface TransferBSV21Inscription extends TransferTokenInscription {
+  id: string;
+}
+
+export enum TokenType {
+  BSV20 = 'bsv20',
+  BSV21 = 'bsv21',
+}
+
+interface Inscription {
+  txid: string;
+  vout: number;
+  outpoint: string;
+  data?: {
+    insc?: {
+      file?: {
+        hash: string;
+        size: number;
+        type: string | ImageContentType;
+      };
+      json?:
+        | TokenInscription
+        | TransferBSV20Inscription
+        | TransferBSV21Inscription;
+    };
+    types?: string[];
+    bsv20?: {
+      id: string;
+      op: 'transfer' | 'mint' | 'deploy+mint' | 'burn';
+      amt: number;
+      listing?: boolean;
+    };
+  };
+  origin?: {
+    data?: {
+      insc?: {
+        file?: {
+          hash: string;
+          size: number;
+          type: string | ImageContentType;
+        };
+        json?:
+          | TokenInscription
+          | TransferBSV20Inscription
+          | TransferBSV21Inscription;
+      };
+    };
+    num?: string;
+  };
+}
+
+const fetchInscriptionData = async (outpoint: string): Promise<Inscription> => {
+  const url = `${API_HOST}/txos/${outpoint}`;
+  console.log({ url });
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(
+      `Error fetching inscription: ${response.status} ${response.statusText}`,
+    );
+  }
+  return response.json();
+};
+
+const fetchInscriptionContent = async (
+  inscription: Inscription,
+): Promise<string | undefined> => {
+  // First check if content is in the inscription data
+  if (inscription.data?.insc?.json) {
+    return JSON.stringify(inscription.data.insc.json, null, 2);
+  }
+
+  // If not, try to fetch from content endpoint
+  const url = `${API_HOST}/content/${inscription.outpoint}`;
+  console.log({ url });
+  const response = await fetch(url);
+  if (!response.ok) {
+    if (response.status === 404) {
+      return undefined;
+    }
+    throw new Error(
+      `Error fetching inscription content: ${response.status} ${response.statusText}`,
+    );
+  }
+  return response.text();
+};
+
+export async function activate(context: vscode.ExtensionContext) {
+  console.log('Bitcoin extension activating...');
+
+  // Show welcome screen on first activation
+  if (!context.globalState.get('bitcoin.hasShownWelcome')) {
+    WelcomePanel.show(context.extensionUri);
+    context.globalState.update('bitcoin.hasShownWelcome', true);
+  }
+
+  const outputManager = new OutputManager();
+  const workspaceManager = new WorkspaceManager();
+  const keyVault = new KeyVault(context);
+  const encryptionService = new EncryptionService(keyVault);
+
+  // Register show key vault command
+  const showKeyVaultCommand = vscode.commands.registerCommand(
+    'bitcoin.showKeyVault',
+    () => {
+      KeyPanel.show(keyVault);
+    },
+  );
+  context.subscriptions.push(showKeyVaultCommand);
+
+  // Register test command
+  const testCommand = vscode.commands.registerCommand('bitcoin.test', () => {
+    console.log('Test command executed');
+    vscode.window.showInformationMessage('Test command works!');
+  });
+  context.subscriptions.push(testCommand);
+
+  // Register convertData command
+  context.subscriptions.push(
+    vscode.commands.registerCommand('bitcoin.convertData', async () => {
+      try {
+        const input = await vscode.window.showInputBox({
+          placeHolder: 'Enter data to convert (hex, base64, or binary array)',
+          validateInput: (text) => {
+            return text.length === 0 ? 'Input cannot be empty' : null;
+          },
+        });
+
+        if (!input) {
+          return;
+        }
+
+        const inputFormat = detectFormat(input);
+        if (inputFormat === 'unknown') {
+          vscode.window.showErrorMessage(
+            'Unable to detect input format. Please ensure input is valid hex, base64, or binary array.',
+          );
+          return;
+        }
+
+        const formats = ['hex', 'base64', 'binary'];
+        const targetFormat = await vscode.window.showQuickPick(
+          formats.filter((f) => f !== inputFormat),
+          {
+            placeHolder: `Convert from ${inputFormat} to:`,
+          },
+        );
+
+        if (!targetFormat) {
+          return;
+        }
+
+        const result = convertData(input, inputFormat, targetFormat);
+        await vscode.commands.executeCommand(
+          'bitcoin.handleOutput',
+          `Original (${inputFormat}):\n${input}\n\nConverted (${targetFormat}):\n${result}`,
+          'conversions',
+          `${inputFormat}_to_${targetFormat}`,
+        );
+      } catch (error) {
+        vscode.window.showErrorMessage(
+          `Command failed: ${
+            error instanceof Error ? error.message : 'Unknown error'
+          }`,
+        );
+      }
+    }),
+  );
+
+  // Register detect and convert command
+  context.subscriptions.push(
+    vscode.commands.registerCommand('bitcoin.detectAndConvert', async () => {
+      try {
+        const input = await vscode.window.showInputBox({
+          prompt: 'Enter base64 encoded data to convert',
+          placeHolder: 'e.g. /9j/4AAQSkZJRg...',
+        });
+
+        if (!input) {
+          return;
+        }
+
+        const uri = await workspaceManager.detectAndConvertContent(input);
+        if (!uri) {
+          vscode.window.showErrorMessage(
+            'Failed to convert content. Please check the input data.',
+          );
+          return;
+        }
+
+        vscode.window.showInformationMessage(
+          `Content saved to ${vscode.workspace.asRelativePath(uri)}`,
+        );
+
+        // Open the file if it's an image or text
+        const contentType = path.extname(uri.fsPath).toLowerCase();
+        if (['.jpeg', '.jpg', '.png', '.gif', '.bmp'].includes(contentType)) {
+          vscode.commands.executeCommand('vscode.open', uri);
+        } else if (['.json', '.xml', '.txt'].includes(contentType)) {
+          const doc = await vscode.workspace.openTextDocument(uri);
+          await vscode.window.showTextDocument(doc);
+        }
+      } catch (error) {
+        vscode.window.showErrorMessage(
+          `Error converting content: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        );
+      }
+    }),
+  );
+
+  // Register key generation commands
+  registerCommand(
+    context,
+    outputManager,
+    'bitcoin.generateHDPublicKey',
+    async () => {
       const hdPrivKey = HD.fromRandom();
       const hdPubKey = hdPrivKey.toPublic();
-      vscode.env.clipboard.writeText(hdPubKey.toString());
-      vscode.window.showInformationMessage(`Copied! ${hdPubKey.toString()}`);
-    })
+      const value = hdPubKey.toString();
+
+      // Store in vault
+      await keyVault.storeKey({
+        type: 'hdpublic',
+        value,
+        label: 'Generated HD Public Key',
+      });
+
+      return {
+        data: value,
+        type: 'keys',
+        name: 'hdpubkey',
+      };
+    },
   );
 
-  disposables.push(
-    vscode.commands.registerCommand('bitcoin.generateHDPrivateKey', () => {
+  registerCommand(
+    context,
+    outputManager,
+    'bitcoin.generateHDPrivateKey',
+    async () => {
       const hdPrivKey = HD.fromRandom();
-      vscode.env.clipboard.writeText(hdPrivKey.toString());
-      vscode.window.showInformationMessage(`Copied! ${hdPrivKey.toString()}`);
-    })
+      const value = hdPrivKey.toString();
+
+      // Store in vault
+      await keyVault.storeKey({
+        type: 'hdprivate',
+        value,
+        label: 'Generated HD Private Key',
+      });
+
+      return {
+        data: value,
+        type: 'keys',
+        name: 'hdprivkey',
+      };
+    },
   );
 
-  disposables.push(
-    vscode.commands.registerCommand('bitcoin.xPubFromxPriv', async () => {
+  registerCommand(context, outputManager, 'bitcoin.xPubFromxPriv', async () => {
+    const xPriv = await vscode.window.showInputBox({
+      value: '',
+      placeHolder: 'Ex: xprv9s21ZrQH143K...',
+      validateInput: (text) => {
+        return text.length !== 111 ? 'Invalid private key!' : null;
+      },
+    });
+
+    if (!xPriv) {
+      return undefined;
+    }
+
+    const hdPrivKey = HD.fromString(xPriv);
+    const hdPubKey = hdPrivKey.toPublic();
+    return {
+      data: hdPubKey.toString(),
+      type: 'keys',
+      name: 'derived_hdpubkey',
+    };
+  });
+
+  // Register address generation commands
+  registerCommand(
+    context,
+    outputManager,
+    'bitcoin.addressFromHDPublicKey',
+    async () => {
+      const xPub = await vscode.window.showInputBox({
+        value: '',
+        placeHolder: 'Ex: xpub661MyMwAqRbcGa7...',
+        validateInput: (text) => {
+          return text.length !== 111 ? 'Invalid extended public key!' : null;
+        },
+      });
+
+      const path = await vscode.window.showInputBox({
+        value: 'm/0/0',
+        placeHolder: 'Ex: m/0/0',
+        validateInput: (_text) => {
+          return null;
+        },
+      });
+
+      if (!xPub || !path) {
+        return undefined;
+      }
+
+      const hdPubKey = HD.fromString(xPub);
+      const derivedPubKey = hdPubKey.derive(path);
+      const address = derivedPubKey.pubKey.toAddress();
+
+      return {
+        data: address,
+        type: 'addresses',
+        name: `from_hdpubkey_${path.replace('/', '_')}`,
+      };
+    },
+  );
+
+  registerCommand(
+    context,
+    outputManager,
+    'bitcoin.addressFromHDPrivateKey',
+    async () => {
       const xPriv = await vscode.window.showInputBox({
         value: '',
         placeHolder: 'Ex: xprv9s21ZrQH143K...',
         validateInput: (text) => {
-          return text.length !== 111 ? 'Invalid private key!' : null;
+          return text.length !== 111 ? 'Invalid extended private key!' : null;
         },
       });
 
-      if (xPriv) {
-        try {
-          const hdPrivKey = HD.fromString(xPriv);
-          const hdPubKey = hdPrivKey.toPublic();
-          vscode.env.clipboard.writeText(hdPubKey.toString());
-          vscode.window.showInformationMessage(
-            `Copied! ${hdPubKey.toString()}`
-          );
-        } catch (e) {
-          console.error(e);
-        }
-      }
-    })
-  );
-
-  disposables.push(
-    vscode.commands.registerCommand(
-      'bitcoin.addressFromHDPublicKey',
-      async () => {
-        const xPub = await vscode.window.showInputBox({
-          value: '',
-          placeHolder: 'Ex: xpub661MyMwAqRbcGa7...',
-          validateInput: (text) => {
-            return text.length !== 111 ? 'Invalid extended public key!' : null;
-          },
-        });
-
-        const path = await vscode.window.showInputBox({
-          value: 'm/0/0',
-          placeHolder: 'Ex: m/0/0',
-          validateInput: (_text) => {
-            return null;
-          },
-        });
-
-        if (xPub && path) {
-          try {
-            const hdPubKey = HD.fromString(xPub);
-            const derivedPubKey = hdPubKey.derive(path);
-
-            const address = derivedPubKey.pubKey.toAddress();
-            vscode.env.clipboard.writeText(address);
-            vscode.window.showInformationMessage(`Copied! ${address}`);
-          } catch (e) {
-            console.error(e);
-          }
-        }
-      }
-    )
-  );
-
-  disposables.push(
-    vscode.commands.registerCommand('bitcoin.generatePublicKey', () => {
-      const privKey = PrivateKey.fromRandom();
-      const publicKey = privKey.toPublicKey();
-      vscode.env.clipboard.writeText(publicKey.toString());
-      vscode.window.showInformationMessage(`Copied! ${publicKey.toString()}`);
-    })
-  );
-
-  disposables.push(
-    vscode.commands.registerCommand('bitcoin.generatePrivateKey', () => {
-      try {
-        const privKey = PrivateKey.fromRandom();
-        vscode.env.clipboard.writeText(privKey.toString());
-        vscode.window.showInformationMessage(`Copied! ${privKey.toString()}`);
-      } catch (e) {
-        console.error(e);
-      }
-    })
-  );
-
-  disposables.push(
-    vscode.commands.registerCommand('bitcoin.generateWIF', () => {
-      try {
-        const privKey = PrivateKey.fromRandom();
-        vscode.env.clipboard.writeText(privKey.toWif());
-        vscode.window.showInformationMessage(`Copied! ${privKey.toWif()}`);
-      } catch (e) {
-        console.error(e);
-      }
-    })
-  );
-
-  disposables.push(
-    vscode.commands.registerCommand('bitcoin.generateMnemonic', () => {
-      try {
-        const mnemonic = Mnemonic.fromRandom();
-        vscode.env.clipboard.writeText(mnemonic.toString());
-        vscode.window.showInformationMessage(`Copied! ${mnemonic.toString()}`);
-      } catch (e) {
-        console.error(e);
-      }
-    })
-  );
-
-  disposables.push(
-    vscode.commands.registerCommand(
-      'bitcoin.extendedPrivateKeyFromMnemonic',
-      async () => {
-        const mnemonicStr = await vscode.window.showInputBox({
-          value: '',
-          placeHolder:
-            'Ex: solid drastic bone type leopard law virtual share agree way bacon noise',
-          validateInput: (text) => {
-            return text.split(' ').length !== 12 ? 'Invalid mnemonic!' : null;
-          },
-        });
-
-        if (mnemonicStr) {
-          try {
-            const mnemonic = Mnemonic.fromString(mnemonicStr);
-            const hdPrivKey = HD.fromSeed(mnemonic.toSeed());
-            vscode.env.clipboard.writeText(hdPrivKey.toString());
-            vscode.window.showInformationMessage(
-              `Copied! ${hdPrivKey.toString()}`
-            );
-          } catch (e) {
-            console.error(e);
-          }
-        }
-      }
-    )
-  );
-
-  disposables.push(
-    vscode.commands.registerCommand('bitcoin.decodeRawTx', async () => {
-      const rawTxHex = await vscode.window.showInputBox({
-        value: '',
-        placeHolder: 'paste raw tx hex',
+      const path = await vscode.window.showInputBox({
+        value: 'm/0/0',
+        placeHolder: 'Ex: m/0/0',
         validateInput: (_text) => {
           return null;
         },
       });
 
-      if (rawTxHex) {
-        try {
-          const tx = Transaction.fromHex(rawTxHex);
-          const txObj = {
-            version: tx.version,
-            inputs: tx.inputs.map((input) => ({
-              prevTxId: input.sourceTXID?.toString() || '',
-              outputIndex: input.sourceOutputIndex,
-              script: input.unlockingScript
-                ? input.unlockingScript.toString()
-                : '',
-              sequence: input.sequence,
-            })),
-            outputs: tx.outputs.map((output) => ({
-              satoshis: output.satoshis,
-              script: output.lockingScript.toString(),
-            })),
-            lockTime: tx.lockTime,
-          };
-          const txt = JSON.stringify(txObj, null, 2);
-
-          vscode.workspace
-            .openTextDocument({
-              language: 'text',
-              content: txt,
-            })
-            .then((doc) => {
-              vscode.window.showTextDocument(doc, {
-                preview: false,
-                preserveFocus: true,
-              });
-            });
-        } catch (e) {
-          console.error(e);
-        }
+      if (!xPriv || !path) {
+        return undefined;
       }
-    })
+
+      const hdPrivKey = HD.fromString(xPriv);
+      const derivedKey = hdPrivKey.derive(path);
+      const privKey = PrivateKey.fromHex(derivedKey.privKey.toString());
+      const pubKey = privKey.toPublicKey();
+      const address = pubKey.toAddress();
+
+      return {
+        data: address,
+        type: 'addresses',
+        name: `from_hdprivkey_${path.replace('/', '_')}`,
+      };
+    },
   );
 
-  disposables.push(
-    vscode.commands.registerCommand('bitcoin.asmFromScript', async () => {
-      const scriptHex = await vscode.window.showInputBox({
-        value: '',
-        placeHolder: 'Ex: 006a0c74657374206d657373616765...',
-        validateInput: (_text) => {
-          return null;
-        },
-      });
-
-      if (scriptHex) {
-        try {
-          const script = Script.fromHex(scriptHex);
-          const asmString = script.toASM();
-          vscode.env.clipboard.writeText(asmString);
-          vscode.window.showInformationMessage(`Copied! ${asmString}`);
-        } catch (e) {
-          console.error(e);
-        }
-      }
-    })
-  );
-
-  disposables.push(
-    vscode.commands.registerCommand('bitcoin.addressFromPublicKey', async () => {
+  registerCommand(
+    context,
+    outputManager,
+    'bitcoin.addressFromPublicKey',
+    async () => {
       const pubKey = await vscode.window.showInputBox({
         value: '',
         placeHolder: 'Ex: 02...',
@@ -260,22 +609,26 @@ export function activate(context: vscode.ExtensionContext) {
         },
       });
 
-      if (pubKey) {
-        try {
-          const publicKey = PublicKey.fromString(pubKey);
-          const script = Script.fromASM(`OP_DUP OP_HASH160 ${Utils.toHex(Utils.toArray(publicKey.toHash()))} OP_EQUALVERIFY OP_CHECKSIG`);
-          const address = Utils.toBase58Check(Utils.toArray(script.toHex()));
-          vscode.env.clipboard.writeText(address);
-          vscode.window.showInformationMessage(`Copied! ${address}`);
-        } catch (e) {
-          console.error(e);
-        }
+      if (!pubKey) {
+        return undefined;
       }
-    })
+
+      const publicKey = PublicKey.fromString(pubKey);
+      const address = publicKey.toAddress();
+
+      return {
+        data: address,
+        type: 'addresses',
+        name: 'from_pubkey',
+      };
+    },
   );
 
-  disposables.push(
-    vscode.commands.registerCommand('bitcoin.addressFromPrivateKey', async () => {
+  registerCommand(
+    context,
+    outputManager,
+    'bitcoin.addressFromPrivateKey',
+    async () => {
       const privKey = await vscode.window.showInputBox({
         value: '',
         placeHolder: 'Ex: L...',
@@ -284,23 +637,27 @@ export function activate(context: vscode.ExtensionContext) {
         },
       });
 
-      if (privKey) {
-        try {
-          const privateKey = PrivateKey.fromString(privKey);
-          const publicKey = privateKey.toPublicKey();
-          const script = Script.fromASM(`OP_DUP OP_HASH160 ${Utils.toHex(Utils.toArray(publicKey.toHash()))} OP_EQUALVERIFY OP_CHECKSIG`);
-          const address = Utils.toBase58Check(Utils.toArray(script.toHex()));
-          vscode.env.clipboard.writeText(address);
-          vscode.window.showInformationMessage(`Copied! ${address}`);
-        } catch (e) {
-          console.error(e);
-        }
+      if (!privKey) {
+        return undefined;
       }
-    })
+
+      const privateKey = PrivateKey.fromString(privKey);
+      const publicKey = privateKey.toPublicKey();
+      const address = publicKey.toAddress();
+
+      return {
+        data: address,
+        type: 'addresses',
+        name: 'from_privkey',
+      };
+    },
   );
 
-  disposables.push(
-    vscode.commands.registerCommand('bitcoin.addressFromWIF', async () => {
+  registerCommand(
+    context,
+    outputManager,
+    'bitcoin.addressFromWIF',
+    async () => {
       const wif = await vscode.window.showInputBox({
         value: '',
         placeHolder: 'Ex: L...',
@@ -309,39 +666,98 @@ export function activate(context: vscode.ExtensionContext) {
         },
       });
 
-      if (wif) {
-        try {
-          const privateKey = PrivateKey.fromWif(wif);
-          const publicKey = privateKey.toPublicKey();
-          const script = Script.fromASM(`OP_DUP OP_HASH160 ${Utils.toHex(Utils.toArray(publicKey.toHash()))} OP_EQUALVERIFY OP_CHECKSIG`);
-          const address = Utils.toBase58Check(Utils.toArray(script.toHex()));
-          vscode.env.clipboard.writeText(address);
-          vscode.window.showInformationMessage(`Copied! ${address}`);
-        } catch (e) {
-          console.error(e);
-        }
+      if (!wif) {
+        return undefined;
       }
-    })
+
+      const privateKey = PrivateKey.fromWif(wif);
+      const publicKey = privateKey.toPublicKey();
+      const address = publicKey.toAddress();
+
+      return {
+        data: address,
+        type: 'addresses',
+        name: 'from_wif',
+      };
+    },
   );
 
-  disposables.push(
-    vscode.commands.registerCommand('bitcoin.getTx', async () => {
-      const txid = await vscode.window.showInputBox({
-        value: '',
-        placeHolder: 'Ex: 4d03ff9062ac2e6...',
-        validateInput: (_text) => {
-          return null;
-        },
-      });
+  // Register transaction commands
+  registerCommand(context, outputManager, 'bitcoin.getTx', async () => {
+    const txid = await vscode.window.showInputBox({
+      value: '',
+      placeHolder: 'Ex: 4d03ff9062ac2e6...',
+      validateInput: (text) => {
+        return text.match(/^[a-fA-F0-9]{64}$/)
+          ? null
+          : 'Invalid transaction ID format. Expected: 64 character hex string';
+      },
+    });
 
-      if (txid) {
-        try {
-          const response = await fetch(
-            `https://api.whatsonchain.com/v1/bsv/main/tx/${txid}/hex`
-          );
-          const rawTxHex = await response.text();
+    if (!txid) {
+      return undefined;
+    }
+
+    const formats = [
+      {
+        label: 'Hex (Raw Transaction)',
+        value: 'hex',
+        description: 'Raw transaction hex',
+      },
+      {
+        label: 'Base64',
+        value: 'base64',
+        description: 'Raw transaction base64 encoded',
+      },
+      {
+        label: 'JSON (Parsed)',
+        value: 'json',
+        description: 'Parsed transaction data',
+      },
+      {
+        label: 'BOB (Parsed)',
+        value: 'bob',
+        description: 'Bitcoin OP_RETURN Bytecode format',
+      },
+      {
+        label: 'BMAP (Parsed)',
+        value: 'bmap',
+        description: 'Bitcoin Message Action Protocol format',
+      },
+    ];
+
+    const format = await vscode.window.showQuickPick(formats, {
+      placeHolder: 'Select output format',
+      title: 'Transaction Format',
+    });
+
+    // Default to hex if no format selected
+    const selectedFormat = format?.value || 'hex';
+
+    try {
+      let content: string;
+      let language: string;
+
+      // First fetch the raw transaction hex
+      const hexResponse = await fetch(
+        `https://api.whatsonchain.com/v1/bsv/main/tx/${txid}/hex`,
+      );
+      if (!hexResponse.ok) {
+        throw new Error(`${hexResponse.status} ${hexResponse.statusText}`);
+      }
+      const rawTxHex = await hexResponse.text();
+
+      switch (selectedFormat) {
+        case 'base64': {
+          content = Buffer.from(rawTxHex, 'hex').toString('base64');
+          language = 'plaintext';
+          break;
+        }
+        case 'json': {
+          // Parse using our SDK for consistent formatting
           const tx = Transaction.fromHex(rawTxHex);
           const txObj = {
+            txid,
             version: tx.version,
             inputs: tx.inputs.map((input) => ({
               prevTxId: input.sourceTXID?.toString() || '',
@@ -357,28 +773,157 @@ export function activate(context: vscode.ExtensionContext) {
             })),
             lockTime: tx.lockTime,
           };
-          const txt = JSON.stringify(txObj, null, 2);
+          content = JSON.stringify(txObj, null, 2);
+          language = 'json';
+          break;
+        }
+        case 'bob': {
+          const bob = await parse({
+            tx: { r: rawTxHex },
+            split: [
+              { token: { op: 106 }, include: 'l' },
+              { token: { s: '|' } },
+            ],
+          });
+          content = JSON.stringify(bob, null, 2);
+          language = 'json';
+          break;
+        }
+        case 'bmap': {
+          try {
+            const bmap = new BMAP();
+            console.log('Starting transaction processing...');
+            console.log('Raw transaction:', rawTxHex);
 
-          vscode.workspace
-            .openTextDocument({
-              language: 'text',
-              content: txt,
-            })
-            .then((doc) => {
-              vscode.window.showTextDocument(doc, {
-                preview: false,
-                preserveFocus: true,
-              });
-            });
-        } catch (e) {
-          console.error(e);
+            if (!rawTxHex) {
+              throw new Error('No transaction data provided');
+            }
+
+            console.log('Parsing transaction with bpu-ts...');
+            const bob = (await parse({
+              tx: { r: rawTxHex },
+              split: [
+                { token: { op: 106 }, include: 'l' },
+                { token: { s: '|' } },
+              ],
+            })) as BobTx;
+
+            if (!bob) {
+              throw new Error('Failed to parse transaction with bpu-ts');
+            }
+
+            console.log('Parsed BOB:', JSON.stringify(bob, null, 2));
+
+            console.log('Transforming transaction with bmapjs...');
+            const tx = await TransformTx(
+              bob,
+              allProtocols.map((p) => p.name),
+            );
+            content = JSON.stringify(tx, null, 2);
+          } catch (error) {
+            // If BMAP parsing fails, just return tx hash
+            content = JSON.stringify({ tx: { h: txid } }, null, 2);
+          }
+          language = 'json';
+          break;
+        }
+        default: {
+          // Hex format (default)
+          content = rawTxHex;
+          language = 'plaintext';
         }
       }
-    })
-  );
 
-  disposables.push(
-    vscode.commands.registerCommand('bitcoin.getUtxosForAddress', async () => {
+      // Always open in new editor first
+      const doc = await vscode.workspace.openTextDocument({
+        content,
+        language,
+      });
+      await vscode.window.showTextDocument(doc, { preview: false });
+
+      // Then handle according to output preference
+      return {
+        data: content,
+        type: 'transactions',
+        name: `${txid}_${selectedFormat}`,
+      };
+    } catch (error) {
+      console.error('Transaction fetch error:', error);
+      throw new Error(
+        `Failed to fetch transaction: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
+  });
+
+  registerCommand(context, outputManager, 'bitcoin.decodeRawTx', async () => {
+    const rawTxHex = await vscode.window.showInputBox({
+      value: '',
+      placeHolder: 'paste raw tx hex',
+      validateInput: (_text) => {
+        return null;
+      },
+    });
+
+    if (!rawTxHex) {
+      return undefined;
+    }
+
+    const tx = Transaction.fromHex(rawTxHex);
+    const txObj = {
+      version: tx.version,
+      inputs: tx.inputs.map((input) => ({
+        prevTxId: input.sourceTXID?.toString() || '',
+        outputIndex: input.sourceOutputIndex,
+        script: input.unlockingScript ? input.unlockingScript.toString() : '',
+        sequence: input.sequence,
+      })),
+      outputs: tx.outputs.map((output) => ({
+        satoshis: output.satoshis,
+        script: output.lockingScript.toString(),
+      })),
+      lockTime: tx.lockTime,
+    };
+
+    return {
+      data: JSON.stringify(txObj, null, 2),
+      type: 'transactions',
+      name: `decoded_${new Date().toISOString().replace(/[:.]/g, '-')}`,
+    };
+  });
+
+  registerCommand(context, outputManager, 'bitcoin.rawTxToBob', async () => {
+    const rawTxHex = await vscode.window.showInputBox({
+      value: '',
+      placeHolder: 'paste raw tx hex',
+      validateInput: (_text) => {
+        return null;
+      },
+    });
+
+    if (!rawTxHex) {
+      return undefined;
+    }
+
+    const bob = await parse({
+      tx: { r: rawTxHex },
+      split: [{ token: { op: 106 }, include: 'l' }, { token: { s: '|' } }],
+    });
+
+    return {
+      data: JSON.stringify(bob, null, 2),
+      type: 'transactions',
+      name: `bob_${new Date().toISOString().replace(/[:.]/g, '-')}`,
+    };
+  });
+
+  // Register UTXO commands
+  registerCommand(
+    context,
+    outputManager,
+    'bitcoin.getUtxosForAddress',
+    async () => {
       const address = await vscode.window.showInputBox({
         value: '',
         placeHolder: 'Ex: 1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa',
@@ -387,118 +932,512 @@ export function activate(context: vscode.ExtensionContext) {
         },
       });
 
-      if (address) {
-        try {
-          const response = await fetch(
-            `https://api.whatsonchain.com/v1/bsv/main/address/${address}/unspent`
-          );
-          const utxos = await response.json();
-          const txt = JSON.stringify(utxos, null, 2);
-
-          vscode.workspace
-            .openTextDocument({
-              language: 'text',
-              content: txt,
-            })
-            .then((doc) => {
-              vscode.window.showTextDocument(doc, {
-                preview: false,
-                preserveFocus: true,
-              });
-            });
-        } catch (e) {
-          console.error(e);
-        }
+      if (!address) {
+        return undefined;
       }
-    })
-  );
 
-  disposables.push(
-    vscode.commands.registerCommand('bitcoin.rawTxToTxo', async () => {
-      const rawTxHex = await vscode.window.showInputBox({
-        value: '',
-        placeHolder: 'paste raw tx hex',
-        validateInput: (_text) => {
-          return null;
-        },
-      });
+      try {
+        const utxos = await fetchPayUtxos(address, 'hex');
 
-      if (rawTxHex) {
-        try {
-          const tx = Transaction.fromHex(rawTxHex);
-          const txObj = {
-            version: tx.version,
-            inputs: tx.inputs.map((input) => ({
-              prevTxId: input.sourceTXID?.toString() || '',
-              outputIndex: input.sourceOutputIndex,
-              script: input.unlockingScript
-                ? input.unlockingScript.toString()
-                : '',
-              sequence: input.sequence,
-            })),
-            outputs: tx.outputs.map((output) => ({
-              satoshis: output.satoshis,
-              script: output.lockingScript.toString(),
-            })),
-            lockTime: tx.lockTime,
+        // Handle empty response
+        if (!utxos || !Array.isArray(utxos)) {
+          return {
+            data: JSON.stringify(
+              {
+                address,
+                utxoCount: 0,
+                totalSatoshis: 0,
+                utxos: [],
+              },
+              null,
+              2,
+            ),
+            type: 'utxos',
+            name: `utxos_${address}`,
           };
-          const txt = JSON.stringify(txObj, null, 2);
-
-          vscode.workspace
-            .openTextDocument({
-              language: 'text',
-              content: txt,
-            })
-            .then((doc) => {
-              vscode.window.showTextDocument(doc, {
-                preview: false,
-                preserveFocus: true,
-              });
-            });
-        } catch (e) {
-          console.error(e);
         }
+
+        const result = {
+          address,
+          utxoCount: utxos.length,
+          totalSatoshis: utxos.reduce(
+            (sum, utxo) => sum + (utxo.satoshis || 0),
+            0,
+          ),
+          utxos: utxos.map((utxo) => ({
+            txid: utxo.txid,
+            vout: utxo.vout,
+            value: utxo.satoshis,
+            scriptPubKey: utxo.script,
+          })),
+        };
+
+        return {
+          data: JSON.stringify(result, null, 2),
+          type: 'utxos',
+          name: `utxos_${address}`,
+        };
+      } catch (error) {
+        console.error('UTXO fetch error:', error);
+        const errorMessage =
+          error instanceof Error ? error.message : String(error);
+        throw new Error(
+          `Failed to fetch UTXOs from ${API_HOST}/txos/address/${address}/unspent?bsv20=false\nError: ${errorMessage}`,
+        );
       }
-    })
+    },
   );
 
-  disposables.push(
-    vscode.commands.registerCommand('bitcoin.rawTxToBob', async () => {
-      const rawTxHex = await vscode.window.showInputBox({
+  // Register script commands
+  registerCommand(context, outputManager, 'bitcoin.asmFromScript', async () => {
+    const scriptHex = await vscode.window.showInputBox({
+      value: '',
+      placeHolder: 'Ex: 006a0c74657374206d657373616765...',
+      validateInput: (_text) => {
+        return null;
+      },
+    });
+
+    if (!scriptHex) {
+      return undefined;
+    }
+
+    const script = Script.fromHex(scriptHex);
+    const asmString = script.toASM();
+
+    return {
+      data: asmString,
+      type: 'scripts',
+      name: `asm_${new Date().toISOString().replace(/[:.]/g, '-')}`,
+    };
+  });
+
+  // Register key generation commands
+  registerCommand(
+    context,
+    outputManager,
+    'bitcoin.generatePublicKey',
+    async () => {
+      const privKey = PrivateKey.fromRandom();
+      const publicKey = privKey.toPublicKey();
+
+      return {
+        data: publicKey.toString(),
+        type: 'keys',
+        name: 'pubkey',
+      };
+    },
+  );
+
+  registerCommand(
+    context,
+    outputManager,
+    'bitcoin.generatePrivateKey',
+    async () => {
+      const privKey = PrivateKey.fromRandom();
+      const value = privKey.toString();
+
+      // Store in vault
+      await keyVault.storeKey({
+        type: 'private',
+        value,
+        label: 'Generated Private Key',
+      });
+
+      return {
+        data: value,
+        type: 'keys',
+        name: 'privkey',
+      };
+    },
+  );
+
+  registerCommand(context, outputManager, 'bitcoin.generateWIF', async () => {
+    const privKey = PrivateKey.fromRandom();
+    const value = privKey.toWif();
+
+    // Store in vault
+    await keyVault.storeKey({
+      type: 'wif',
+      value,
+      label: 'Generated WIF',
+    });
+
+    return {
+      data: value,
+      type: 'keys',
+      name: 'wif',
+    };
+  });
+
+  registerCommand(
+    context,
+    outputManager,
+    'bitcoin.generateMnemonic',
+    async () => {
+      const mnemonic = Mnemonic.fromRandom();
+      const value = mnemonic.toString();
+
+      // Store in vault
+      await keyVault.storeKey({
+        type: 'mnemonic',
+        value,
+        label: 'Generated Mnemonic',
+      });
+
+      return {
+        data: value,
+        type: 'keys',
+        name: 'mnemonic',
+      };
+    },
+  );
+
+  registerCommand(
+    context,
+    outputManager,
+    'bitcoin.extendedPrivateKeyFromMnemonic',
+    async () => {
+      const mnemonicStr = await vscode.window.showInputBox({
         value: '',
-        placeHolder: 'paste raw tx hex',
+        placeHolder:
+          'Ex: solid drastic bone type leopard law virtual share agree way bacon noise',
+        validateInput: (text) => {
+          return text.split(' ').length !== 12 ? 'Invalid mnemonic!' : null;
+        },
+      });
+
+      if (!mnemonicStr) {
+        return undefined;
+      }
+
+      const mnemonic = Mnemonic.fromString(mnemonicStr);
+      const hdPrivKey = HD.fromSeed(mnemonic.toSeed());
+
+      return {
+        data: hdPrivKey.toString(),
+        type: 'keys',
+        name: 'hdprivkey_from_mnemonic',
+      };
+    },
+  );
+
+  registerCommand(
+    context,
+    outputManager,
+    'bitcoin.publicKeyFromPrivateKey',
+    async () => {
+      const privKeyStr = await vscode.window.showInputBox({
+        value: '',
+        placeHolder: 'Ex: L...',
         validateInput: (_text) => {
           return null;
         },
       });
 
-      if (rawTxHex) {
-        try {
-          const bob = await parse({
-            tx: { r: rawTxHex },
-            split: [{ token: { op: 106 }, include: 'l' }, { token: { s: '|' } }],
-          });
-          const txt = JSON.stringify(bob, null, 2);
-
-          vscode.workspace
-            .openTextDocument({
-              language: 'text',
-              content: txt,
-            })
-            .then((doc) => {
-              vscode.window.showTextDocument(doc, {
-                preview: false,
-                preserveFocus: true,
-              });
-            });
-        } catch (e) {
-          console.error(e);
-        }
+      if (!privKeyStr) {
+        return undefined;
       }
+
+      const privKey = PrivateKey.fromString(privKeyStr);
+      const pubKey = privKey.toPublicKey();
+
+      return {
+        data: pubKey.toString(),
+        type: 'keys',
+        name: 'pubkey_from_privkey',
+      };
+    },
+  );
+
+  // Register output handler
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      'bitcoin.handleOutput',
+      async (output: string, type: string, suggestedName?: string) => {
+        const config = vscode.workspace.getConfiguration('bitcoin');
+        const preference = config.get('outputPreference') as string;
+
+        try {
+          switch (preference) {
+            case 'workspace': {
+              const uri = await workspaceManager.saveFile(
+                output,
+                type,
+                suggestedName,
+              );
+              vscode.window.showInformationMessage(
+                `Output saved to ${vscode.workspace.asRelativePath(uri)}`,
+              );
+              break;
+            }
+
+            case 'file': {
+              const fileUri = await vscode.window.showSaveDialog({
+                defaultUri: vscode.Uri.file(
+                  suggestedName ?? `${type}_${Date.now()}.txt`,
+                ),
+                filters: { 'Text files': ['txt'] },
+              });
+              if (fileUri) {
+                await vscode.workspace.fs.writeFile(
+                  fileUri,
+                  Buffer.from(output),
+                );
+                vscode.window.showInformationMessage(
+                  `Output saved to ${vscode.workspace.asRelativePath(fileUri)}`,
+                );
+              }
+              break;
+            }
+
+            default: {
+              // Handle clipboard (default case)
+              await vscode.env.clipboard.writeText(output);
+              const changeSettings = 'Change Output Settings';
+              const result = await vscode.window.showInformationMessage(
+                'Output copied to clipboard!',
+                changeSettings,
+              );
+              if (result === changeSettings) {
+                await vscode.commands.executeCommand(
+                  'workbench.action.openSettings',
+                  'bitcoin.outputPreference',
+                );
+              }
+              break;
+            }
+          }
+        } catch (error) {
+          vscode.window.showErrorMessage(
+            `Error handling output: ${
+              error instanceof Error ? error.message : String(error)
+            }`,
+          );
+        }
+      },
+    ),
+  );
+
+  // Register encryption and decryption commands
+  context.subscriptions.push(
+    vscode.commands.registerCommand('bitcoin.encrypt', async () => {
+      try {
+        // Get active text editor
+        const editor = vscode.window.activeTextEditor;
+        if (!editor) {
+          vscode.window.showErrorMessage('No active text editor');
+          return;
+        }
+
+        // Get selected text or entire document
+        const selection = editor.selection;
+        const text = selection.isEmpty
+          ? editor.document.getText()
+          : editor.document.getText(selection);
+
+        if (!text) {
+          vscode.window.showErrorMessage('No text to encrypt');
+          return;
+        }
+
+        // Get encryption key
+        const key = await encryptionService.promptForKey('encrypt');
+        if (!key) {
+          return; // User cancelled
+        }
+
+        // Generate filename from source
+        const fileName =
+          editor.document.uri.fsPath.split('/').pop() || 'unknown';
+
+        // Encrypt the data
+        const { encryptedData, privateKey } = await encryptionService.encrypt(
+          text,
+          key,
+          {
+            fileName,
+            command: 'bitcoin.encrypt',
+          },
+        );
+
+        // Save the encrypted data
+        const uri = await workspaceManager.saveFile(
+          encryptedData,
+          'encrypted',
+          `encrypted_${fileName}.dat`,
+        );
+
+        // Show success message with key
+        const wif = privateKey.toWif();
+        await vscode.window.showInformationMessage(
+          'Data encrypted and saved. Keep this key safe:',
+          { modal: true },
+        );
+        await vscode.window.showInformationMessage(wif, { modal: true });
+
+        // Open the encrypted file
+        const doc = await vscode.workspace.openTextDocument(uri);
+        await vscode.window.showTextDocument(doc);
+      } catch (error) {
+        vscode.window.showErrorMessage(
+          `Encryption failed: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        );
+      }
+    }),
+
+    vscode.commands.registerCommand('bitcoin.decrypt', async () => {
+      try {
+        // Get active text editor
+        const editor = vscode.window.activeTextEditor;
+        if (!editor) {
+          vscode.window.showErrorMessage('No active text editor');
+          return;
+        }
+
+        // Get selected text or entire document
+        const selection = editor.selection;
+        const text = selection.isEmpty
+          ? editor.document.getText()
+          : editor.document.getText(selection);
+
+        if (!text) {
+          vscode.window.showErrorMessage('No text to decrypt');
+          return;
+        }
+
+        // Get decryption key
+        const key = await encryptionService.promptForKey('decrypt');
+        if (!key) {
+          return; // User cancelled
+        }
+
+        // Decrypt the data
+        const decrypted = await encryptionService.decrypt(text, key);
+
+        // Create new document with decrypted content
+        const doc = await vscode.workspace.openTextDocument({
+          content: decrypted.toString(),
+          language: 'plaintext',
+        });
+        await vscode.window.showTextDocument(doc);
+      } catch (error) {
+        vscode.window.showErrorMessage(
+          `Decryption failed: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        );
+      }
+    }),
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('bitcoin.lookupBapProfile', async () => {
+      const bapService = new BapService();
+
+      // Prompt for BAP ID
+      const idKey = await vscode.window.showInputBox({
+        prompt: 'Enter BAP ID',
+        placeHolder: 'e.g. Go8vCHAa4S6AhXKTABGpANiz35J',
+      });
+
+      if (!idKey) {
+        return;
+      }
+
+      try {
+        // Show progress indicator
+        const profile = await vscode.window.withProgress(
+          {
+            location: vscode.ProgressLocation.Notification,
+            title: 'Looking up BAP profile...',
+            cancellable: false,
+          },
+          () => bapService.getProfile(idKey),
+        );
+
+        // Show profile in webview
+        BapPanel.show(profile);
+      } catch (error) {
+        vscode.window.showErrorMessage(
+          `Failed to lookup BAP profile: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        );
+      }
+    }),
+  );
+
+  // Register fetch ordinals inscription command
+  registerCommand(
+    context,
+    outputManager,
+    'bitcoin.fetchOrdinalsInscription',
+    async () => {
+      const outpoint = await vscode.window.showInputBox({
+        value: '',
+        placeHolder:
+          'Ex: 027cea24351db7081089108b59916e5c5e90893233a872266c013f7665c53758_1',
+        validateInput: (text) => {
+          return text.match(/^[a-fA-F0-9]{64}_[0-9]+$/)
+            ? null
+            : 'Invalid outpoint format. Expected: txid_vout';
+        },
+      });
+
+      if (!outpoint) {
+        return undefined;
+      }
+
+      try {
+        // First fetch inscription metadata
+        const inscription = await fetchInscriptionData(outpoint);
+
+        // Then fetch or extract the content
+        const content = await fetchInscriptionContent(inscription);
+
+        if (!content) {
+          throw new Error('No inscription content found');
+        }
+
+        // Try to parse as JSON for formatting
+        try {
+          const jsonContent = JSON.parse(content);
+          return {
+            data: JSON.stringify(jsonContent, null, 2),
+            type: 'inscriptions',
+            name: `inscription_${outpoint.replace('_', '-')}`,
+          };
+        } catch {
+          // Not JSON, return as is
+          return {
+            data: content,
+            type: 'inscriptions',
+            name: `inscription_${outpoint.replace('_', '-')}`,
+          };
+        }
+      } catch (error) {
+        console.error('Inscription fetch error:', error);
+        const errorMessage =
+          error instanceof Error ? error.message : String(error);
+        throw new Error(
+          `Failed to fetch inscription from ${API_HOST}/txos/${outpoint}\nError: ${errorMessage}`,
+        );
+      }
+    },
+  );
+
+  // Add command to reset welcome screen
+  context.subscriptions.push(
+    vscode.commands.registerCommand('bitcoin.resetWelcomeScreen', async () => {
+      await context.globalState.update('bitcoin.hasShownWelcome', false);
+      vscode.window.showInformationMessage('Welcome screen has been reset. Please reload VS Code to see it.');
     })
   );
 
-  context.subscriptions.push(...disposables);
+  console.log('Bitcoin extension activated successfully!');
 }
 
 // this method is called when your extension is deactivated
