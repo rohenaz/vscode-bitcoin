@@ -1,9 +1,9 @@
-import vscode from 'vscode';
-import { PrivateKey } from '@bsv/sdk';
+import vsApi from '../../vsShim';
 import type { OutputManager } from '../../output';
+import { PrivateKey } from '@bsv/sdk';
 
-export async function addressFromPrivateKey(output: OutputManager) {
-  const privKey = await vscode.window.showInputBox({
+export async function handleAddressFromPrivateKeyCommand(outputManager: OutputManager) {
+  const privKey = await vsApi.window.showInputBox({
     value: '',
     placeHolder: 'Ex: L...',
     validateInput: (_text) => {
@@ -21,7 +21,7 @@ export async function addressFromPrivateKey(output: OutputManager) {
 
   return {
     data: address,
-    type: 'addresses' as const,
+    type: 'addresses',
     name: 'from_privkey',
   };
 } 

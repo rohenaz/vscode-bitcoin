@@ -14,6 +14,92 @@ const { toArray, toHex, toBase58Check, fromBase58Check, toBase64 } = Utils;
 - never use the 'any' type
 - dont assume, CHECK! you have access to the command line and you can look things up rather than make assumptions
 
+# Command Organization
+
+## Structure
+- Each command should be in its own folder under `src/commands/`
+- Command folder structure:
+  ```
+  src/commands/commandName/
+    ├── index.ts       # Command implementation
+    └── command.test.ts # Tests for the command
+  ```
+- Command implementation should be a single exported function
+- Command function should take `outputManager` as first parameter
+- Keep command logic out of `extension.ts`
+
+## Command Patterns
+
+### Transaction Commands
+- Input validation should check:
+  - Empty input
+  - Valid hex format
+  - Minimum length
+- Error handling should:
+  - Validate transaction format first
+  - Catch and format errors consistently
+  - Log errors for debugging
+- Return format should be:
+  ```typescript
+  {
+    data: string,
+    type: 'transactions',
+    name: string
+  }
+  ```
+
+### API Integration Commands
+- Input validation should check:
+  - Empty input
+  - Format validation before API call
+  - Domain-specific validation (e.g., address format)
+- Error handling should:
+  - Handle common HTTP status codes (404, 500)
+  - Parse error responses for details
+  - Provide user-friendly error messages
+  - Log full error details for debugging
+- Testing should:
+  - Mock fetch calls
+  - Test API error cases
+  - Restore fetch in afterEach
+  - Verify response formatting
+
+## Testing Commands
+- Test file should import from `../../test/setup` for VS Code mocks
+- Mock the minimal VS Code API surface needed for the test
+- Test user cancellation cases
+- Test input validation
+- Test successful cases with expected output
+- Use `afterEach` to restore mocks
+- Example test structure:
+```typescript
+import { describe, expect, test, mock, afterEach } from 'bun:test';
+import vscode from '../../test/setup';
+import { handleCommand } from '.';
+import type { OutputManager } from '../../output';
+
+const mockOutput = {
+  handleOutput: mock(() => Promise.resolve()),
+} as unknown as OutputManager;
+
+describe('commandName', () => {
+  const originalWindow = vscode.window;
+  
+  afterEach(() => {
+    vscode.window = originalWindow;
+  });
+
+  test('returns undefined when user cancels', async () => {
+    vscode.window = {
+      ...originalWindow,
+      showInputBox: async () => undefined
+    };
+    const result = await handleCommand(mockOutput);
+    expect(result).toBeUndefined();
+  });
+});
+```
+
 # Key Concepts
 
 ## Imports

@@ -1,17 +1,17 @@
-import vscode from 'vscode';
-import { HD, PrivateKey } from '@bsv/sdk';
+import vsApi from '../../vsShim';
 import type { OutputManager } from '../../output';
+import { HD, PrivateKey } from '@bsv/sdk';
 
-export async function addressFromHDPrivateKey(output: OutputManager) {
-  const xPriv = await vscode.window.showInputBox({
+export async function handleAddressFromHDPrivateKeyCommand(outputManager: OutputManager) {
+  const xPriv = await vsApi.window.showInputBox({
     value: '',
-    placeHolder: 'Ex: xprv9s21ZrQH143K...',
+    placeHolder: 'Ex: xprv...',
     validateInput: (text) => {
       return text.length !== 111 ? 'Invalid extended private key!' : null;
     },
   });
 
-  const path = await vscode.window.showInputBox({
+  const path = await vsApi.window.showInputBox({
     value: 'm/0/0',
     placeHolder: 'Ex: m/0/0',
     validateInput: (_text) => {
@@ -31,7 +31,7 @@ export async function addressFromHDPrivateKey(output: OutputManager) {
 
   return {
     data: address,
-    type: 'addresses' as const,
-    name: `from_hdprivkey_${path.replaceAll('/', '_')}`,
+    type: 'addresses',
+    name: `from_hdprivkey_${path.replace(/\//g, '_')}`,
   };
 } 

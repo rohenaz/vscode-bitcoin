@@ -37,8 +37,16 @@ import { addressFromWIF } from './commands/addressFromWIF';
 import { addressFromPublicKey } from './commands/addressFromPublicKey';
 import { publicKeyFromWIF } from './commands/publicKeyFromWIF';
 import { handleConvertDataCommand } from './commands/convertData';
+import { handleGetTxCommand } from './commands/getTx';
+import { handleDecodeRawTxCommand } from './commands/decodeRawTx';
+import { handleRawTxToBobCommand } from './commands/rawTxToBob';
+import { handleGetUtxosForAddressCommand } from './commands/getUtxosForAddress';
+import { handleLookupBapProfileCommand } from './commands/lookupBapProfile';
+import { handleAddressFromHDPublicKeyCommand } from './commands/addressFromHDPublicKey';
+import { handleAddressFromHDPrivateKeyCommand } from './commands/addressFromHDPrivateKey';
+import { handleAddressFromPrivateKeyCommand } from './commands/addressFromPrivateKey';
 
-const { fromBase58Check } = Utils;
+const { fromBase58Check, toBase64, toArray } = Utils;
 
 function registerCommand(
   context: ExtensionContext,
@@ -241,7 +249,7 @@ export async function activate(context: ExtensionContext) {
   console.log('Bitcoin extension activating...');
 
   // Show welcome screen on first activation, but skip in tests
-  if (!context.globalState.get('bitcoin.hasShownWelcome') && !process.env.TEST_ENV) {
+  if (!context.globalState.get('bitcoin.hasShownWelcome') && process.env.TEST_ENV !== 'true') {
     WelcomePanel.show(context.extensionUri);
     context.globalState.update('bitcoin.hasShownWelcome', true);
   }
@@ -268,9 +276,7 @@ export async function activate(context: ExtensionContext) {
   context.subscriptions.push(testCommand);
 
   // Register convertData command
-  context.subscriptions.push(
-    vsApi.commands.registerCommand('bitcoin.convertData', handleConvertDataCommand)
-  );
+  registerCommand(context, outputManager, 'bitcoin.convertData', handleConvertDataCommand);
 
   // Register detect and convert command
   context.subscriptions.push(
@@ -391,35 +397,7 @@ export async function activate(context: ExtensionContext) {
     outputManager,
     'bitcoin.addressFromHDPublicKey',
     async () => {
-      const xPub = await vsApi.window.showInputBox({
-        value: '',
-        placeHolder: 'Ex: xpub661MyMwAqRbcGa7...',
-        validateInput: (text) => {
-          return text.length !== 111 ? 'Invalid extended public key!' : null;
-        },
-      });
-
-      const path = await vsApi.window.showInputBox({
-        value: 'm/0/0',
-        placeHolder: 'Ex: m/0/0',
-        validateInput: (_text) => {
-          return null;
-        },
-      });
-
-      if (!xPub || !path) {
-        return undefined;
-      }
-
-      const hdPubKey = HD.fromString(xPub);
-      const derivedPubKey = hdPubKey.derive(path);
-      const address = derivedPubKey.pubKey.toAddress();
-
-      return {
-        data: address,
-        type: 'addresses',
-        name: `from_hdpubkey_${path.replace('/', '_')}`,
-      };
+      return handleAddressFromHDPublicKeyCommand(outputManager);
     },
   );
 
@@ -428,37 +406,7 @@ export async function activate(context: ExtensionContext) {
     outputManager,
     'bitcoin.addressFromHDPrivateKey',
     async () => {
-      const xPriv = await vsApi.window.showInputBox({
-        value: '',
-        placeHolder: 'Ex: xprv9s21ZrQH143K...',
-        validateInput: (text) => {
-          return text.length !== 111 ? 'Invalid extended private key!' : null;
-        },
-      });
-
-      const path = await vsApi.window.showInputBox({
-        value: 'm/0/0',
-        placeHolder: 'Ex: m/0/0',
-        validateInput: (_text) => {
-          return null;
-        },
-      });
-
-      if (!xPriv || !path) {
-        return undefined;
-      }
-
-      const hdPrivKey = HD.fromString(xPriv);
-      const derivedKey = hdPrivKey.derive(path);
-      const privKey = PrivateKey.fromHex(derivedKey.privKey.toString());
-      const pubKey = privKey.toPublicKey();
-      const address = pubKey.toAddress();
-
-      return {
-        data: address,
-        type: 'addresses',
-        name: `from_hdprivkey_${path.replace('/', '_')}`,
-      };
+      return handleAddressFromHDPrivateKeyCommand(outputManager);
     },
   );
 
@@ -476,27 +424,7 @@ export async function activate(context: ExtensionContext) {
     outputManager,
     'bitcoin.addressFromPrivateKey',
     async () => {
-      const privKey = await vsApi.window.showInputBox({
-        value: '',
-        placeHolder: 'Ex: L...',
-        validateInput: (_text) => {
-          return null;
-        },
-      });
-
-      if (!privKey) {
-        return undefined;
-      }
-
-      const privateKey = PrivateKey.fromString(privKey);
-      const publicKey = privateKey.toPublicKey();
-      const address = publicKey.toAddress();
-
-      return {
-        data: address,
-        type: 'addresses',
-        name: 'from_privkey',
-      };
+      return handleAddressFromPrivateKeyCommand(outputManager);
     },
   );
 
@@ -506,238 +434,15 @@ export async function activate(context: ExtensionContext) {
 
   // Register transaction commands
   registerCommand(context, outputManager, 'bitcoin.getTx', async () => {
-    const txid = await vsApi.window.showInputBox({
-      value: '',
-      placeHolder: 'Ex: 4d03ff9062ac2e6...',
-      validateInput: (text) => {
-        return text.match(/^[a-fA-F0-9]{64}$/)
-          ? null
-          : 'Invalid transaction ID format. Expected: 64 character hex string';
-      },
-    });
-
-    if (!txid) {
-      return undefined;
-    }
-
-    const formats = [
-      {
-        label: 'Hex (Raw Transaction)',
-        value: 'hex',
-        description: 'Raw transaction hex',
-      },
-      {
-        label: 'Base64',
-        value: 'base64',
-        description: 'Raw transaction base64 encoded',
-      },
-      {
-        label: 'JSON (Parsed)',
-        value: 'json',
-        description: 'Parsed transaction data',
-      },
-      {
-        label: 'BOB (Parsed)',
-        value: 'bob',
-        description: 'Bitcoin OP_RETURN Bytecode format',
-      },
-      {
-        label: 'BMAP (Parsed)',
-        value: 'bmap',
-        description: 'Bitcoin Message Action Protocol format',
-      },
-    ];
-
-    const format = await vsApi.window.showQuickPick(formats, {
-      placeHolder: 'Select output format',
-      title: 'Transaction Format',
-    });
-
-    // Default to hex if no format selected
-    const selectedFormat = format?.value || 'hex';
-
-    try {
-      let content: string;
-      let language: string;
-
-      // First fetch the raw transaction hex
-      const hexResponse = await fetch(
-        `https://api.whatsonchain.com/v1/bsv/main/tx/${txid}/hex`,
-      );
-      if (!hexResponse.ok) {
-        throw new Error(`${hexResponse.status} ${hexResponse.statusText}`);
-      }
-      const rawTxHex = await hexResponse.text();
-
-      switch (selectedFormat) {
-        case 'base64': {
-          content = Buffer.from(rawTxHex, 'hex').toString('base64');
-          language = 'plaintext';
-          break;
-        }
-        case 'json': {
-          // Parse using our SDK for consistent formatting
-          const tx = Transaction.fromHex(rawTxHex);
-          const txObj = {
-            txid,
-            version: tx.version,
-            inputs: tx.inputs.map((input) => ({
-              prevTxId: input.sourceTXID?.toString() || '',
-              outputIndex: input.sourceOutputIndex,
-              script: input.unlockingScript
-                ? input.unlockingScript.toString()
-                : '',
-              sequence: input.sequence,
-            })),
-            outputs: tx.outputs.map((output) => ({
-              satoshis: output.satoshis,
-              script: output.lockingScript.toString(),
-            })),
-            lockTime: tx.lockTime,
-          };
-          content = JSON.stringify(txObj, null, 2);
-          language = 'json';
-          break;
-        }
-        case 'bob': {
-          const bob = await parse({
-            tx: { r: rawTxHex },
-            split: [
-              { token: { op: 106 }, include: 'l' },
-              { token: { s: '|' } },
-            ],
-          });
-          content = JSON.stringify(bob, null, 2);
-          language = 'json';
-          break;
-        }
-        case 'bmap': {
-          try {
-            const bmap = new BMAP();
-            console.log('Starting transaction processing...');
-            console.log('Raw transaction:', rawTxHex);
-
-            if (!rawTxHex) {
-              throw new Error('No transaction data provided');
-            }
-
-            console.log('Parsing transaction with bpu-ts...');
-            const bob = (await parse({
-              tx: { r: rawTxHex },
-              split: [
-                { token: { op: 106 }, include: 'l' },
-                { token: { s: '|' } },
-              ],
-            })) as BobTx;
-
-            if (!bob) {
-              throw new Error('Failed to parse transaction with bpu-ts');
-            }
-
-            console.log('Parsed BOB:', JSON.stringify(bob, null, 2));
-
-            console.log('Transforming transaction with bmapjs...');
-            const tx = await TransformTx(
-              bob,
-              allProtocols.map((p) => p.name),
-            );
-            content = JSON.stringify(tx, null, 2);
-          } catch (error) {
-            // If BMAP parsing fails, just return tx hash
-            content = JSON.stringify({ tx: { h: txid } }, null, 2);
-          }
-          language = 'json';
-          break;
-        }
-        default: {
-          // Hex format (default)
-          content = rawTxHex;
-          language = 'plaintext';
-        }
-      }
-
-      // Always open in new editor first
-      const doc = await vsApi.workspace.openTextDocument({
-        content,
-        language,
-      });
-      await vsApi.window.showTextDocument(doc, { preview: false });
-
-      // Then handle according to output preference
-      return {
-        data: content,
-        type: 'transactions',
-        name: `${txid}_${selectedFormat}`,
-      };
-    } catch (error) {
-      console.error('Transaction fetch error:', error);
-      throw new Error(
-        `Failed to fetch transaction: ${
-          error instanceof Error ? error.message : String(error)
-        }`,
-      );
-    }
+    return handleGetTxCommand(outputManager);
   });
 
   registerCommand(context, outputManager, 'bitcoin.decodeRawTx', async () => {
-    const rawTxHex = await vsApi.window.showInputBox({
-      value: '',
-      placeHolder: 'paste raw tx hex',
-      validateInput: (_text) => {
-        return null;
-      },
-    });
-
-    if (!rawTxHex) {
-      return undefined;
-    }
-
-    const tx = Transaction.fromHex(rawTxHex);
-    const txObj = {
-      version: tx.version,
-      inputs: tx.inputs.map((input) => ({
-        prevTxId: input.sourceTXID?.toString() || '',
-        outputIndex: input.sourceOutputIndex,
-        script: input.unlockingScript ? input.unlockingScript.toString() : '',
-        sequence: input.sequence,
-      })),
-      outputs: tx.outputs.map((output) => ({
-        satoshis: output.satoshis,
-        script: output.lockingScript.toString(),
-      })),
-      lockTime: tx.lockTime,
-    };
-
-    return {
-      data: JSON.stringify(txObj, null, 2),
-      type: 'transactions',
-      name: `decoded_${new Date().toISOString().replace(/[:.]/g, '-')}`,
-    };
+    return handleDecodeRawTxCommand(outputManager);
   });
 
   registerCommand(context, outputManager, 'bitcoin.rawTxToBob', async () => {
-    const rawTxHex = await vsApi.window.showInputBox({
-      value: '',
-      placeHolder: 'paste raw tx hex',
-      validateInput: (_text) => {
-        return null;
-      },
-    });
-
-    if (!rawTxHex) {
-      return undefined;
-    }
-
-    const bob = await parse({
-      tx: { r: rawTxHex },
-      split: [{ token: { op: 106 }, include: 'l' }, { token: { s: '|' } }],
-    });
-
-    return {
-      data: JSON.stringify(bob, null, 2),
-      type: 'transactions',
-      name: `bob_${new Date().toISOString().replace(/[:.]/g, '-')}`,
-    };
+    return handleRawTxToBobCommand(outputManager);
   });
 
   // Register UTXO commands
@@ -746,67 +451,7 @@ export async function activate(context: ExtensionContext) {
     outputManager,
     'bitcoin.getUtxosForAddress',
     async () => {
-      const address = await vsApi.window.showInputBox({
-        value: '',
-        placeHolder: 'Ex: 1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa',
-        validateInput: (_text) => {
-          return null;
-        },
-      });
-
-      if (!address) {
-        return undefined;
-      }
-
-      try {
-        const utxos = await fetchPayUtxos(address, 'hex');
-
-        // Handle empty response
-        if (!utxos || !Array.isArray(utxos)) {
-          return {
-            data: JSON.stringify(
-              {
-                address,
-                utxoCount: 0,
-                totalSatoshis: 0,
-                utxos: [],
-              },
-              null,
-              2,
-            ),
-            type: 'utxos',
-            name: `utxos_${address}`,
-          };
-        }
-
-        const result = {
-          address,
-          utxoCount: utxos.length,
-          totalSatoshis: utxos.reduce(
-            (sum, utxo) => sum + (utxo.satoshis || 0),
-            0,
-          ),
-          utxos: utxos.map((utxo) => ({
-            txid: utxo.txid,
-            vout: utxo.vout,
-            value: utxo.satoshis,
-            scriptPubKey: utxo.script,
-          })),
-        };
-
-        return {
-          data: JSON.stringify(result, null, 2),
-          type: 'utxos',
-          name: `utxos_${address}`,
-        };
-      } catch (error) {
-        console.error('UTXO fetch error:', error);
-        const errorMessage =
-          error instanceof Error ? error.message : String(error);
-        throw new Error(
-          `Failed to fetch UTXOs from ${API_HOST}/txos/address/${address}/unspent?bsv20=false\nError: ${errorMessage}`,
-        );
-      }
+      return handleGetUtxosForAddressCommand(outputManager);
     },
   );
 
@@ -1057,42 +702,10 @@ export async function activate(context: ExtensionContext) {
     }),
   );
 
-  context.subscriptions.push(
-    vsApi.commands.registerCommand('bitcoin.lookupBapProfile', async () => {
-      const bapService = new BapService();
-
-      // Prompt for BAP ID
-      const idKey = await vsApi.window.showInputBox({
-        prompt: 'Enter BAP ID',
-        placeHolder: 'e.g. Go8vCHAa4S6AhXKTABGpANiz35J',
-      });
-
-      if (!idKey) {
-        return;
-      }
-
-      try {
-        // Show progress indicator
-        const profile = await vsApi.window.withProgress(
-          {
-            location: vsApi.ProgressLocation.Notification,
-            title: 'Looking up BAP profile...',
-            cancellable: false,
-          },
-          () => bapService.getProfile(idKey),
-        );
-
-        // Show profile in webview
-        BapPanel.show(profile);
-      } catch (error) {
-        vsApi.window.showErrorMessage(
-          `Failed to lookup BAP profile: ${
-            error instanceof Error ? error.message : String(error)
-          }`,
-        );
-      }
-    }),
-  );
+  // Register BAP profile lookup command
+  registerCommand(context, outputManager, 'bitcoin.lookupBapProfile', async () => {
+    return handleLookupBapProfileCommand(outputManager);
+  });
 
   // Register fetch ordinals inscription command
   registerCommand(

@@ -74,6 +74,7 @@ export function convertData(
   fromFormat: DataFormat,
   toFormat: DataFormat,
 ): string {
+  console.log('Converting data:', { input: input.slice(0, 100), fromFormat, toFormat });
   let bytes: number[];
 
   // Convert input to bytes
@@ -82,21 +83,27 @@ export function convertData(
       if (!isHex(input)) {
         throw new Error('Invalid hex string');
       }
-      bytes = toArray(Buffer.from(input, 'hex'));
+      console.log('Converting from hex using toArray');
+      bytes = toArray(input, 'hex');
+      console.log('Bytes from hex:', bytes.slice(0, 10));
       break;
 
     case 'base64':
       if (!isBase64(input)) {
         throw new Error('Invalid base64 string');
       }
-      bytes = toArray(Buffer.from(input, 'base64'));
+      console.log('Converting from base64 using toArray');
+      bytes = toArray(input, 'base64');
+      console.log('Bytes from base64:', bytes.slice(0, 10));
       break;
 
     case 'binary':
       if (!isBinaryArray(input)) {
         throw new Error('Invalid binary array');
       }
+      console.log('Parsing binary array');
       bytes = JSON.parse(input);
+      console.log('Bytes from binary:', bytes.slice(0, 10));
       break;
 
     default:
@@ -104,13 +111,20 @@ export function convertData(
   }
 
   // Convert bytes to desired output format
+  let result: string;
   switch (toFormat) {
     case 'hex':
-      return toHex(bytes);
+      result = toHex(bytes);
+      console.log('Converted to hex:', result.slice(0, 100));
+      return result;
     case 'base64':
-      return toBase64(bytes);
+      result = toBase64(bytes);
+      console.log('Converted to base64:', result.slice(0, 100));
+      return result;
     case 'binary':
-      return JSON.stringify(bytes);
+      result = JSON.stringify(bytes);
+      console.log('Converted to binary:', result.slice(0, 100));
+      return result;
     default:
       throw new Error(`Unsupported output format: ${toFormat}`);
   }

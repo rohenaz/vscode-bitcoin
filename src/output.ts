@@ -11,6 +11,11 @@ export class OutputManager {
   private getOutputPreference(
     command: string,
   ): 'clipboard' | 'file' | 'workspace' {
+    // Default to clipboard if no workspace is open
+    if (!vsApi.workspace.workspaceFolders?.length) {
+      return 'clipboard';
+    }
+
     const config = vsApi.workspace.getConfiguration('bitcoin');
     const prefs = config.get('outputPreference') as Record<string, string>;
     return (prefs?.[command] || 'clipboard') as

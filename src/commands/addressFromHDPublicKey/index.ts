@@ -1,17 +1,17 @@
-import vscode from 'vscode';
-import { HD } from '@bsv/sdk';
+import vsApi from '../../vsShim';
 import type { OutputManager } from '../../output';
+import { HD } from '@bsv/sdk';
 
-export async function addressFromHDPublicKey(output: OutputManager) {
-  const xPub = await vscode.window.showInputBox({
+export async function handleAddressFromHDPublicKeyCommand(outputManager: OutputManager) {
+  const xPub = await vsApi.window.showInputBox({
     value: '',
-    placeHolder: 'Ex: xpub661MyMwAqRbcGa7...',
+    placeHolder: 'Ex: xpub...',
     validateInput: (text) => {
       return text.length !== 111 ? 'Invalid extended public key!' : null;
     },
   });
 
-  const path = await vscode.window.showInputBox({
+  const path = await vsApi.window.showInputBox({
     value: 'm/0/0',
     placeHolder: 'Ex: m/0/0',
     validateInput: (_text) => {
@@ -29,7 +29,7 @@ export async function addressFromHDPublicKey(output: OutputManager) {
 
   return {
     data: address,
-    type: 'addresses' as const,
-    name: 'from_hdpubkey_m_0_0',
+    type: 'addresses',
+    name: `from_hdpubkey_${path.replace(/\//g, '_')}`,
   };
 } 

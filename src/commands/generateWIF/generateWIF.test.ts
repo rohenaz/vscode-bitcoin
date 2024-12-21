@@ -16,7 +16,12 @@ const mockKeyVault = {
 
 // Mock window.showErrorMessage
 const originalShowErrorMessage = vscode.window.showErrorMessage;
-vscode.window.showErrorMessage = mock(async (message: string, ...items: string[]) => items[0] || 'Error');
+vscode.window.showErrorMessage = mock(async <T extends string>(
+  message: string,
+  ...items: T[]
+) => {
+  return items[0] || ('Error' as T);
+});
 
 describe('generateWIF', () => {
   test('generates valid WIF', async () => {

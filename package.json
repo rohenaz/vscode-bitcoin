@@ -180,7 +180,7 @@
     "lint:fix": "biome check --apply .",
     "format": "biome format . --write",
     "check": "biome check --apply .",
-    "test": "bun test src/test/suite/extension.test.ts",
+    "test": "bun test",
     "package": "vsce package",
     "publish": "vsce publish",
     "clean": "rm -rf dist node_modules *.vsix out"
@@ -202,6 +202,7 @@
   "extensionKind": ["workspace"],
   "dependencies": {
     "@bsv/sdk": "^1.2.19",
+    "js-1sat-ord": "^0.1.79",
     "node-fetch": "^2.7.0",
     "vscode": "^1.1.37"
   },

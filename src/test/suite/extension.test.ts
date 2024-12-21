@@ -178,9 +178,7 @@ describe('Bitcoin Extension Tests', () => {
 
     // Test P2PKH script creation
     const script = Script.fromASM(
-      `OP_DUP OP_HASH160 ${Utils.toHex(
-        Utils.toArray(pubKey.toHash()),
-      )} OP_EQUALVERIFY OP_CHECKSIG`,
+      `OP_DUP OP_HASH160 ${pubKey.toHash('hex')} OP_EQUALVERIFY OP_CHECKSIG`,
     );
     expect(script).toBeDefined();
     expect(script.toASM()).toContain('OP_DUP OP_HASH160');
@@ -196,9 +194,7 @@ describe('Bitcoin Extension Tests', () => {
     const privKey = PrivateKey.fromRandom();
     const pubKey = privKey.toPublicKey();
     const script = Script.fromASM(
-      `OP_DUP OP_HASH160 ${Utils.toHex(
-        Utils.toArray(pubKey.toHash()),
-      )} OP_EQUALVERIFY OP_CHECKSIG`,
+      `OP_DUP OP_HASH160 ${pubKey.toHash('hex')} OP_EQUALVERIFY OP_CHECKSIG`,
     );
     const address = Utils.toBase58Check(Utils.toArray(script.toHex()));
     expect(address).toBeDefined();
@@ -210,9 +206,7 @@ describe('Bitcoin Extension Tests', () => {
     const addressFromWif = Utils.toBase58Check(
       Utils.toArray(
         Script.fromASM(
-          `OP_DUP OP_HASH160 ${Utils.toHex(
-            Utils.toArray(fromWif.toPublicKey().toHash()),
-          )} OP_EQUALVERIFY OP_CHECKSIG`,
+          `OP_DUP OP_HASH160 ${fromWif.toPublicKey().toHash('hex')} OP_EQUALVERIFY OP_CHECKSIG`,
         ).toHex(),
       ),
     );
@@ -226,9 +220,7 @@ describe('Bitcoin Extension Tests', () => {
     const addressFromHD = Utils.toBase58Check(
       Utils.toArray(
         Script.fromASM(
-          `OP_DUP OP_HASH160 ${Utils.toHex(
-            Utils.toArray(childPubKey.toHash()),
-          )} OP_EQUALVERIFY OP_CHECKSIG`,
+          `OP_DUP OP_HASH160 ${childPubKey.toHash('hex')} OP_EQUALVERIFY OP_CHECKSIG`,
         ).toHex(),
       ),
     );
@@ -249,9 +241,7 @@ describe('Bitcoin Extension Tests', () => {
     const sourceTx = new Transaction();
     sourceTx.addOutput({
       lockingScript: Script.fromASM(
-        `OP_DUP OP_HASH160 ${Utils.toHex(
-          Utils.toArray(pubKey.toHash()),
-        )} OP_EQUALVERIFY OP_CHECKSIG`,
+        `OP_DUP OP_HASH160 ${pubKey.toHash('hex')} OP_EQUALVERIFY OP_CHECKSIG`,
       ),
       satoshis: 2000,
     });
@@ -260,16 +250,12 @@ describe('Bitcoin Extension Tests', () => {
       sourceTransaction: sourceTx,
       sourceOutputIndex: 0,
       unlockingScript: Script.fromASM(
-        `OP_DUP OP_HASH160 ${Utils.toHex(
-          Utils.toArray(pubKey.toHash()),
-        )} OP_EQUALVERIFY OP_CHECKSIG`,
+        `OP_DUP OP_HASH160 ${pubKey.toHash('hex')} OP_EQUALVERIFY OP_CHECKSIG`,
       ),
     });
     tx.addOutput({
       lockingScript: Script.fromASM(
-        `OP_DUP OP_HASH160 ${Utils.toHex(
-          Utils.toArray(pubKey.toHash()),
-        )} OP_EQUALVERIFY OP_CHECKSIG`,
+        `OP_DUP OP_HASH160 ${pubKey.toHash('hex')} OP_EQUALVERIFY OP_CHECKSIG`,
       ),
       satoshis: 1000,
     });
@@ -363,9 +349,7 @@ describe('Bitcoin Extension Tests', () => {
     const sourceTx = new Transaction();
     sourceTx.addOutput({
       lockingScript: Script.fromASM(
-        `OP_DUP OP_HASH160 ${Utils.toHex(
-          Utils.toArray(pubKey.toHash()),
-        )} OP_EQUALVERIFY OP_CHECKSIG`,
+        `OP_DUP OP_HASH160 ${pubKey.toHash('hex')} OP_EQUALVERIFY OP_CHECKSIG`,
       ),
       satoshis: 2000,
     });
@@ -375,16 +359,12 @@ describe('Bitcoin Extension Tests', () => {
       sourceTransaction: sourceTx,
       sourceOutputIndex: 0,
       unlockingScript: Script.fromASM(
-        `OP_DUP OP_HASH160 ${Utils.toHex(
-          Utils.toArray(pubKey.toHash()),
-        )} OP_EQUALVERIFY OP_CHECKSIG`,
+        `OP_DUP OP_HASH160 ${pubKey.toHash('hex')} OP_EQUALVERIFY OP_CHECKSIG`,
       ),
     });
     tx.addOutput({
       lockingScript: Script.fromASM(
-        `OP_DUP OP_HASH160 ${Utils.toHex(
-          Utils.toArray(pubKey.toHash()),
-        )} OP_EQUALVERIFY OP_CHECKSIG`,
+        `OP_DUP OP_HASH160 ${pubKey.toHash('hex')} OP_EQUALVERIFY OP_CHECKSIG`,
       ),
       satoshis: 1000,
     });
