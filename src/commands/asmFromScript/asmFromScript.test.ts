@@ -1,4 +1,4 @@
-import vscode from '../../../setup';
+import vscode from '@test/setup';
 import { describe, expect, test, mock, afterAll } from 'bun:test';
 import { asmFromScript } from './index';
 import type { OutputManager } from '../../output';
@@ -22,7 +22,7 @@ const originalShowInputBox = vscode.window.showInputBox;
 describe('asmFromScript', () => {
   test('converts script hex to ASM', async () => {
     // Mock user input
-    vscode.window.showInputBox = async () => '006a0c74657374206d657373616765';
+    vscode.window.showInputBox = mock(async () => '006a0c74657374206d657373616765') as unknown as typeof vscode.window.showInputBox;
 
     const result = await asmFromScript(mockOutput);
     
@@ -36,7 +36,7 @@ describe('asmFromScript', () => {
 
   test('returns undefined when input is cancelled', async () => {
     // Mock cancelled input
-    vscode.window.showInputBox = async () => undefined;
+    vscode.window.showInputBox = mock(async () => undefined) as unknown as typeof vscode.window.showInputBox;
 
     const result = await asmFromScript(mockOutput);
     expect(result).toBeUndefined();

@@ -97,6 +97,10 @@
         "title": "Bitcoin: Public Key From Private Key"
       },
       {
+        "command": "bitcoin.publicKeyFromWIF",
+        "title": "Bitcoin: Public Key From WIF"
+      },
+      {
         "command": "bitcoin.decodeRawTx",
         "title": "Bitcoin: Decode Raw Transaction"
       },

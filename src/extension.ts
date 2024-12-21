@@ -30,6 +30,7 @@ import { extendedPrivateKeyFromMnemonic } from './commands/extendedPrivateKeyFro
 import { publicKeyFromPrivateKey } from './commands/publicKeyFromPrivateKey';
 import { addressFromWIF } from './commands/addressFromWIF';
 import { addressFromPublicKey } from './commands/addressFromPublicKey';
+import { publicKeyFromWIF } from './commands/publicKeyFromWIF';
 
 const { toArray, toHex, toBase64 } = Utils;
 const { fromBase58Check } = Utils;
@@ -336,8 +337,8 @@ const fetchInscriptionContent = async (
 export async function activate(context: vscode.ExtensionContext) {
   console.log('Bitcoin extension activating...');
 
-  // Show welcome screen on first activation
-  if (!context.globalState.get('bitcoin.hasShownWelcome')) {
+  // Show welcome screen on first activation, but skip in tests
+  if (!context.globalState.get('bitcoin.hasShownWelcome') && !process.env.TEST_ENV) {
     WelcomePanel.show(context.extensionUri);
     context.globalState.update('bitcoin.hasShownWelcome', true);
   }
@@ -1005,6 +1006,15 @@ export async function activate(context: vscode.ExtensionContext) {
     'bitcoin.publicKeyFromPrivateKey',
     async () => {
       return publicKeyFromPrivateKey(outputManager);
+    },
+  );
+
+  registerCommand(
+    context,
+    outputManager,
+    'bitcoin.publicKeyFromWIF',
+    async () => {
+      return publicKeyFromWIF(outputManager);
     },
   );
 

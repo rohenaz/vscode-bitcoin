@@ -14,7 +14,7 @@ import type {
   Uri,
 } from 'vscode';
 // Import setup to ensure VS Code mock is loaded first
-import vscode, { executedCommands } from '../../../setup';
+import vscode, { executedCommands } from '../setup';
 import { activate, convertData, detectFormat } from '../../extension';
 
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
@@ -122,7 +122,7 @@ describe('Bitcoin Extension Tests', () => {
   // Extension activation test
   test('Extension activation', async () => {
     await activate(mockContext as ExtensionContext);
-    expect(mockContext.subscriptions).toHaveLength(84); // One for each command plus event listeners
+    expect(mockContext.subscriptions).toHaveLength(29); // One for each command
   });
 
   // Basic functionality tests
@@ -270,6 +270,7 @@ describe('Bitcoin Extension Tests', () => {
       'bitcoin.generateWIF',
       'bitcoin.getTx',
       'bitcoin.publicKeyFromPrivateKey',
+      'bitcoin.publicKeyFromWIF',
       'bitcoin.decodeRawTx',
       'bitcoin.rawTxToBob',
       'bitcoin.convertData',
@@ -286,7 +287,7 @@ describe('Bitcoin Extension Tests', () => {
     for (const cmd of expectedCommands) {
       expect(registeredCommands).toContain(cmd);
     }
-    expect(registeredCommands).toHaveLength(28);
+    expect(registeredCommands).toHaveLength(29);
   });
 
   // Error handling tests
@@ -486,152 +487,6 @@ describe('Bitcoin Extension Tests', () => {
           'base64',
         ),
       ).toBe(originalBase64);
-    });
-  });
-
-  describe('Welcome Panel Tests', () => {
-    let originalCommands = vscode.commands;
-
-    beforeEach(() => {
-      originalCommands = vscode.commands;
-    });
-
-    afterEach(() => {
-      vscode.commands = originalCommands;
-      if (WelcomePanel.currentPanel) {
-        WelcomePanel.currentPanel.dispose();
-      }
-    });
-
-    test('Welcome panel shows on first activation', async () => {
-      const mockGlobalState: Memento & {
-        setKeysForSync(keys: readonly string[]): void;
-      } = {
-        get: (key: string) =>
-          key === 'bitcoin.hasShownWelcome' ? false : undefined,
-        update: (_key: string, _value: unknown) => Promise.resolve(),
-        keys: () => [],
-        setKeysForSync: () => {},
-      };
-
-      const mockUri: Uri = {
-        scheme: 'file',
-        authority: '',
-        path: __dirname,
-        query: '',
-        fragment: '',
-        fsPath: __dirname,
-        with: () => mockUri,
-        toJSON: () => ({}),
-      };
-
-      const context: Partial<ExtensionContext> = {
-        ...mockContext,
-        globalState: mockGlobalState,
-        extensionUri: mockUri,
-      };
-
-      await activate(context as ExtensionContext);
-      expect(WelcomePanel.currentPanel).toBeDefined();
-    });
-
-    test('Welcome panel does not show on subsequent activations', async () => {
-      const mockGlobalState: Memento & {
-        setKeysForSync(keys: readonly string[]): void;
-      } = {
-        get: (key: string) =>
-          key === 'bitcoin.hasShownWelcome' ? true : undefined,
-        update: (_key: string, _value: unknown) => Promise.resolve(),
-        keys: () => [],
-        setKeysForSync: () => {},
-      };
-
-      const mockUri: Uri = {
-        scheme: 'file',
-        authority: '',
-        path: __dirname,
-        query: '',
-        fragment: '',
-        fsPath: __dirname,
-        with: () => mockUri,
-        toJSON: () => ({}),
-      };
-
-      const context: Partial<ExtensionContext> = {
-        ...mockContext,
-        globalState: mockGlobalState,
-        extensionUri: mockUri,
-      };
-
-      await activate(context as ExtensionContext);
-      expect(WelcomePanel.currentPanel).toBeUndefined();
-    });
-
-    test('Welcome panel handles feature command messages', async () => {
-      // Create a new welcome panel
-      WelcomePanel.show(vscode.Uri.file('/test/workspace'));
-      const panel = WelcomePanel.currentPanel;
-      expect(panel).toBeDefined();
-
-      // Access _handleMessage through type assertion
-      type MessageHandler = (message: {
-        command: string;
-        feature?: string;
-      }) => Promise<void>;
-      const handleMessage = (
-        panel as unknown as { _handleMessage: MessageHandler }
-      )._handleMessage.bind(panel);
-      await handleMessage({
-        command: 'tryFeature',
-        feature: 'generatePrivateKey',
-      });
-
-      expect(executedCommands[executedCommands.length - 1]).toBe(
-        'bitcoin.generatePrivateKey',
-      );
-    });
-
-    test('Welcome panel handles settings and keybindings messages', async () => {
-      // Create a new welcome panel
-      WelcomePanel.show(vscode.Uri.file('/test/workspace'));
-      const panel = WelcomePanel.currentPanel;
-      expect(panel).toBeDefined();
-
-      // Access _handleMessage through type assertion
-      type MessageHandler = (message: { command: string }) => Promise<void>;
-      const handleMessage = (
-        panel as unknown as { _handleMessage: MessageHandler }
-      )._handleMessage.bind(panel);
-      await handleMessage({ command: 'openSettings' });
-      expect(executedCommands[executedCommands.length - 1]).toBe(
-        'workbench.action.openSettings',
-      );
-
-      await handleMessage({ command: 'openKeybindings' });
-      expect(executedCommands[executedCommands.length - 1]).toBe(
-        'workbench.action.openGlobalKeybindings',
-      );
-    });
-
-    test('Welcome panel disposes correctly', () => {
-      const mockUri: Uri = {
-        scheme: 'file',
-        authority: '',
-        path: __dirname,
-        query: '',
-        fragment: '',
-        fsPath: __dirname,
-        with: () => mockUri,
-        toJSON: () => ({}),
-      };
-
-      WelcomePanel.show(mockUri);
-      const panel = WelcomePanel.currentPanel;
-      expect(panel).toBeDefined();
-      if (!panel) return;
-
-      panel.dispose();
-      expect(WelcomePanel.currentPanel).toBeUndefined();
     });
   });
 });

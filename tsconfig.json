@@ -11,7 +11,8 @@
     "noUnusedParameters": true,
     "baseUrl": ".",
     "paths": {
-      "vscode": ["./setup"]
+      "vscode": ["./src/test/setup"],
+      "@test/*": ["src/test/*"]
     },
     "types": ["@types/vscode", "node", "bun-types"],
     "esModuleInterop": true,
@@ -21,8 +22,7 @@
   },
   "include": [
     "src/**/*",
-    "test/**/*",
-    "setup.ts"
+    "test/**/*"
   ],
   "exclude": [
     "node_modules",

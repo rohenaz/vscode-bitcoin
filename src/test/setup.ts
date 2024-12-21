@@ -1,13 +1,13 @@
-class MockEventEmitter {
-  constructor() {
-    this.listeners = [];
-  }
-  fire(data) {
+class MockEventEmitter<T> {
+  private listeners: Array<(e: T) => void> = [];
+
+  fire(data: T): void {
     for (const listener of this.listeners) {
       listener(data);
     }
   }
-  event(listener) {
+
+  event(listener: (e: T) => void): { dispose: () => void } {
     this.listeners.push(listener);
     return {
       dispose: () => {
@@ -19,36 +19,27 @@ class MockEventEmitter {
     };
   }
 }
+
 class MockExtensionContext {
-  constructor() {
-    this.subscriptions = [];
-    this.globalState = {
-      get: () => undefined,
-      update: () => Promise.resolve(),
-    };
-    this.workspaceState = {
-      get: () => undefined,
-      update: () => Promise.resolve(),
-    };
-    this.extensionUri = { fsPath: '' };
-    this.storagePath = '';
-    this.globalStoragePath = '';
-    this.logPath = '';
-    this.extensionPath = '';
-    this.environmentVariableCollection = {
-      replace: () => {},
-      persistent: true,
-    };
-    this.secrets = {
-      store: () => Promise.resolve(),
-      get: () => Promise.resolve(''),
-      delete: () => Promise.resolve(),
-    };
-  }
-  asAbsolutePath(relativePath) {
+  subscriptions: { dispose(): void }[] = [];
+  globalState = { get: () => undefined, update: () => Promise.resolve() };
+  workspaceState = { get: () => undefined, update: () => Promise.resolve() };
+  extensionUri = { fsPath: '' };
+  asAbsolutePath(relativePath: string): string {
     return relativePath;
   }
+  storagePath = '';
+  globalStoragePath = '';
+  logPath = '';
+  extensionPath = '';
+  environmentVariableCollection = { replace: () => {}, persistent: true };
+  secrets = {
+    store: () => Promise.resolve(),
+    get: () => Promise.resolve(''),
+    delete: () => Promise.resolve(),
+  };
 }
+
 // Mock commands
 const mockCommands = [
   'bitcoin.asmFromScript',
@@ -80,14 +71,33 @@ const mockCommands = [
   'bitcoin.lookupBapProfile',
   'bitcoin.fetchOrdinalsInscription',
 ];
+
+interface VSCodeOptions {
+  placeHolder?: string;
+  prompt?: string;
+  value?: string;
+  password?: boolean;
+  ignoreFocusOut?: boolean;
+}
+
+interface VSCodeQuickPickOptions {
+  placeHolder?: string;
+  ignoreFocusOut?: boolean;
+  matchOnDescription?: boolean;
+  matchOnDetail?: boolean;
+}
+
+const executedCommands: string[] = [];
+
 const vscode = {
   EventEmitter: MockEventEmitter,
   window: {
-    showInformationMessage: async (_message) => {},
-    showWarningMessage: async (_message) => {},
-    showErrorMessage: async (_message) => {},
-    showInputBox: async (_options) => '',
-    showQuickPick: async (_items, _options) => '',
+    showInformationMessage: async () => {},
+    showWarningMessage: async (_message: string) => {},
+    showErrorMessage: async (_message: string, ..._items: string[]): Promise<string> => 'Error',
+    showInputBox: async (_options: VSCodeOptions) => '',
+    showQuickPick: async (_items: string[], _options: VSCodeQuickPickOptions) =>
+      '',
     createWebviewPanel: () => ({
       webview: {
         html: '',
@@ -110,30 +120,35 @@ const vscode = {
     },
   },
   commands: {
-    registerCommand: (_cmd, _callback) => ({
+    registerCommand: (_cmd: string, _callback: () => void) => ({
       dispose: () => {},
     }),
+    executeCommand: async (command: string) => {
+      executedCommands.push(command);
+      return command;
+    },
     getCommands: async () => mockCommands,
   },
   env: {
     clipboard: {
-      writeText: async (_text) => {},
+      writeText: async (_text: string) => {},
+      readText: async () => '',
     },
   },
   workspace: {
     workspaceFolders: [
       {
-        uri: { fsPath: process.cwd() },
+        uri: { fsPath: '/test/workspace' },
         name: 'test',
         index: 0,
       },
     ],
-    openTextDocument: async (_uri) => ({
+    openTextDocument: async (_uri: { fsPath: string }) => ({
       getText: () => '',
       save: () => Promise.resolve(),
     }),
     getConfiguration: () => ({
-      get: (key) => {
+      get: (key: string) => {
         switch (key) {
           case 'workspace.path':
             return '.bitcoin';
@@ -147,25 +162,48 @@ const vscode = {
       },
     }),
     fs: {
-      writeFile: async (_uri, _content) => {},
-      readFile: async (_uri) => new Uint8Array(),
-      createDirectory: async (_uri) => {},
-      stat: async (_uri) => ({
+      writeFile: async (_uri: { fsPath: string }, _content: Uint8Array) => {},
+      readFile: async (_uri: { fsPath: string }) => new Uint8Array(),
+      createDirectory: async (_uri: { fsPath: string }) => {},
+      stat: async (_uri: { fsPath: string }) => ({
         type: 1,
         size: 0,
         ctime: 0,
         mtime: 0,
       }),
-      readDirectory: async (_uri) => [],
+      readDirectory: async (_uri: { fsPath: string }) => [],
     },
   },
   ExtensionContext: MockExtensionContext,
   Uri: {
-    file: (path) => ({ fsPath: path }),
-    parse: (path) => ({ fsPath: path }),
+    file: (path: string) => ({
+      fsPath: path,
+      scheme: 'file',
+      authority: '',
+      path: path,
+      query: '',
+      fragment: '',
+      with: function () {
+        return this;
+      },
+      toJSON: () => ({}),
+    }),
+    parse: (path: string) => ({ fsPath: path }),
+  },
+  ViewColumn: {
+    One: 1,
+    Two: 2,
+    Three: 3,
+    Active: -1,
+    Beside: -2,
   },
 };
-globalThis.require = (id) => {
+
+declare global {
+  var require: NodeRequire;
+}
+
+(globalThis.require as unknown as (id: string) => unknown) = (id: string) => {
   if (id === 'vscode') return vscode;
   if (id === 'fs')
     return {
@@ -181,5 +219,6 @@ globalThis.require = (id) => {
     };
   throw new Error(`Cannot find module '${id}'`);
 };
-module.exports = vscode;
-//# sourceMappingURL=setup.js.map
+
+export { executedCommands };
+export default vscode;

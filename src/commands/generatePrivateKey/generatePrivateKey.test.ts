@@ -1,6 +1,7 @@
 import { describe, expect, mock, test } from 'bun:test';
+
 import { PrivateKey } from '@bsv/sdk';
-import vscode from '../../../setup';
+import vscode from '../../test/setup';
 import type { KeyVault } from '../../keyVault';
 import type { OutputManager } from '../../output';
 import { generatePrivateKey } from './index';

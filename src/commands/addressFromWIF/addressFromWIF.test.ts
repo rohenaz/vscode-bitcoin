@@ -1,5 +1,5 @@
-import vscode from '../../../setup';
 import { describe, expect, test, mock, afterAll } from 'bun:test';
+import vscode from '@test/setup';
 import { addressFromWIF } from './index';
 import type { OutputManager } from '../../output';
 import { PrivateKey } from '@bsv/sdk';

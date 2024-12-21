@@ -1,4 +1,4 @@
-import vscode from '../../../setup';
+import vscode from '@test/setup';
 import { describe, expect, test, mock, afterAll } from 'bun:test';
 import { extendedPrivateKeyFromMnemonic } from './index';
 import type { OutputManager } from '../../output';

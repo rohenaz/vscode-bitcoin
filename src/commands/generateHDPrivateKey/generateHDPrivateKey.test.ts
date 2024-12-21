@@ -1,9 +1,9 @@
 import { describe, expect, mock, test } from 'bun:test';
-import { Mnemonic } from '@bsv/sdk';
+import { HD } from '@bsv/sdk';
 import vscode from '@test/setup';
 import type { KeyVault } from '../../keyVault';
 import type { OutputManager } from '../../output';
-import { generateMnemonic } from './index';
+import { generateHDPrivateKey } from './index';
 
 // Create a minimal mock that only implements what we need
 const mockOutput = {
@@ -18,48 +18,44 @@ const mockKeyVault = {
 const originalShowErrorMessage = vscode.window.showErrorMessage;
 vscode.window.showErrorMessage = mock(async (message: string, ...items: string[]) => items[0] || 'Error');
 
-describe('generateMnemonic', () => {
-  test('generates valid mnemonic', async () => {
-    const result = await generateMnemonic(mockOutput, mockKeyVault);
+describe('generateHDPrivateKey', () => {
+  test('generates valid HD private key', async () => {
+    const result = await generateHDPrivateKey(mockOutput, mockKeyVault);
 
-    // Check return value format - should be 12 words
-    expect(result.data.split(' ')).toHaveLength(12);
+    // Check return value format
     expect(result).toEqual({
-      data: expect.any(String),
+      data: expect.stringMatching(/^xprv[1-9A-HJ-NP-Za-km-z]{107}/),
       type: 'keys',
-      name: 'mnemonic',
+      name: 'hdprivkey',
     });
 
     // Verify key was stored in vault
     expect(mockKeyVault.storeKey).toHaveBeenCalledWith({
-      type: 'mnemonic',
-      value: expect.any(String),
-      label: 'Generated Mnemonic',
+      type: 'hdprivate',
+      value: expect.stringMatching(/^xprv[1-9A-HJ-NP-Za-km-z]{107}/),
+      label: 'Generated HD Private Key',
     });
-
-    // Verify the mnemonic is valid
-    const mnemonic = Mnemonic.fromString(result.data);
-    expect(mnemonic.isValid()).toBe(true);
   });
 
   test('handles errors', async () => {
-    // Mock Mnemonic.fromRandom to throw
-    const originalFromRandom = Mnemonic.fromRandom;
-    Mnemonic.fromRandom = () => {
+    // Mock HD.fromRandom to throw
+    const originalFromRandom = HD.fromRandom;
+    HD.fromRandom = () => {
       throw new Error('Test error');
     };
 
     try {
-      await expect(generateMnemonic(mockOutput, mockKeyVault)).rejects.toThrow(
-        'Test error',
-      );
+      await expect(
+        generateHDPrivateKey(mockOutput, mockKeyVault),
+      ).rejects.toThrow('Test error');
+
       expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
-        'Error generating mnemonic: Error: Test error',
+        'Error generating HD private key: Test error',
       );
     } finally {
       // Restore original functions
-      Mnemonic.fromRandom = originalFromRandom;
+      HD.fromRandom = originalFromRandom;
       vscode.window.showErrorMessage = originalShowErrorMessage;
     }
   });
-});
+}); 
