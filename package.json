@@ -137,6 +137,44 @@
         "command": "bitcoin.resetWelcomeScreen",
         "title": "Bitcoin: Reset Welcome Screen",
         "category": "Bitcoin"
+      },
+      {
+        "command": "bitcoin.openConversionTool",
+        "title": "Open Conversion Tool",
+        "category": "Bitcoin"
+      }
+    ],
+    "menus": {
+      "editor/context": [
+        {
+          "submenu": "bitcoin.contextMenu",
+          "when": "editorHasSelection"
+        }
+      ],
+      "bitcoin.contextMenu": [
+        {
+          "command": "bitcoin.convertData",
+          "group": "conversion@1"
+        },
+        {
+          "command": "bitcoin.encrypt",
+          "group": "conversion@2"
+        },
+        {
+          "command": "bitcoin.decrypt",
+          "group": "conversion@3"
+        },
+        {
+          "command": "bitcoin.openConversionTool",
+          "group": "conversion@4"
+        }
+      ]
+    },
+    "submenus": [
+      {
+        "id": "bitcoin.contextMenu",
+        "label": "Bitcoin",
+        "icon": "$(symbol-key)"
       }
     ],
     "configuration": {

@@ -151,7 +151,7 @@ describe('Bitcoin Extension Tests', () => {
     process.env.TEST_ENV = 'true';
 
     await activate(mockContext as ExtensionContext);
-    expect(mockContext.subscriptions).toHaveLength(30); // One for each command
+    expect(mockContext.subscriptions).toHaveLength(31); // One for each command
   });
 
   // Basic functionality tests

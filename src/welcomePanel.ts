@@ -100,6 +100,7 @@ export class WelcomePanel {
         commands: [
           { id: 'convertData', label: 'Convert Data Format' },
           { id: 'decodeRawTx', label: 'Decode Raw Transaction' },
+          { id: 'openConversionTool', label: 'Advanced Conversion Tool' },
         ],
       },
       {

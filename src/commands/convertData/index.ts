@@ -2,13 +2,14 @@ import type { OutputManager } from '../../output';
 import { type DataFormat, convertData, detectFormat } from '../../utils';
 import vsApi from '../../vsShim';
 
-export async function handleConvertDataCommand(): Promise<
-  { data: string; type: string; name?: string } | undefined
-> {
+export async function handleConvertDataCommand(
+  initialInput?: string
+): Promise<{ data: string; type: string; name?: string } | undefined> {
   console.log('Starting data conversion command...');
 
-  const input = await vsApi.window.showInputBox({
-    placeHolder: 'Enter data to convert (hex, base64, or binary array)',
+  const input = initialInput ?? await vsApi.window.showInputBox({
+    prompt: 'Enter data to convert (hex, base64, or binary array)',
+    placeHolder: 'e.g. 48656c6c6f or SGVsbG8= or [72,101,108,108,111]',
     validateInput: (text) => {
       return text.length === 0 ? 'Input cannot be empty' : null;
     },

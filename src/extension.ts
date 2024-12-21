@@ -250,19 +250,78 @@ const fetchInscriptionContent = async (
 export async function activate(context: ExtensionContext) {
   console.log('Bitcoin extension activating...');
 
-  // Show welcome screen on first activation, but skip in tests
-  if (
-    !context.globalState.get('bitcoin.hasShownWelcome') &&
-    process.env.TEST_ENV !== 'true'
-  ) {
-    WelcomePanel.show(context.extensionUri);
-    context.globalState.update('bitcoin.hasShownWelcome', true);
-  }
+  // We can skip the welcome screen if in test env
+  const isTestMode = process.env.TEST_ENV === 'true';
 
-  const outputManager = new OutputManager();
+  // Construct managers
   const workspaceManager = new WorkspaceManager();
   const keyVault = new KeyVault(context);
   const encryptionService = new EncryptionService(keyVault);
+  const outputManager = new OutputManager();
+
+  // Register openConversionTool command
+  const openConversionToolDisposable = vsApi.commands.registerCommand(
+    'bitcoin.openConversionTool',
+    async () => {
+      try {
+        // Get selected text if any
+        const editor = vsApi.window.activeTextEditor;
+        const selectedText = editor?.selection && !editor.selection.isEmpty
+          ? editor.document.getText(editor.selection)
+          : undefined;
+
+        // Create and show webview panel
+        const panel = vsApi.window.createWebviewPanel(
+          'bitcoinConversion',
+          'Bitcoin Conversion Tool',
+          vsApi.window.activeTextEditor?.viewColumn || 1,
+          {
+            enableScripts: true,
+            retainContextWhenHidden: true,
+          }
+        );
+
+        // Set webview content
+        panel.webview.html = getConversionWebviewContent(selectedText);
+
+        // Handle messages from the webview
+        panel.webview.onDidReceiveMessage(
+          async (message) => {
+            switch (message.command) {
+              case 'convert': {
+                try {
+                  const doc = await vsApi.workspace.openTextDocument({
+                    language: 'text',
+                    content: message.result,
+                  });
+                  await vsApi.window.showTextDocument(doc, { preview: false });
+                } catch (e) {
+                  console.error(e);
+                  vsApi.window.showErrorMessage(
+                    `Failed to show conversion result: ${e instanceof Error ? e.message : 'Unknown error'}`
+                  );
+                }
+                break;
+              }
+            }
+          },
+          undefined,
+          context.subscriptions
+        );
+      } catch (e) {
+        console.error(e);
+        vsApi.window.showErrorMessage(
+          `Failed to open conversion tool: ${e instanceof Error ? e.message : 'Unknown error'}`
+        );
+      }
+    }
+  );
+  context.subscriptions.push(openConversionToolDisposable);
+
+  // Register other commands...
+  registerCommand(context, outputManager, 'bitcoin.convertData', () =>
+    handleConvertDataCommand()
+  );
 
   // Register show key vault command
   const showKeyVaultCommand = vsApi.commands.registerCommand(
@@ -286,14 +345,6 @@ export async function activate(context: ExtensionContext) {
     outputManager,
     'bitcoin.decodeFile',
     async () => handleDecodeFileCommand(outputManager),
-  );
-
-  // Register convertData command
-  registerCommand(
-    context,
-    outputManager,
-    'bitcoin.convertData',
-    handleConvertDataCommand,
   );
 
   // Register key generation commands
@@ -748,3 +799,321 @@ export async function activate(context: ExtensionContext) {
 
 // this method is called when your extension is deactivated
 export function deactivate() {}
+
+function getConversionWebviewContent(initialInput?: string) {
+  return `<!DOCTYPE html>
+  <html>
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>Bitcoin Conversion Tool</title>
+      <style>
+        body {
+          padding: 20px;
+          font-family: var(--vscode-font-family);
+          color: var(--vscode-foreground);
+          background-color: var(--vscode-editor-background);
+        }
+        select, input, button {
+          margin: 5px 0;
+          padding: 5px;
+          font-family: var(--vscode-font-family);
+          background-color: var(--vscode-input-background);
+          color: var(--vscode-input-foreground);
+          border: 1px solid var(--vscode-input-border);
+        }
+        button {
+          background-color: var(--vscode-button-background);
+          color: var(--vscode-button-foreground);
+          border: none;
+          padding: 8px 12px;
+          cursor: pointer;
+        }
+        button:hover {
+          background-color: var(--vscode-button-hoverBackground);
+        }
+        textarea {
+          width: 100%;
+          min-height: 100px;
+          margin: 10px 0;
+          padding: 8px;
+          font-family: var(--vscode-editor-font-family);
+          background-color: var(--vscode-input-background);
+          color: var(--vscode-input-foreground);
+          border: 1px solid var(--vscode-input-border);
+        }
+        .form-group {
+          margin-bottom: 15px;
+        }
+        label {
+          display: block;
+          margin-bottom: 5px;
+        }
+        .error {
+          color: var(--vscode-errorForeground);
+          margin-top: 5px;
+          display: none;
+        }
+        .output-group {
+          margin-top: 20px;
+          display: none;
+        }
+        .output-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          margin-bottom: 5px;
+        }
+        .copy-button {
+          padding: 4px 8px;
+          font-size: 12px;
+        }
+        #output {
+          background-color: var(--vscode-input-background);
+          opacity: 0.8;
+        }
+      </style>
+    </head>
+    <body>
+      <div class="form-group">
+        <label for="input">Input:</label>
+        <textarea id="input" placeholder="Enter text to convert">${initialInput || ''}</textarea>
+      </div>
+      <div class="form-group">
+        <label for="fromFormat">From Format:</label>
+        <select id="fromFormat">
+          <option value="utf8">UTF-8</option>
+          <option value="hex">Hex</option>
+          <option value="base64">Base64</option>
+          <option value="binary">Binary Array</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="toFormat">To Format:</label>
+        <select id="toFormat">
+          <option value="utf8">UTF-8</option>
+          <option value="hex">Hex</option>
+          <option value="base64">Base64</option>
+          <option value="binary">Binary Array</option>
+        </select>
+      </div>
+      <button onclick="convert()">Convert</button>
+      <div id="error" class="error"></div>
+      <div class="output-group">
+        <div class="output-header">
+          <label for="output">Output:</label>
+          <button onclick="copyOutput()" class="copy-button">Copy</button>
+        </div>
+        <textarea id="output" readonly></textarea>
+      </div>
+
+      <script>
+        const vscode = acquireVsCodeApi();
+        let fromFormat = document.getElementById('fromFormat');
+        let toFormat = document.getElementById('toFormat');
+        let input = document.getElementById('input');
+        let output = document.getElementById('output');
+        let error = document.getElementById('error');
+        let outputGroup = document.querySelector('.output-group');
+
+        function detectFormat(input) {
+          // Try binary array first (most specific format)
+          if (/^\[(\d+,)*\d+\]$/.test(input)) {
+            fromFormat.value = 'binary';
+            return;
+          }
+          
+          // Try base64 (specific pattern with padding)
+          try {
+            if (/^[A-Za-z0-9+/]*={0,2}$/.test(input)) {
+              const decoded = atob(input);
+              fromFormat.value = 'base64';
+              return;
+            }
+          } catch {}
+          
+          // Try hex (must be even length and only hex chars)
+          if (/^[0-9A-Fa-f]+$/.test(input) && input.length % 2 === 0) {
+            fromFormat.value = 'hex';
+            return;
+          }
+
+          // Default to UTF-8 for anything else
+          fromFormat.value = 'utf8';
+        }
+
+        input.addEventListener('input', () => {
+          detectFormat(input.value);
+        });
+
+        function showError(message) {
+          error.textContent = message;
+          error.style.display = 'block';
+        }
+
+        function hideError() {
+          error.style.display = 'none';
+        }
+
+        function copyOutput() {
+          output.select();
+          document.execCommand('copy');
+          // Deselect
+          output.setSelectionRange(0, 0);
+          output.blur();
+        }
+
+        function showOutput(result) {
+          output.value = result;
+          outputGroup.style.display = 'block';
+        }
+
+        function validateHex(input) {
+          return /^[0-9A-Fa-f]+$/.test(input);
+        }
+
+        function validateBase64(input) {
+          try {
+            atob(input);
+            return /^[A-Za-z0-9+/]*={0,2}$/.test(input);
+          } catch {
+            return false;
+          }
+        }
+
+        function validateBinaryArray(input) {
+          try {
+            const arr = JSON.parse(input);
+            return Array.isArray(arr) && arr.every(n => Number.isInteger(n) && n >= 0 && n <= 255);
+          } catch {
+            return false;
+          }
+        }
+
+        function utf8ToBytes(str) {
+          const encoder = new TextEncoder();
+          return Array.from(encoder.encode(str));
+        }
+
+        function bytesToUtf8(bytes) {
+          const decoder = new TextDecoder();
+          return decoder.decode(new Uint8Array(bytes));
+        }
+
+        function hexToBytes(hex) {
+          const bytes = [];
+          for (let i = 0; i < hex.length; i += 2) {
+            bytes.push(parseInt(hex.substr(i, 2), 16));
+          }
+          return bytes;
+        }
+
+        function base64ToBytes(base64) {
+          const binary = atob(base64);
+          const bytes = new Uint8Array(binary.length);
+          for (let i = 0; i < binary.length; i++) {
+            bytes[i] = binary.charCodeAt(i);
+          }
+          return Array.from(bytes);
+        }
+
+        function bytesToHex(bytes) {
+          return bytes.map(b => b.toString(16).padStart(2, '0')).join('');
+        }
+
+        function bytesToBase64(bytes) {
+          const binary = String.fromCharCode.apply(null, bytes);
+          return btoa(binary);
+        }
+
+        function convert() {
+          hideError();
+          const inputValue = input.value.trim();
+          if (!inputValue) {
+            showError('Please enter some input');
+            return;
+          }
+
+          let bytes;
+          const from = fromFormat.value;
+          const to = toFormat.value;
+
+          try {
+            // Convert input to bytes
+            switch (from) {
+              case 'utf8':
+                bytes = utf8ToBytes(inputValue);
+                break;
+              case 'hex':
+                if (!validateHex(inputValue)) {
+                  showError('Invalid hex format');
+                  return;
+                }
+                bytes = hexToBytes(inputValue);
+                break;
+              case 'base64':
+                if (!validateBase64(inputValue)) {
+                  showError('Invalid base64 format');
+                  return;
+                }
+                bytes = base64ToBytes(inputValue);
+                break;
+              case 'binary':
+                if (!validateBinaryArray(inputValue)) {
+                  showError('Invalid binary array format');
+                  return;
+                }
+                bytes = JSON.parse(inputValue);
+                break;
+            }
+
+            // Convert bytes to output format
+            let result;
+            switch (to) {
+              case 'utf8':
+                result = bytesToUtf8(bytes);
+                break;
+              case 'hex':
+                result = bytesToHex(bytes);
+                break;
+              case 'base64':
+                result = bytesToBase64(bytes);
+                break;
+              case 'binary':
+                result = '[' + bytes.toString() + ']';
+                break;
+            }
+
+            showOutput(result);
+          } catch (e) {
+            showError('Conversion failed: ' + e.message);
+          }
+        }
+
+        // Auto-detect format of initial input
+        if (input.value) {
+          detectFormat(input.value);
+        }
+
+        // If we have initial input, trigger conversion immediately
+        if (input.value) {
+          // Set a reasonable default target format based on detected input format
+          const detectedFormat = fromFormat.value;
+          switch (detectedFormat) {
+            case 'utf8':
+              toFormat.value = 'hex';
+              break;
+            case 'hex':
+            case 'base64':
+              toFormat.value = 'utf8';
+              break;
+            case 'binary':
+              toFormat.value = 'hex';
+              break;
+          }
+          convert();
+        }
+      </script>
+    </body>
+  </html>`;
+}
