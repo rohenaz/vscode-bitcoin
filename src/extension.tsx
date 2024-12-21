@@ -36,6 +36,7 @@ import {
 } from './vsShim';
 import { WelcomePanel } from './welcomePanel';
 import { WorkspaceManager } from './workspace';
+import { API_HOST } from './constants';
 
 const { fromBase58Check, toBase64, toArray } = Utils;
 
@@ -76,7 +77,6 @@ interface Utxo {
   script: string;
 }
 
-const API_HOST = 'https://ordinals.gorillapool.io/api';
 
 const fetchPayUtxos = async (
   address: string,
@@ -239,6 +239,25 @@ const fetchInscriptionContent = async (
 export async function activate(context: ExtensionContext) {
   console.log('Bitcoin extension activating...');
 
+  // Add diagnostic command for selection
+  context.subscriptions.push(
+    vsApi.commands.registerCommand('bitcoin.debugSelection', async () => {
+      const editor = vsApi.window.activeTextEditor;
+      if (!editor) {
+        vsApi.window.showInformationMessage('No active editor');
+        return;
+      }
+
+      const selection = editor.selection;
+      const selectedText = editor.document.getText(selection);
+      const isTxid = /^[a-fA-F0-9]{64}$/.test(selectedText);
+      
+      vsApi.window.showInformationMessage(
+        `Selected text: "${selectedText}"\nMatches txid pattern: ${isTxid}\nLength: ${selectedText.length}`
+      );
+    })
+  );
+
   // We can skip the welcome screen if in test env
   const isTestMode = process.env.TEST_ENV === 'true';
 
@@ -286,30 +305,7 @@ export async function activate(context: ExtensionContext) {
           return;
         }
 
-        // Detect format and ask for output format if detected
-        const detectedFormat = detectFormat(userInput);
-        if (detectedFormat) {
-          const outputFormat = await vsApi.window.showQuickPick(
-            ['hex', 'base64', 'binary'].filter((f) => f !== detectedFormat),
-            {
-              placeHolder: `Convert from ${detectedFormat} to...`,
-            },
-          );
-
-          if (outputFormat) {
-            // Convert and open tool with the result
-            const result = convertData(
-              userInput,
-              detectedFormat,
-              outputFormat as DataFormat,
-            );
-            await openConversionTool(result);
-            return;
-          }
-        }
-
-        // If format not detected or user cancelled format selection,
-        // just open the tool with the original input
+        // Open the conversion tool with the input
         await openConversionTool(userInput);
       } catch (error) {
         vsApi.window.showErrorMessage(

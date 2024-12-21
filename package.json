@@ -143,32 +143,66 @@
         "command": "bitcoin.openConversionTool",
         "title": "Open Conversion Tool",
         "category": "Bitcoin"
+      },
+      {
+        "command": "bitcoin.debugSelection",
+        "title": "Debug Selection",
+        "category": "Bitcoin"
       }
     ],
     "menus": {
       "editor/context": [
         {
           "when": "editorHasSelection",
-          "submenu": "bitcoin.contextMenu",
+          "command": "bitcoin.debugSelection",
+          "group": "bitcoin@0"
+        },
+        {
+          "when": "editorHasSelection",
+          "command": "bitcoin.getTx",
           "group": "bitcoin@1"
+        },
+        {
+          "when": "editorHasSelection",
+          "submenu": "bitcoin.contextMenu",
+          "group": "bitcoin@2"
         }
       ],
       "bitcoin.contextMenu": [
         {
+          "when": "editorHasSelection && editorTextFocus && selection =~ /^[13][a-km-zA-HJ-NP-Z1-9]{25,34}$/",
+          "command": "bitcoin.getUtxosForAddress",
+          "title": "Get UTXOs for Address",
+          "group": "lookup@2"
+        },
+        {
+          "when": "editorHasSelection && editorTextFocus && selection =~ /^[0-9a-fA-F]+$/",
           "command": "bitcoin.convertData",
+          "title": "Convert from Hex",
           "group": "conversion@1"
         },
         {
-          "command": "bitcoin.encrypt",
+          "when": "editorHasSelection && editorTextFocus && selection =~ /^[A-Za-z0-9+/=]+$/",
+          "command": "bitcoin.convertData",
+          "title": "Convert from Base64",
           "group": "conversion@2"
         },
         {
+          "when": "editorHasSelection",
+          "command": "bitcoin.encrypt",
+          "title": "Encrypt Data",
+          "group": "encryption@1"
+        },
+        {
+          "when": "editorHasSelection",
           "command": "bitcoin.decrypt",
-          "group": "conversion@3"
+          "title": "Decrypt Data",
+          "group": "encryption@2"
         },
         {
           "command": "bitcoin.openConversionTool",
-          "group": "conversion@4"
+          "title": "Open Conversion Tool",
+          "group": "conversion@3"
         }
       ]
     },

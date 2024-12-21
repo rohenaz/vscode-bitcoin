@@ -67,18 +67,12 @@ const styles = `
     border-bottom: 1px solid var(--vscode-panel-border);
     margin: 24px 0;
   }
-  .buttons-row {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    margin-top: 8px;
-  }
   .status-message {
-    flex: 1;
     color: var(--vscode-descriptionForeground);
     font-size: 0.9em;
     height: 18px;
-    margin-top: 4px;
+    margin-top: 8px;
+    text-align: center;
   }
   .output-container {
     display: flex;
@@ -148,42 +142,89 @@ function getConversionWebviewContent(
   const script = `<script type="application/javascript">
     const vscode = acquireVsCodeApi();
 
-          function showStatusMessage(message) {
-            const statusMessage = document.getElementById('statusMessage');
-            statusMessage.textContent = message;
-            setTimeout(() => {
-              statusMessage.textContent = '';
-            }, 3000);
+    // Auto-detect format and set input type
+    function detectAndSetFormat(input) {
+      const formats = {
+        binary: /^\[(\d+,)*\d+\]$/,
+        hex: /^[0-9A-Fa-f]+$/,
+        base64: /^[A-Za-z0-9+/]*={0,2}$/,
+        utf8: /[a-zA-Z][,!?.\s]|[,!?.\s][a-zA-Z]/
+      };
+
+      // Check each format
+      for (const [format, regex] of Object.entries(formats)) {
+        if (regex.test(input)) {
+          document.getElementById('fromFormat').value = format;
+          break;
+        }
+      }
+    }
+
+    // Auto-convert if we have both input and output formats
+    function autoConvert() {
+      const fromFormat = document.getElementById('fromFormat').value;
+      const toFormat = document.getElementById('toFormat').value;
+      const input = document.getElementById('input').value;
+      if (fromFormat && toFormat && input) {
+        vscode.postMessage({ fromFormat, toFormat, input });
+      }
+    }
+
+    // Handle paste events on the input textarea
+    document.getElementById('input').addEventListener('paste', (e) => {
+      // Get the pasted text
+      const pastedText = e.clipboardData?.getData('text') || '';
+      detectAndSetFormat(pastedText);
+    });
+
+    function showStatusMessage(message) {
+      const statusMessage = document.getElementById('statusMessage');
+      statusMessage.textContent = message;
+      setTimeout(() => {
+        statusMessage.textContent = '';
+      }, 3000);
+    }
+
+    document.getElementById('convertButton').addEventListener('click', () => {
+      const fromFormat = document.getElementById('fromFormat').value;
+      const toFormat = document.getElementById('toFormat').value;
+      const input = document.getElementById('input').value;
+      vscode.postMessage({ fromFormat, toFormat, input });
+    });
+
+    document.getElementById('copyButton').addEventListener('click', () => {
+      const output = document.getElementById('output');
+      output.select();
+      document.execCommand('copy');
+      vscode.postMessage({ type: 'copy' });
+    });
+
+    window.addEventListener('message', (event) => {
+      if (event.data.type === 'result') {
+        document.getElementById('output').value = event.data.value;
+        showStatusMessage('Conversion succeeded');
+      }
+    });
+
+    // Initialize with any provided input
+    (() => {
+      const input = document.getElementById('input').value;
+      if (input) {
+        detectAndSetFormat(input);
+        // Select first available output format that's different from input format
+        const fromFormat = document.getElementById('fromFormat').value;
+        const toFormat = document.getElementById('toFormat');
+        for (const option of toFormat.options) {
+          if (option.value !== fromFormat) {
+            toFormat.value = option.value;
+            break;
           }
-
-          document.getElementById('convertButton').addEventListener('click', () => {
-            const fromFormat = document.getElementById('fromFormat').value;
-            const toFormat = document.getElementById('toFormat').value;
-            const input = document.getElementById('input').value;
-            vscode.postMessage({ fromFormat, toFormat, input });
-          });
-
-          document.getElementById('copyButton').addEventListener('click', () => {
-            const output = document.getElementById('output');
-            output.select();
-            document.execCommand('copy');
-            vscode.postMessage({ type: 'copy' });
-          });
-
-          window.addEventListener('message', (event) => {
-            if (event.data.type === 'result') {
-              document.getElementById('output').value = event.data.value;
-              showStatusMessage('Conversion succeeded');
-            }
-          });
-
-          // Auto-select the detected input format, if any
-          (() => {
-            if ("{safeDetectedFormat}" !== "") {
-              document.getElementById('fromFormat').value = "{safeDetectedFormat}";
-            }
-          })();
-          </script>`;
+        }
+        // Auto-convert if we have both formats
+        autoConvert();
+      }
+    })();
+    </script>`;
 
   // Build HTML using typed-html's createElement for JSX
   const content = (
@@ -217,18 +258,17 @@ function getConversionWebviewContent(
             <div class="form-group">
               <label for="toFormat">Output Format:</label>
               <select id="toFormat">
+                <option value="utf8">UTF-8</option>
                 <option value="hex">Hex</option>
                 <option value="base64">Base64</option>
                 <option value="binary">Binary Array</option>
               </select>
             </div>
 
-            <div class="buttons-row">
-              <button type="button" id="convertButton">
-                Convert
-              </button>
-              <div class="status-message" id="statusMessage" />
-            </div>
+            <button type="button" id="convertButton">
+              Convert
+            </button>
+            <div class="status-message" id="statusMessage" />
 
             <div class="output-container">
               <textarea id="output" readonly={'readonly'} />

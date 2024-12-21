@@ -1,8 +1,7 @@
 import fetch from 'node-fetch';
 import type { OutputManager } from '../../output';
 import vsApi from '../../vsShim';
-const API_HOST = 'https://ordinals.gorillapool.io/api';
-
+import { API_HOST } from '../../constants';
 interface Inscription {
   txid: string;
   vout: number;

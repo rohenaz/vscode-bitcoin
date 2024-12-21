@@ -1,7 +1,7 @@
 import { P2PKH, Utils } from '@bsv/sdk';
 import type { OutputManager } from '../../output';
 import vsApi from '../../vsShim';
-
+import { API_HOST } from '../../constants';
 const { fromBase58Check } = Utils;
 
 interface Utxo {
@@ -15,7 +15,6 @@ interface ApiError {
   message: string;
 }
 
-const API_HOST = 'https://ordinals.gorillapool.io/api';
 
 const fetchPayUtxos = async (
   address: string,
