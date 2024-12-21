@@ -1,6 +1,6 @@
 import * as crypto from 'node:crypto';
 import { PrivateKey } from '@bsv/sdk';
-import * as vscode from 'vscode';
+import vsApi from './vsShim';
 import type { KeyVault } from './keyVault';
 
 export class EncryptionService {
@@ -115,7 +115,7 @@ export class EncryptionService {
   ): Promise<PrivateKey | undefined> {
     if (mode === 'encrypt') {
       const options = ['Generate New Key', 'Use Existing Key (WIF)'];
-      const selection = await vscode.window.showQuickPick(options, {
+      const selection = await vsApi.window.showQuickPick(options, {
         placeHolder: 'Select encryption key source',
       });
 
@@ -129,7 +129,7 @@ export class EncryptionService {
     }
 
     // For decryption, or if user chose to use existing key for encryption
-    const wif = await vscode.window.showInputBox({
+    const wif = await vsApi.window.showInputBox({
       prompt:
         mode === 'encrypt'
           ? 'Enter private key in WIF format'

@@ -7,3 +7,6 @@ preload = ["./src/test/setup.ts"]
 pattern = "**/*.ts"
 # Exclude compiled files
 exclude = ["**/*.js"]
+
+[env]
+NODE_ENV = "test"

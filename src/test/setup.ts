@@ -1,7 +1,36 @@
-import type { WebviewOptions, WebviewPanel, Uri, ViewColumn, Disposable, WebviewPanelOptions, WebviewPanelOnDidChangeViewStateEvent } from 'vscode';
+import type { WebviewOptions, WebviewPanel, Uri, ViewColumn, Disposable, WebviewPanelOptions, WebviewPanelOnDidChangeViewStateEvent, ExtensionContext, Event, OutputChannel, WebviewView, WebviewViewProvider, TextDocument, TextEditor, TextDocumentShowOptions, ProgressLocation, Progress, CancellationToken } from 'vscode';
+
+// Re-export types that our code needs
+export type {
+  WebviewOptions,
+  WebviewPanel,
+  Uri,
+  ViewColumn,
+  Disposable,
+  WebviewPanelOptions,
+  WebviewPanelOnDidChangeViewStateEvent,
+  ExtensionContext,
+  Event,
+  OutputChannel,
+  WebviewView,
+  WebviewViewProvider,
+  TextDocument,
+  TextEditor,
+  TextDocumentShowOptions,
+  ProgressLocation,
+  Progress,
+  CancellationToken,
+};
 
 // Track executed commands
 const executedCommands: string[] = [];
+
+// Default workspace configuration
+const defaultWorkspaceConfig = {
+  'workspace.path': '.bitcoin',
+  'workspace.detectContentType': true,
+  'workspace.organizeFolders': true,
+};
 
 // Mock commands
 const mockCommands = [
@@ -35,7 +64,64 @@ const mockCommands = [
   'bitcoin.fetchOrdinalsInscription',
 ];
 
+// Mock EventEmitter class
+class EventEmitter<T> {
+  private listeners: Array<(e: T) => unknown> = [];
+
+  fire(data: T): void {
+    for (const listener of this.listeners) {
+      listener(data);
+    }
+  }
+
+  event(listener: (e: T) => unknown): Disposable {
+    this.listeners.push(listener);
+    return {
+      dispose: () => {
+        const index = this.listeners.indexOf(listener);
+        if (index > -1) {
+          this.listeners.splice(index, 1);
+        }
+      },
+    };
+  }
+}
+
+// Mock SecretStorage
+class SecretStorage {
+  private storage = new Map<string, string>();
+
+  async get(key: string): Promise<string | undefined> {
+    return this.storage.get(key);
+  }
+
+  async store(key: string, value: string): Promise<void> {
+    this.storage.set(key, value);
+  }
+
+  async delete(key: string): Promise<void> {
+    this.storage.delete(key);
+  }
+}
+
 interface VSCodeMock {
+  EventEmitter: typeof EventEmitter;
+  SecretStorage: typeof SecretStorage;
+  ExtensionContext: {
+    new(): {
+      subscriptions: Disposable[];
+      secrets: SecretStorage;
+      extensionPath: string;
+      globalState: {
+        get: <T>(key: string) => T | undefined;
+        update: (key: string, value: unknown) => Promise<void>;
+      };
+      workspaceState: {
+        get: <T>(key: string) => T | undefined;
+        update: (key: string, value: unknown) => Promise<void>;
+      };
+    };
+  };
   window: {
     createWebviewPanel: (viewType: string, title: string, column: ViewColumn, options: WebviewPanelOptions & WebviewOptions) => WebviewPanel;
     showInformationMessage: <T extends string>(message: string, ...items: T[]) => Promise<T | undefined>;
@@ -48,6 +134,17 @@ interface VSCodeMock {
       document: { getText: () => string; uri: { fsPath: string } };
       selection: { isEmpty: boolean };
     };
+    withProgress: <T>(
+      options: {
+        location: number;
+        title?: string;
+        cancellable?: boolean;
+      },
+      task: (
+        progress: Progress<{ message?: string; increment?: number }>,
+        token: CancellationToken,
+      ) => Promise<T>,
+    ) => Promise<T>;
   };
   commands: {
     registerCommand: (command: string, callback: (...args: unknown[]) => unknown) => Disposable;
@@ -60,6 +157,7 @@ interface VSCodeMock {
     getConfiguration: (section?: string) => {
       get: <T>(key: string) => T | undefined;
       update: <T>(key: string, value: T) => Promise<void>;
+      has: (key: string) => boolean;
     };
     fs: {
       writeFile: (uri: Uri, content: Uint8Array) => Promise<void>;
@@ -80,10 +178,30 @@ interface VSCodeMock {
     Active: number;
     Beside: number;
   };
+  ProgressLocation: {
+    Notification: 1;
+    SourceControl: 2;
+    Window: 3;
+  };
 }
 
 // Create mock VS Code instance
 const mockVSCode: VSCodeMock = {
+  EventEmitter,
+  SecretStorage,
+  ExtensionContext: class {
+    subscriptions: Disposable[] = [];
+    secrets = new SecretStorage();
+    extensionPath = '/test/extension/path';
+    globalState = {
+      get: <T>(_key: string) => undefined as T | undefined,
+      update: async (_key: string, _value: unknown) => {},
+    };
+    workspaceState = {
+      get: <T>(_key: string) => undefined as T | undefined,
+      update: async (_key: string, _value: unknown) => {},
+    };
+  },
   window: {
     createWebviewPanel: (_viewType: string, _title: string, _column: ViewColumn, _options: WebviewPanelOptions & WebviewOptions): WebviewPanel => ({
       webview: {
@@ -115,6 +233,26 @@ const mockVSCode: VSCodeMock = {
       document: { getText: () => '', uri: { fsPath: '' } },
       selection: { isEmpty: true },
     },
+    withProgress: async <T>(
+      options: {
+        location: number;
+        title?: string;
+        cancellable?: boolean;
+      },
+      task: (
+        progress: Progress<{ message?: string; increment?: number }>,
+        token: CancellationToken,
+      ) => Promise<T>,
+    ): Promise<T> => {
+      const progress: Progress<{ message?: string; increment?: number }> = {
+        report: () => {},
+      };
+      const token: CancellationToken = {
+        isCancellationRequested: false,
+        onCancellationRequested: () => ({ dispose: () => {} }),
+      };
+      return task(progress, token);
+    },
   },
   commands: {
     registerCommand: () => ({ dispose: () => {} }),
@@ -130,20 +268,13 @@ const mockVSCode: VSCodeMock = {
     getConfiguration: (section?: string) => ({
       get: <T>(key: string): T | undefined => {
         if (section === 'bitcoin') {
-          switch (key) {
-            case 'workspace.path':
-              return '.bitcoin' as unknown as T;
-            case 'workspace.detectContentType':
-              return true as unknown as T;
-            case 'workspace.organizeFolders':
-              return true as unknown as T;
-            default:
-              return undefined;
-          }
+          const value = defaultWorkspaceConfig[key as keyof typeof defaultWorkspaceConfig];
+          return value as T;
         }
         return undefined;
       },
       update: async () => Promise.resolve(),
+      has: (key: string) => key in defaultWorkspaceConfig,
     }),
     fs: {
       writeFile: async () => {},
@@ -176,13 +307,31 @@ const mockVSCode: VSCodeMock = {
     }),
   },
   ViewColumn: { One: 1, Two: 2, Three: 3, Active: -1, Beside: -2 },
+  ProgressLocation: {
+    Notification: 1,
+    SourceControl: 2,
+    Window: 3,
+  },
 };
 
-// Register mock globally
-(globalThis as unknown as { vscode: VSCodeMock }).vscode = mockVSCode;
+// Patch globalThis.require if Bun is using `require` under the hood
+if (typeof globalThis.require === 'function') {
+  const originalRequire = globalThis.require as NodeRequire;
+  const patchedRequire = ((id: string) => {
+    if (id === 'vscode') {
+      return mockVSCode;
+    }
+    return originalRequire(id);
+  }) as NodeRequire;
+
+  patchedRequire.resolve = originalRequire.resolve;
+  patchedRequire.cache = originalRequire.cache;
+  patchedRequire.extensions = originalRequire.extensions;
+  patchedRequire.main = originalRequire.main;
+
+  globalThis.require = patchedRequire;
+}
 
 // Export for direct imports
 export { executedCommands };
 export default mockVSCode;
-
-// ... rest of the existing code ...

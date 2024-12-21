@@ -12,7 +12,12 @@ import {
 import { BMAP, type BobTx, TransformTx, allProtocols } from 'bmapjs';
 import { parse } from 'bpu-ts';
 import fetch from 'node-fetch';
-import * as vscode from 'vscode';
+import vsApi, { 
+  ExtensionContext,
+  WebviewPanel,
+  WebviewView,
+  WebviewViewProvider
+} from './vsShim';
 import { BapPanel } from './bapPanel';
 import { BapService } from './bapService';
 import { generateMnemonic } from './commands/generateMnemonic';
@@ -31,121 +36,19 @@ import { publicKeyFromPrivateKey } from './commands/publicKeyFromPrivateKey';
 import { addressFromWIF } from './commands/addressFromWIF';
 import { addressFromPublicKey } from './commands/addressFromPublicKey';
 import { publicKeyFromWIF } from './commands/publicKeyFromWIF';
+import { convertData, detectFormat, type DataFormat } from './utils';
 
-const { toArray, toHex, toBase64 } = Utils;
 const { fromBase58Check } = Utils;
 
-// Helper functions for data conversion
-export function isHex(str: string): boolean {
-  return /^[0-9A-Fa-f]*$/.test(str);
-}
-
-export function isBase64(str: string): boolean {
-  try {
-    return btoa(atob(str)) === str;
-  } catch (e) {
-    return false;
-  }
-}
-
-export function detectFormat(
-  input: string,
-): 'hex' | 'base64' | 'binary' | 'unknown' {
-  // Check if it's a binary array string
-  if (input.startsWith('[') && input.endsWith(']')) {
-    try {
-      const arr = JSON.parse(input);
-      if (
-        Array.isArray(arr) &&
-        arr.every((n) => typeof n === 'number' && n >= 0 && n <= 255)
-      ) {
-        return 'binary';
-      }
-    } catch {}
-  }
-
-  // Check if it's hex
-  if (isHex(input)) {
-    return 'hex';
-  }
-
-  // Check if it's base64
-  if (isBase64(input)) {
-    return 'base64';
-  }
-
-  return 'unknown';
-}
-
-export function convertData(
-  input: string,
-  fromFormat: string,
-  toFormat: string,
-): string {
-  let bytes: number[];
-
-  // First convert input to byte array using toArray
-  switch (fromFormat) {
-    case 'hex':
-      try {
-        if (!isHex(input)) {
-          throw new Error('Invalid hex string');
-        }
-        bytes = toArray(Buffer.from(input, 'hex'));
-      } catch (e) {
-        throw new Error('Invalid hex input');
-      }
-      break;
-    case 'base64':
-      try {
-        if (!isBase64(input)) {
-          throw new Error('Invalid base64 string');
-        }
-        bytes = toArray(Buffer.from(input, 'base64'));
-      } catch (e) {
-        throw new Error('Invalid base64 input');
-      }
-      break;
-    case 'binary':
-      try {
-        const arr = JSON.parse(input);
-        if (
-          !Array.isArray(arr) ||
-          !arr.every((n) => typeof n === 'number' && n >= 0 && n <= 255)
-        ) {
-          throw new Error('Invalid binary array');
-        }
-        bytes = arr;
-      } catch (e) {
-        throw new Error('Invalid binary array input');
-      }
-      break;
-    default:
-      throw new Error('Unsupported input format');
-  }
-
-  // Then convert byte array to desired output format using Utils functions
-  switch (toFormat) {
-    case 'hex':
-      return toHex(bytes);
-    case 'base64':
-      return toBase64(bytes);
-    case 'binary':
-      return JSON.stringify(bytes);
-    default:
-      throw new Error('Unsupported output format');
-  }
-}
-
 function registerCommand(
-  context: vscode.ExtensionContext,
+  context: vsApi.ExtensionContext,
   outputManager: OutputManager,
   command: string,
   handler: () => Promise<
     { data: string; type: string; name?: string } | undefined
   >,
 ): void {
-  const disposable = vscode.commands.registerCommand(command, async () => {
+  const disposable = vsApi.commands.registerCommand(command, async () => {
     try {
       const result = await handler();
       if (result) {
@@ -157,7 +60,7 @@ function registerCommand(
         );
       }
     } catch (error) {
-      vscode.window.showErrorMessage(
+      vsApi.window.showErrorMessage(
         `Command failed: ${
           error instanceof Error ? error.message : 'Unknown error'
         }`,
@@ -334,7 +237,7 @@ const fetchInscriptionContent = async (
   return response.text();
 };
 
-export async function activate(context: vscode.ExtensionContext) {
+export async function activate(context: vsApi.ExtensionContext) {
   console.log('Bitcoin extension activating...');
 
   // Show welcome screen on first activation, but skip in tests
@@ -349,7 +252,7 @@ export async function activate(context: vscode.ExtensionContext) {
   const encryptionService = new EncryptionService(keyVault);
 
   // Register show key vault command
-  const showKeyVaultCommand = vscode.commands.registerCommand(
+  const showKeyVaultCommand = vsApi.commands.registerCommand(
     'bitcoin.showKeyVault',
     () => {
       KeyPanel.show(keyVault);
@@ -358,17 +261,17 @@ export async function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(showKeyVaultCommand);
 
   // Register test command
-  const testCommand = vscode.commands.registerCommand('bitcoin.test', () => {
+  const testCommand = vsApi.commands.registerCommand('bitcoin.test', () => {
     console.log('Test command executed');
-    vscode.window.showInformationMessage('Test command works!');
+    vsApi.window.showInformationMessage('Test command works!');
   });
   context.subscriptions.push(testCommand);
 
   // Register convertData command
   context.subscriptions.push(
-    vscode.commands.registerCommand('bitcoin.convertData', async () => {
+    vsApi.commands.registerCommand('bitcoin.convertData', async () => {
       try {
-        const input = await vscode.window.showInputBox({
+        const input = await vsApi.window.showInputBox({
           placeHolder: 'Enter data to convert (hex, base64, or binary array)',
           validateInput: (text) => {
             return text.length === 0 ? 'Input cannot be empty' : null;
@@ -380,34 +283,34 @@ export async function activate(context: vscode.ExtensionContext) {
         }
 
         const inputFormat = detectFormat(input);
-        if (inputFormat === 'unknown') {
-          vscode.window.showErrorMessage(
+        if (!inputFormat) {
+          vsApi.window.showErrorMessage(
             'Unable to detect input format. Please ensure input is valid hex, base64, or binary array.',
           );
           return;
         }
 
         const formats = ['hex', 'base64', 'binary'];
-        const targetFormat = await vscode.window.showQuickPick(
+        const targetFormat = await vsApi.window.showQuickPick(
           formats.filter((f) => f !== inputFormat),
           {
             placeHolder: `Convert from ${inputFormat} to:`,
           },
-        );
+        ) as DataFormat;
 
         if (!targetFormat) {
           return;
         }
 
         const result = convertData(input, inputFormat, targetFormat);
-        await vscode.commands.executeCommand(
+        await vsApi.commands.executeCommand(
           'bitcoin.handleOutput',
           `Original (${inputFormat}):\n${input}\n\nConverted (${targetFormat}):\n${result}`,
           'conversions',
           `${inputFormat}_to_${targetFormat}`,
         );
       } catch (error) {
-        vscode.window.showErrorMessage(
+        vsApi.window.showErrorMessage(
           `Command failed: ${
             error instanceof Error ? error.message : 'Unknown error'
           }`,
@@ -418,9 +321,9 @@ export async function activate(context: vscode.ExtensionContext) {
 
   // Register detect and convert command
   context.subscriptions.push(
-    vscode.commands.registerCommand('bitcoin.detectAndConvert', async () => {
+    vsApi.commands.registerCommand('bitcoin.detectAndConvert', async () => {
       try {
-        const input = await vscode.window.showInputBox({
+        const input = await vsApi.window.showInputBox({
           prompt: 'Enter base64 encoded data to convert',
           placeHolder: 'e.g. /9j/4AAQSkZJRg...',
         });
@@ -431,26 +334,26 @@ export async function activate(context: vscode.ExtensionContext) {
 
         const uri = await workspaceManager.detectAndConvertContent(input);
         if (!uri) {
-          vscode.window.showErrorMessage(
+          vsApi.window.showErrorMessage(
             'Failed to convert content. Please check the input data.',
           );
           return;
         }
 
-        vscode.window.showInformationMessage(
-          `Content saved to ${vscode.workspace.asRelativePath(uri)}`,
+        vsApi.window.showInformationMessage(
+          `Content saved to ${vsApi.workspace.asRelativePath(uri)}`,
         );
 
         // Open the file if it's an image or text
         const contentType = path.extname(uri.fsPath).toLowerCase();
         if (['.jpeg', '.jpg', '.png', '.gif', '.bmp'].includes(contentType)) {
-          vscode.commands.executeCommand('vscode.open', uri);
+          vsApi.commands.executeCommand('vscode.open', uri);
         } else if (['.json', '.xml', '.txt'].includes(contentType)) {
-          const doc = await vscode.workspace.openTextDocument(uri);
-          await vscode.window.showTextDocument(doc);
+          const doc = await vsApi.workspace.openTextDocument(uri);
+          await vsApi.window.showTextDocument(doc);
         }
       } catch (error) {
-        vscode.window.showErrorMessage(
+        vsApi.window.showErrorMessage(
           `Error converting content: ${
             error instanceof Error ? error.message : String(error)
           }`,
@@ -508,7 +411,7 @@ export async function activate(context: vscode.ExtensionContext) {
   );
 
   registerCommand(context, outputManager, 'bitcoin.xPubFromxPriv', async () => {
-    const xPriv = await vscode.window.showInputBox({
+    const xPriv = await vsApi.window.showInputBox({
       value: '',
       placeHolder: 'Ex: xprv9s21ZrQH143K...',
       validateInput: (text) => {
@@ -535,7 +438,7 @@ export async function activate(context: vscode.ExtensionContext) {
     outputManager,
     'bitcoin.addressFromHDPublicKey',
     async () => {
-      const xPub = await vscode.window.showInputBox({
+      const xPub = await vsApi.window.showInputBox({
         value: '',
         placeHolder: 'Ex: xpub661MyMwAqRbcGa7...',
         validateInput: (text) => {
@@ -543,7 +446,7 @@ export async function activate(context: vscode.ExtensionContext) {
         },
       });
 
-      const path = await vscode.window.showInputBox({
+      const path = await vsApi.window.showInputBox({
         value: 'm/0/0',
         placeHolder: 'Ex: m/0/0',
         validateInput: (_text) => {
@@ -572,7 +475,7 @@ export async function activate(context: vscode.ExtensionContext) {
     outputManager,
     'bitcoin.addressFromHDPrivateKey',
     async () => {
-      const xPriv = await vscode.window.showInputBox({
+      const xPriv = await vsApi.window.showInputBox({
         value: '',
         placeHolder: 'Ex: xprv9s21ZrQH143K...',
         validateInput: (text) => {
@@ -580,7 +483,7 @@ export async function activate(context: vscode.ExtensionContext) {
         },
       });
 
-      const path = await vscode.window.showInputBox({
+      const path = await vsApi.window.showInputBox({
         value: 'm/0/0',
         placeHolder: 'Ex: m/0/0',
         validateInput: (_text) => {
@@ -620,7 +523,7 @@ export async function activate(context: vscode.ExtensionContext) {
     outputManager,
     'bitcoin.addressFromPrivateKey',
     async () => {
-      const privKey = await vscode.window.showInputBox({
+      const privKey = await vsApi.window.showInputBox({
         value: '',
         placeHolder: 'Ex: L...',
         validateInput: (_text) => {
@@ -650,7 +553,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
   // Register transaction commands
   registerCommand(context, outputManager, 'bitcoin.getTx', async () => {
-    const txid = await vscode.window.showInputBox({
+    const txid = await vsApi.window.showInputBox({
       value: '',
       placeHolder: 'Ex: 4d03ff9062ac2e6...',
       validateInput: (text) => {
@@ -692,7 +595,7 @@ export async function activate(context: vscode.ExtensionContext) {
       },
     ];
 
-    const format = await vscode.window.showQuickPick(formats, {
+    const format = await vsApi.window.showQuickPick(formats, {
       placeHolder: 'Select output format',
       title: 'Transaction Format',
     });
@@ -801,11 +704,11 @@ export async function activate(context: vscode.ExtensionContext) {
       }
 
       // Always open in new editor first
-      const doc = await vscode.workspace.openTextDocument({
+      const doc = await vsApi.workspace.openTextDocument({
         content,
         language,
       });
-      await vscode.window.showTextDocument(doc, { preview: false });
+      await vsApi.window.showTextDocument(doc, { preview: false });
 
       // Then handle according to output preference
       return {
@@ -824,7 +727,7 @@ export async function activate(context: vscode.ExtensionContext) {
   });
 
   registerCommand(context, outputManager, 'bitcoin.decodeRawTx', async () => {
-    const rawTxHex = await vscode.window.showInputBox({
+    const rawTxHex = await vsApi.window.showInputBox({
       value: '',
       placeHolder: 'paste raw tx hex',
       validateInput: (_text) => {
@@ -860,7 +763,7 @@ export async function activate(context: vscode.ExtensionContext) {
   });
 
   registerCommand(context, outputManager, 'bitcoin.rawTxToBob', async () => {
-    const rawTxHex = await vscode.window.showInputBox({
+    const rawTxHex = await vsApi.window.showInputBox({
       value: '',
       placeHolder: 'paste raw tx hex',
       validateInput: (_text) => {
@@ -890,7 +793,7 @@ export async function activate(context: vscode.ExtensionContext) {
     outputManager,
     'bitcoin.getUtxosForAddress',
     async () => {
-      const address = await vscode.window.showInputBox({
+      const address = await vsApi.window.showInputBox({
         value: '',
         placeHolder: 'Ex: 1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa',
         validateInput: (_text) => {
@@ -1020,10 +923,10 @@ export async function activate(context: vscode.ExtensionContext) {
 
   // Register output handler
   context.subscriptions.push(
-    vscode.commands.registerCommand(
+    vsApi.commands.registerCommand(
       'bitcoin.handleOutput',
       async (output: string, type: string, suggestedName?: string) => {
-        const config = vscode.workspace.getConfiguration('bitcoin');
+        const config = vsApi.workspace.getConfiguration('bitcoin');
         const preference = config.get('outputPreference') as string;
 
         try {
@@ -1034,26 +937,26 @@ export async function activate(context: vscode.ExtensionContext) {
                 type,
                 suggestedName,
               );
-              vscode.window.showInformationMessage(
-                `Output saved to ${vscode.workspace.asRelativePath(uri)}`,
+              vsApi.window.showInformationMessage(
+                `Output saved to ${vsApi.workspace.asRelativePath(uri.fsPath)}`,
               );
               break;
             }
 
             case 'file': {
-              const fileUri = await vscode.window.showSaveDialog({
-                defaultUri: vscode.Uri.file(
+              const fileUri = await vsApi.window.showSaveDialog({
+                defaultUri: vsApi.Uri.file(
                   suggestedName ?? `${type}_${Date.now()}.txt`,
                 ),
                 filters: { 'Text files': ['txt'] },
               });
               if (fileUri) {
-                await vscode.workspace.fs.writeFile(
+                await vsApi.workspace.fs.writeFile(
                   fileUri,
                   Buffer.from(output),
                 );
-                vscode.window.showInformationMessage(
-                  `Output saved to ${vscode.workspace.asRelativePath(fileUri)}`,
+                vsApi.window.showInformationMessage(
+                  `Output saved to ${vsApi.workspace.asRelativePath(fileUri)}`,
                 );
               }
               break;
@@ -1061,14 +964,14 @@ export async function activate(context: vscode.ExtensionContext) {
 
             default: {
               // Handle clipboard (default case)
-              await vscode.env.clipboard.writeText(output);
+              await vsApi.env.clipboard.writeText(output);
               const changeSettings = 'Change Output Settings';
-              const result = await vscode.window.showInformationMessage(
+              const result = await vsApi.window.showInformationMessage(
                 'Output copied to clipboard!',
                 changeSettings,
               );
               if (result === changeSettings) {
-                await vscode.commands.executeCommand(
+                await vsApi.commands.executeCommand(
                   'workbench.action.openSettings',
                   'bitcoin.outputPreference',
                 );
@@ -1077,7 +980,7 @@ export async function activate(context: vscode.ExtensionContext) {
             }
           }
         } catch (error) {
-          vscode.window.showErrorMessage(
+          vsApi.window.showErrorMessage(
             `Error handling output: ${
               error instanceof Error ? error.message : String(error)
             }`,
@@ -1089,12 +992,12 @@ export async function activate(context: vscode.ExtensionContext) {
 
   // Register encryption and decryption commands
   context.subscriptions.push(
-    vscode.commands.registerCommand('bitcoin.encrypt', async () => {
+    vsApi.commands.registerCommand('bitcoin.encrypt', async () => {
       try {
         // Get active text editor
-        const editor = vscode.window.activeTextEditor;
+        const editor = vsApi.window.activeTextEditor;
         if (!editor) {
-          vscode.window.showErrorMessage('No active text editor');
+          vsApi.window.showErrorMessage('No active text editor');
           return;
         }
 
@@ -1105,7 +1008,7 @@ export async function activate(context: vscode.ExtensionContext) {
           : editor.document.getText(selection);
 
         if (!text) {
-          vscode.window.showErrorMessage('No text to encrypt');
+          vsApi.window.showErrorMessage('No text to encrypt');
           return;
         }
 
@@ -1138,17 +1041,17 @@ export async function activate(context: vscode.ExtensionContext) {
 
         // Show success message with key
         const wif = privateKey.toWif();
-        await vscode.window.showInformationMessage(
+        await vsApi.window.showInformationMessage(
           'Data encrypted and saved. Keep this key safe:',
           { modal: true },
         );
-        await vscode.window.showInformationMessage(wif, { modal: true });
+        await vsApi.window.showInformationMessage(wif, { modal: true });
 
         // Open the encrypted file
-        const doc = await vscode.workspace.openTextDocument(uri);
-        await vscode.window.showTextDocument(doc);
+        const doc = await vsApi.workspace.openTextDocument(uri.fsPath);
+        await vsApi.window.showTextDocument(doc);
       } catch (error) {
-        vscode.window.showErrorMessage(
+        vsApi.window.showErrorMessage(
           `Encryption failed: ${
             error instanceof Error ? error.message : String(error)
           }`,
@@ -1156,12 +1059,12 @@ export async function activate(context: vscode.ExtensionContext) {
       }
     }),
 
-    vscode.commands.registerCommand('bitcoin.decrypt', async () => {
+    vsApi.commands.registerCommand('bitcoin.decrypt', async () => {
       try {
         // Get active text editor
-        const editor = vscode.window.activeTextEditor;
+        const editor = vsApi.window.activeTextEditor;
         if (!editor) {
-          vscode.window.showErrorMessage('No active text editor');
+          vsApi.window.showErrorMessage('No active text editor');
           return;
         }
 
@@ -1172,7 +1075,7 @@ export async function activate(context: vscode.ExtensionContext) {
           : editor.document.getText(selection);
 
         if (!text) {
-          vscode.window.showErrorMessage('No text to decrypt');
+          vsApi.window.showErrorMessage('No text to decrypt');
           return;
         }
 
@@ -1186,13 +1089,13 @@ export async function activate(context: vscode.ExtensionContext) {
         const decrypted = await encryptionService.decrypt(text, key);
 
         // Create new document with decrypted content
-        const doc = await vscode.workspace.openTextDocument({
+        const doc = await vsApi.workspace.openTextDocument({
           content: decrypted.toString(),
           language: 'plaintext',
         });
-        await vscode.window.showTextDocument(doc);
+        await vsApi.window.showTextDocument(doc);
       } catch (error) {
-        vscode.window.showErrorMessage(
+        vsApi.window.showErrorMessage(
           `Decryption failed: ${
             error instanceof Error ? error.message : String(error)
           }`,
@@ -1202,11 +1105,11 @@ export async function activate(context: vscode.ExtensionContext) {
   );
 
   context.subscriptions.push(
-    vscode.commands.registerCommand('bitcoin.lookupBapProfile', async () => {
+    vsApi.commands.registerCommand('bitcoin.lookupBapProfile', async () => {
       const bapService = new BapService();
 
       // Prompt for BAP ID
-      const idKey = await vscode.window.showInputBox({
+      const idKey = await vsApi.window.showInputBox({
         prompt: 'Enter BAP ID',
         placeHolder: 'e.g. Go8vCHAa4S6AhXKTABGpANiz35J',
       });
@@ -1217,9 +1120,9 @@ export async function activate(context: vscode.ExtensionContext) {
 
       try {
         // Show progress indicator
-        const profile = await vscode.window.withProgress(
+        const profile = await vsApi.window.withProgress(
           {
-            location: vscode.ProgressLocation.Notification,
+            location: vsApi.ProgressLocation.Notification,
             title: 'Looking up BAP profile...',
             cancellable: false,
           },
@@ -1229,7 +1132,7 @@ export async function activate(context: vscode.ExtensionContext) {
         // Show profile in webview
         BapPanel.show(profile);
       } catch (error) {
-        vscode.window.showErrorMessage(
+        vsApi.window.showErrorMessage(
           `Failed to lookup BAP profile: ${
             error instanceof Error ? error.message : String(error)
           }`,
@@ -1244,7 +1147,7 @@ export async function activate(context: vscode.ExtensionContext) {
     outputManager,
     'bitcoin.fetchOrdinalsInscription',
     async () => {
-      const outpoint = await vscode.window.showInputBox({
+      const outpoint = await vsApi.window.showInputBox({
         value: '',
         placeHolder:
           'Ex: 027cea24351db7081089108b59916e5c5e90893233a872266c013f7665c53758_1',
@@ -1299,9 +1202,9 @@ export async function activate(context: vscode.ExtensionContext) {
 
   // Add command to reset welcome screen
   context.subscriptions.push(
-    vscode.commands.registerCommand('bitcoin.resetWelcomeScreen', async () => {
+    vsApi.commands.registerCommand('bitcoin.resetWelcomeScreen', async () => {
       await context.globalState.update('bitcoin.hasShownWelcome', false);
-      vscode.window.showInformationMessage(
+      vsApi.window.showInformationMessage(
         'Welcome screen has been reset. Please reload VS Code to see it.',
       );
     }),

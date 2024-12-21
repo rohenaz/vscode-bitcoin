@@ -1,12 +1,12 @@
-import * as vscode from 'vscode';
+import vsApi, { WebviewPanel, Disposable } from './vsShim';
 import type { BapProfile } from './bapService';
 
 export class BapPanel {
   public static currentPanel: BapPanel | undefined;
-  private readonly _panel: vscode.WebviewPanel;
-  private _disposables: vscode.Disposable[] = [];
+  private readonly _panel: WebviewPanel;
+  private _disposables: Disposable[] = [];
 
-  private constructor(panel: vscode.WebviewPanel) {
+  private constructor(panel: WebviewPanel) {
     this._panel = panel;
 
     // Listen for when the panel is disposed
@@ -14,10 +14,10 @@ export class BapPanel {
   }
 
   public static show(profile: BapProfile) {
-    const panel = vscode.window.createWebviewPanel(
+    const panel = vsApi.window.createWebviewPanel(
       'bapProfile',
       `BAP Profile: ${profile.identity.alternateName || profile.idKey}`,
-      vscode.ViewColumn.One,
+      vsApi.ViewColumn.One,
       {
         enableScripts: true,
       },

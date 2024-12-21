@@ -1,13 +1,13 @@
-import * as vscode from 'vscode';
+import vsApi, { WebviewPanel, Disposable } from './vsShim';
 import type { KeyEntry, KeyVault } from './keyVault';
 
 export class KeyPanel {
   public static currentPanel: KeyPanel | undefined;
-  private readonly _panel: vscode.WebviewPanel;
+  private readonly _panel: WebviewPanel;
   private readonly _vault: KeyVault;
-  private _disposables: vscode.Disposable[] = [];
+  private _disposables: Disposable[] = [];
 
-  private constructor(panel: vscode.WebviewPanel, vault: KeyVault) {
+  private constructor(panel: WebviewPanel, vault: KeyVault) {
     this._panel = panel;
     this._vault = vault;
 
@@ -31,13 +31,13 @@ export class KeyPanel {
   public static show(vault: KeyVault) {
     if (KeyPanel.currentPanel) {
       // If we already have a panel, show it
-      KeyPanel.currentPanel._panel.reveal(vscode.ViewColumn.One);
+      KeyPanel.currentPanel._panel.reveal(vsApi.ViewColumn.One);
     } else {
       // Otherwise, create a new panel
-      const panel = vscode.window.createWebviewPanel(
+      const panel = vsApi.window.createWebviewPanel(
         'bitcoinKeyVault',
         'Bitcoin Key Vault',
-        vscode.ViewColumn.One,
+        vsApi.ViewColumn.One,
         {
           enableScripts: true,
           retainContextWhenHidden: true,
@@ -264,7 +264,7 @@ export class KeyPanel {
           this._vault
             .updateKeyLabel(message.id, message.label)
             .catch((error) => {
-              vscode.window.showErrorMessage(
+              vsApi.window.showErrorMessage(
                 `Failed to update label: ${
                   error instanceof Error ? error.message : String(error)
                 }`,
@@ -279,11 +279,11 @@ export class KeyPanel {
     try {
       const key = await this._vault.getKey(id);
       if (key) {
-        await vscode.env.clipboard.writeText(key.value);
-        vscode.window.showInformationMessage('Key value copied to clipboard');
+        await vsApi.env.clipboard.writeText(key.value);
+        vsApi.window.showInformationMessage('Key value copied to clipboard');
       }
     } catch (error) {
-      vscode.window.showErrorMessage(
+      vsApi.window.showErrorMessage(
         `Failed to copy key: ${
           error instanceof Error ? error.message : String(error)
         }`,
@@ -294,9 +294,9 @@ export class KeyPanel {
   private async deleteKey(id: string) {
     try {
       await this._vault.deleteKey(id);
-      vscode.window.showInformationMessage('Key deleted');
+      vsApi.window.showInformationMessage('Key deleted');
     } catch (error) {
-      vscode.window.showErrorMessage(
+      vsApi.window.showErrorMessage(
         `Failed to delete key: ${
           error instanceof Error ? error.message : String(error)
         }`,

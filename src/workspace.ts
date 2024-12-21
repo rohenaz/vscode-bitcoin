@@ -1,7 +1,13 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { Utils } from '@bsv/sdk';
-import * as vscode from 'vscode';
+import vsApi, { Uri, isUri } from './vsShim';
+
+interface WorkspaceConfig {
+  path: string;
+  detectContentType: boolean;
+  organizeFolders: boolean;
+}
 
 export class WorkspaceManager {
   private workspaceRoot: string;
@@ -19,31 +25,26 @@ export class WorkspaceManager {
       this.organizeFolders = true;
       this.isTestMode = true;
     } else {
-      // Normal mode - use VS Code configuration
-      const config = vscode.workspace.getConfiguration('bitcoin');
+      // Normal mode - use VS Code configuration with fallback
       this.isTestMode = false;
+      const config = this.getWorkspaceConfig();
 
       // Check if we have a workspace open
-      if (
-        !vscode.workspace.workspaceFolders ||
-        vscode.workspace.workspaceFolders.length === 0
-      ) {
+      if (!vsApi?.workspace?.workspaceFolders?.length) {
         // No workspace open, use a temporary directory or user's home directory
         this.workspaceRoot = process.env.HOME || process.env.USERPROFILE || '.';
-        vscode.window.showWarningMessage(
-          'No workspace open. Bitcoin files will be stored in your home directory.',
-        );
+        if (vsApi?.window?.showWarningMessage) {
+          vsApi.window.showWarningMessage(
+            'No workspace open. Bitcoin files will be stored in your home directory.',
+          );
+        }
       } else {
-        this.workspaceRoot = vscode.workspace.workspaceFolders[0].uri.fsPath;
+        this.workspaceRoot = vsApi.workspace.workspaceFolders[0].uri.fsPath;
       }
 
-      this.workspacePath = path.join(
-        this.workspaceRoot,
-        config.get('workspace.path') ?? '.bitcoin',
-      );
-
-      this.detectContentType = config.get('workspace.detectContentType') ?? true;
-      this.organizeFolders = config.get('workspace.organizeFolders') ?? true;
+      this.workspacePath = path.join(this.workspaceRoot, config.path);
+      this.detectContentType = config.detectContentType;
+      this.organizeFolders = config.organizeFolders;
     }
 
     try {
@@ -52,19 +53,45 @@ export class WorkspaceManager {
         fs.mkdirSync(this.workspacePath, { recursive: true });
       }
 
-      // Only check gitignore if we're not in test mode
-      if (!this.isTestMode) {
+      // Only check gitignore if we're not in test mode and VS Code API is available
+      if (!this.isTestMode && vsApi?.workspace) {
         this.checkGitIgnore();
       }
     } catch (error) {
-      if (!this.isTestMode) {
-        vscode.window.showErrorMessage(
+      if (!this.isTestMode && vsApi?.window?.showErrorMessage) {
+        vsApi.window.showErrorMessage(
           `Failed to create Bitcoin workspace: ${
             error instanceof Error ? error.message : String(error)
           }`,
         );
       }
       throw error; // Re-throw to prevent extension from activating in an invalid state
+    }
+  }
+
+  private getWorkspaceConfig(): WorkspaceConfig {
+    // Default configuration
+    const defaultConfig: WorkspaceConfig = {
+      path: '.bitcoin',
+      detectContentType: true,
+      organizeFolders: true,
+    };
+
+    // If VS Code API is not available or we're in test mode, return defaults
+    if (!vsApi?.workspace?.getConfiguration) {
+      return defaultConfig;
+    }
+
+    try {
+      const config = vsApi.workspace.getConfiguration('bitcoin');
+      return {
+        path: config.get('workspace.path') ?? defaultConfig.path,
+        detectContentType: config.get('workspace.detectContentType') ?? defaultConfig.detectContentType,
+        organizeFolders: config.get('workspace.organizeFolders') ?? defaultConfig.organizeFolders,
+      };
+    } catch (error) {
+      console.warn('Failed to get VS Code configuration, using defaults:', error);
+      return defaultConfig;
     }
   }
 
@@ -84,7 +111,7 @@ export class WorkspaceManager {
       // If .gitignore doesn't exist in a git repo, create it
       if (!fs.existsSync(gitignorePath)) {
         fs.writeFileSync(gitignorePath, '.bitcoin\n');
-        vscode.window.showInformationMessage(
+        vsApi.window.showInformationMessage(
           'Created .gitignore with .bitcoin workspace ignored',
         );
         return;
@@ -109,26 +136,26 @@ export class WorkspaceManager {
           'Warning: .bitcoin workspace is not in .gitignore. This directory may contain sensitive data.';
         const addToGitignore = 'Add to .gitignore';
 
-        vscode.window
+        vsApi.window
           .showWarningMessage(message, addToGitignore)
           .then((selection) => {
             if (selection === addToGitignore) {
               try {
                 // Append .bitcoin to .gitignore
                 fs.appendFileSync(gitignorePath, '\n.bitcoin\n');
-                vscode.window.showInformationMessage(
+                vsApi.window.showInformationMessage(
                   '.bitcoin workspace added to .gitignore',
                 );
               } catch (error) {
                 console.error('Failed to update .gitignore:', error);
-                vscode.window.showErrorMessage('Failed to update .gitignore');
+                vsApi.window.showErrorMessage('Failed to update .gitignore');
               }
             }
           });
       }
     } catch (error) {
       console.error('Failed to check .gitignore:', error);
-      vscode.window.showErrorMessage(
+      vsApi.window.showErrorMessage(
         'Failed to check .gitignore configuration',
       );
     }
@@ -145,7 +172,7 @@ export class WorkspaceManager {
     data: string | Buffer,
     type: string,
     suggestedName?: string,
-  ): Promise<vscode.Uri | { fsPath: string }> {
+  ): Promise<Uri | { fsPath: string }> {
     const timestamp = Date.now();
     const name = suggestedName ?? type;
     const sanitizedName = this.sanitizeFilename(`${name}_${timestamp}`);
@@ -172,7 +199,7 @@ export class WorkspaceManager {
       return { fsPath: filePath };
     }
 
-    return vscode.Uri.file(filePath);
+    return vsApi.Uri.file(filePath);
   }
 
   private sanitizeFilename(input: string): string {
@@ -215,7 +242,7 @@ export class WorkspaceManager {
    */
   async detectAndConvertContent(
     base64Data: string,
-  ): Promise<vscode.Uri | undefined> {
+  ): Promise<Uri | undefined> {
     try {
       // Decode base64 data
       const buffer = Buffer.from(base64Data, 'base64');
@@ -237,7 +264,7 @@ export class WorkspaceManager {
 
       // Save to workspace
       const result = await this.saveFile(buffer, 'media', `content${extension}`);
-      return result as vscode.Uri;
+      return isUri(result) ? result : vsApi.Uri.file(result.fsPath);
     } catch {
       return undefined;
     }
@@ -276,7 +303,7 @@ export class WorkspaceManager {
       'application/octet-stream',
     ];
 
-    return vscode.window.showQuickPick(contentTypes, {
+    return vsApi.window.showQuickPick(contentTypes, {
       placeHolder: 'Select content type',
     });
   }

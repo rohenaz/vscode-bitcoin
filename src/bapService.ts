@@ -1,4 +1,4 @@
-import * as vscode from 'vscode';
+import vsApi from './vsShim';
 
 export interface BapIdentity {
   '@context': string;
@@ -40,7 +40,7 @@ export class BapService {
 
   constructor() {
     // Get the configured BAP indexer URL or use default
-    this.baseUrl = vscode.workspace
+    this.baseUrl = vsApi.workspace
       .getConfiguration('bitcoin')
       .get('bapIndexerUrl', 'https://api.sigmaidentity.com');
   }

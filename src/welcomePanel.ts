@@ -1,4 +1,4 @@
-import * as vscode from 'vscode';
+import vsApi, { WebviewPanel } from './vsShim';
 
 interface WebviewMessage {
   command: 'tryFeature' | 'openKeybindings' | 'openSettings';
@@ -7,11 +7,11 @@ interface WebviewMessage {
 
 export class WelcomePanel {
   public static currentPanel: WelcomePanel | undefined;
-  private readonly _panel: vscode.WebviewPanel;
-  private readonly _extensionUri: vscode.Uri;
-  private _disposables: vscode.Disposable[] = [];
+  private readonly _panel: WebviewPanel;
+  private readonly _extensionUri: vsApi.Uri;
+  private _disposables: vsApi.Disposable[] = [];
 
-  private constructor(panel: vscode.WebviewPanel, extensionUri: vscode.Uri) {
+  private constructor(panel: WebviewPanel, extensionUri: vsApi.Uri) {
     this._panel = panel;
     this._extensionUri = extensionUri;
     this._panel.onDidDispose(() => this.dispose(), null, this._disposables);
@@ -23,7 +23,7 @@ export class WelcomePanel {
     this._updateWebview();
   }
 
-  public static show(extensionUri: vscode.Uri) {
+  public static show(extensionUri: vsApi.Uri) {
     if (process.env.TEST_ENV === 'true') {
       return;
     }
@@ -34,10 +34,10 @@ export class WelcomePanel {
         return;
       }
 
-      const panel = vscode.window.createWebviewPanel(
+      const panel = vsApi.window.createWebviewPanel(
         'bitcoinWelcome',
         'Welcome to Bitcoin Tools',
-        vscode.ViewColumn.One,
+        vsApi.ViewColumn.One,
         {
           enableScripts: true,
           retainContextWhenHidden: true,
@@ -57,17 +57,17 @@ export class WelcomePanel {
     switch (message.command) {
       case 'tryFeature':
         if (message.feature) {
-          await vscode.commands.executeCommand(`bitcoin.${message.feature}`);
+          await vsApi.commands.executeCommand(`bitcoin.${message.feature}`);
         }
         break;
       case 'openKeybindings':
-        await vscode.commands.executeCommand(
+        await vsApi.commands.executeCommand(
           'workbench.action.openGlobalKeybindings',
           'bitcoin',
         );
         break;
       case 'openSettings':
-        await vscode.commands.executeCommand(
+        await vsApi.commands.executeCommand(
           'workbench.action.openSettings',
           'bitcoin',
         );

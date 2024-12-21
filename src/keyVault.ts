@@ -1,5 +1,5 @@
 import * as crypto from 'node:crypto';
-import * as vscode from 'vscode';
+import vsApi, { SecretStorage, ExtensionContext, EventEmitter, Event } from './vsShim';
 
 export type KeyType =
   | 'private'
@@ -20,16 +20,16 @@ export interface KeyEntry {
 }
 
 export class KeyVault {
-  private storage: vscode.SecretStorage;
+  private storage: SecretStorage;
   private keyListKey = 'bitcoin.keyList';
-  private onKeyListChanged: vscode.EventEmitter<void>;
+  private onKeyListChanged: EventEmitter<void>;
 
-  constructor(context: vscode.ExtensionContext) {
+  constructor(context: ExtensionContext) {
     this.storage = context.secrets;
-    this.onKeyListChanged = new vscode.EventEmitter<void>();
+    this.onKeyListChanged = new vsApi.EventEmitter<void>();
   }
 
-  get onDidChangeKeys(): vscode.Event<void> {
+  get onDidChangeKeys(): Event<void> {
     return this.onKeyListChanged.event;
   }
 

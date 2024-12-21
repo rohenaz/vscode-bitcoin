@@ -1,4 +1,4 @@
-import * as vscode from 'vscode';
+import vsApi, { OutputChannel } from './vsShim';
 import { WorkspaceManager } from './workspace';
 
 export class OutputManager {
@@ -11,7 +11,7 @@ export class OutputManager {
   private getOutputPreference(
     command: string,
   ): 'clipboard' | 'file' | 'workspace' {
-    const config = vscode.workspace.getConfiguration('bitcoin');
+    const config = vsApi.workspace.getConfiguration('bitcoin');
     const prefs = config.get('outputPreference') as Record<string, string>;
     return (prefs?.[command] || 'clipboard') as
       | 'clipboard'
@@ -29,17 +29,17 @@ export class OutputManager {
 
     switch (preference) {
       case 'clipboard': {
-        await vscode.env.clipboard.writeText(data);
-        vscode.window.showInformationMessage('Output copied to clipboard!');
+        await vsApi.env.clipboard.writeText(data);
+        vsApi.window.showInformationMessage('Output copied to clipboard!');
         break;
       }
 
       case 'file': {
-        const doc = await vscode.workspace.openTextDocument({
+        const doc = await vsApi.workspace.openTextDocument({
           language: 'text',
           content: data,
         });
-        await vscode.window.showTextDocument(doc, {
+        await vsApi.window.showTextDocument(doc, {
           preview: false,
           preserveFocus: true,
         });
@@ -49,13 +49,14 @@ export class OutputManager {
       case 'workspace': {
         try {
           const uri = await this.workspaceManager.saveFile(data, type, name);
-          vscode.window.showInformationMessage(`File saved: ${uri.fsPath}`);
-          await vscode.window.showTextDocument(uri, {
+          vsApi.window.showInformationMessage(`File saved: ${uri.fsPath}`);
+          const doc = await vsApi.workspace.openTextDocument(vsApi.Uri.file(uri.fsPath));
+          await vsApi.window.showTextDocument(doc, {
             preview: false,
             preserveFocus: true,
           });
         } catch (error) {
-          vscode.window.showErrorMessage(
+          vsApi.window.showErrorMessage(
             `Failed to save file: ${
               error instanceof Error ? error.message : 'Unknown error'
             }`,
@@ -70,16 +71,16 @@ export class OutputManager {
     try {
       const uri = await this.workspaceManager.detectAndConvertContent(data);
       if (uri) {
-        vscode.window.showInformationMessage(`File saved: ${uri.fsPath}`);
+        vsApi.window.showInformationMessage(`File saved: ${uri.fsPath}`);
         // For images and other binary content, use the system default application
-        await vscode.env.openExternal(uri);
+        await vsApi.env.openExternal(uri);
       } else {
-        vscode.window.showWarningMessage(
+        vsApi.window.showWarningMessage(
           'Could not detect content type or convert data',
         );
       }
     } catch (error) {
-      vscode.window.showErrorMessage(
+      vsApi.window.showErrorMessage(
         `Failed to convert content: ${
           error instanceof Error ? error.message : 'Unknown error'
         }`,
