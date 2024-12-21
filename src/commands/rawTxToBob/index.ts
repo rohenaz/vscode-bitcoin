@@ -1,7 +1,7 @@
 import { Transaction } from '@bsv/sdk';
 import { parse } from 'bpu-ts';
-import vsApi from '../../vsShim';
 import type { OutputManager } from '../../output';
+import vsApi from '../../vsShim';
 
 export async function handleRawTxToBobCommand(outputManager: OutputManager) {
   const rawTxHex = await vsApi.window.showInputBox({
@@ -48,7 +48,9 @@ export async function handleRawTxToBobCommand(outputManager: OutputManager) {
   } catch (error) {
     console.error('BOB parsing error:', error);
     throw new Error(
-      `Failed to parse transaction: ${error instanceof Error ? error.message : String(error)}. Please ensure the transaction hex is valid.`,
+      `Failed to parse transaction: ${
+        error instanceof Error ? error.message : String(error)
+      }. Please ensure the transaction hex is valid.`,
     );
   }
 }

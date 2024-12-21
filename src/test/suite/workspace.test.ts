@@ -8,8 +8,8 @@ import {
   unlinkSync,
 } from 'node:fs';
 import { join } from 'node:path';
-import vscode from '../setup';
 import { WorkspaceManager } from '../../workspace';
+import vscode from '../setup';
 
 const TEST_WORKSPACE_DIR = '.test-bitcoin-workspace';
 const TEST_BITCOIN_DIR = join(TEST_WORKSPACE_DIR, '.bitcoin');

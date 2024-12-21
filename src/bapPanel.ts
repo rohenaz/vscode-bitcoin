@@ -1,5 +1,5 @@
-import vsApi, { WebviewPanel, Disposable } from './vsShim';
 import type { BapProfile } from './bapService';
+import vsApi, { WebviewPanel, Disposable } from './vsShim';
 
 export class BapPanel {
   public static currentPanel: BapPanel | undefined;

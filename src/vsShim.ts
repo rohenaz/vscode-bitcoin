@@ -1,21 +1,21 @@
 import type {
-  ExtensionContext,
-  WebviewPanel,
-  Uri,
+  CancellationToken,
   Disposable,
-  EventEmitter,
-  SecretStorage,
   Event,
+  EventEmitter,
+  ExtensionContext,
   OutputChannel,
+  Progress,
+  ProgressLocation,
+  SecretStorage,
+  TextDocument,
+  TextDocumentShowOptions,
+  TextEditor,
+  Uri,
+  ViewColumn,
+  WebviewPanel,
   WebviewView,
   WebviewViewProvider,
-  TextDocument,
-  TextEditor,
-  ViewColumn,
-  TextDocumentShowOptions,
-  ProgressLocation,
-  Progress,
-  CancellationToken,
 } from 'vscode';
 
 let vsApi: typeof import('vscode');
@@ -58,4 +58,4 @@ export function isUri(obj: unknown): obj is Uri {
   );
 }
 
-export default vsApi; 
+export default vsApi;

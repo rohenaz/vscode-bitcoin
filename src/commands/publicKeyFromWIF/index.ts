@@ -1,5 +1,5 @@
-import vscode from 'vscode';
 import { PrivateKey } from '@bsv/sdk';
+import vscode from 'vscode';
 import type { OutputManager } from '../../output';
 
 export async function publicKeyFromWIF(output: OutputManager) {
@@ -27,8 +27,10 @@ export async function publicKeyFromWIF(output: OutputManager) {
     };
   } catch (error) {
     vscode.window.showErrorMessage(
-      `Error deriving public key from WIF: ${error instanceof Error ? error.message : String(error)}`,
+      `Error deriving public key from WIF: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
     );
     throw error;
   }
-} 
+}

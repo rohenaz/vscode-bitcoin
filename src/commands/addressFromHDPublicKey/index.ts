@@ -1,8 +1,10 @@
-import vsApi from '../../vsShim';
-import type { OutputManager } from '../../output';
 import { HD } from '@bsv/sdk';
+import type { OutputManager } from '../../output';
+import vsApi from '../../vsShim';
 
-export async function handleAddressFromHDPublicKeyCommand(outputManager: OutputManager) {
+export async function handleAddressFromHDPublicKeyCommand(
+  outputManager: OutputManager,
+) {
   const xPub = await vsApi.window.showInputBox({
     value: '',
     placeHolder: 'Ex: xpub...',
@@ -32,4 +34,4 @@ export async function handleAddressFromHDPublicKeyCommand(outputManager: OutputM
     type: 'addresses',
     name: `from_hdpubkey_${path.replace(/\//g, '_')}`,
   };
-} 
+}

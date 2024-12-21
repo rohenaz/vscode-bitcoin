@@ -1,6 +1,6 @@
-import vsApi from '../../vsShim';
 import { BapPanel } from '../../bapPanel';
 import { BapService } from '../../bapService';
+import vsApi from '../../vsShim';
 
 export async function lookupBapProfile(): Promise<void> {
   const bapService = new BapService();

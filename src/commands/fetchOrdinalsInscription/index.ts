@@ -1,6 +1,6 @@
-import vsApi from '../../vsShim';
-import type { OutputManager } from '../../output';
 import fetch from 'node-fetch';
+import type { OutputManager } from '../../output';
+import vsApi from '../../vsShim';
 const API_HOST = 'https://ordinals.gorillapool.io/api';
 
 interface Inscription {
@@ -35,7 +35,9 @@ async function fetchInscriptionData(outpoint: string): Promise<Inscription> {
   return inscriptionRes.json();
 }
 
-async function fetchInscriptionContent(inscription: Inscription): Promise<string | undefined> {
+async function fetchInscriptionContent(
+  inscription: Inscription,
+): Promise<string | undefined> {
   if (!inscription.data?.insc) {
     return undefined;
   }
@@ -46,16 +48,18 @@ async function fetchInscriptionContent(inscription: Inscription): Promise<string
       .json()
       .catch(() => ({ message: contentRes.statusText }));
     throw new Error(
-      `Failed to fetch inscription content from ${API_HOST}/content/${inscription.outpoint}\nError: ${
-        error.message || contentRes.statusText
-      }`,
+      `Failed to fetch inscription content from ${API_HOST}/content/${
+        inscription.outpoint
+      }\nError: ${error.message || contentRes.statusText}`,
     );
   }
 
   return contentRes.text();
 }
 
-export async function handleFetchOrdinalsInscriptionCommand(outputManager: OutputManager) {
+export async function handleFetchOrdinalsInscriptionCommand(
+  outputManager: OutputManager,
+) {
   const outpoint = await vsApi.window.showInputBox({
     value: '',
     placeHolder: 'Ex: txid_vout',

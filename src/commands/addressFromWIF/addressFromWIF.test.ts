@@ -1,8 +1,8 @@
-import { describe, expect, test, mock, afterAll } from 'bun:test';
-import vscode from '@test/setup';
-import { addressFromWIF } from './index';
-import type { OutputManager } from '../../output';
+import { afterAll, describe, expect, mock, test } from 'bun:test';
 import { PrivateKey } from '@bsv/sdk';
+import vscode from '@test/setup';
+import type { OutputManager } from '../../output';
+import { addressFromWIF } from './index';
 
 interface VSCodeOptions {
   placeHolder?: string;
@@ -31,7 +31,7 @@ describe('addressFromWIF', () => {
     vscode.window.showInputBox = async () => privKey.toWif();
 
     const result = await addressFromWIF(mockOutput);
-    
+
     // Check return value format
     expect(result).toBeDefined();
     expect(result).toEqual({
@@ -46,7 +46,7 @@ describe('addressFromWIF', () => {
 
   test('returns undefined when input is cancelled', async () => {
     // Mock cancelled input
-    vscode.window.showInputBox = async () => "";
+    vscode.window.showInputBox = async () => '';
 
     const result = await addressFromWIF(mockOutput);
     expect(result).toBeUndefined();
@@ -56,4 +56,4 @@ describe('addressFromWIF', () => {
     // Restore original function
     vscode.window.showInputBox = originalShowInputBox;
   });
-}); 
+});

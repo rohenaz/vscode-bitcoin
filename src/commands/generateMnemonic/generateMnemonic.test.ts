@@ -16,7 +16,9 @@ const mockKeyVault = {
 
 // Mock window.showErrorMessage
 const originalShowErrorMessage = vscode.window.showErrorMessage;
-vscode.window.showErrorMessage = mock(async (message: string, ...items: string[]) => items[0] || 'Error');
+vscode.window.showErrorMessage = mock(
+  async (message: string, ...items: string[]) => items[0] || 'Error',
+);
 
 describe('generateMnemonic', () => {
   test('generates valid mnemonic', async () => {

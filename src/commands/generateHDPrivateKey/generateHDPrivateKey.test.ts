@@ -16,7 +16,9 @@ const mockKeyVault = {
 
 // Mock window.showErrorMessage
 const originalShowErrorMessage = vscode.window.showErrorMessage;
-vscode.window.showErrorMessage = mock(async (message: string, ...items: string[]) => items[0] || 'Error');
+vscode.window.showErrorMessage = mock(
+  async (message: string, ...items: string[]) => items[0] || 'Error',
+);
 
 describe('generateHDPrivateKey', () => {
   test('generates valid HD private key', async () => {
@@ -58,4 +60,4 @@ describe('generateHDPrivateKey', () => {
       vscode.window.showErrorMessage = originalShowErrorMessage;
     }
   });
-}); 
+});

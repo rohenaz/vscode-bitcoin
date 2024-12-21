@@ -1,8 +1,8 @@
-import vscode from '@test/setup';
-import { describe, expect, test, mock, afterAll } from 'bun:test';
-import { publicKeyFromPrivateKey } from './index';
-import type { OutputManager } from '../../output';
+import { afterAll, describe, expect, mock, test } from 'bun:test';
 import { PrivateKey } from '@bsv/sdk';
+import vscode from '@test/setup';
+import type { OutputManager } from '../../output';
+import { publicKeyFromPrivateKey } from './index';
 
 interface VSCodeOptions {
   placeHolder?: string;
@@ -31,7 +31,7 @@ describe('publicKeyFromPrivateKey', () => {
     vscode.window.showInputBox = async () => privKey.toString();
 
     const result = await publicKeyFromPrivateKey(mockOutput);
-    
+
     // Check return value format
     expect(result).toBeDefined();
     expect(result).toEqual({
@@ -43,7 +43,7 @@ describe('publicKeyFromPrivateKey', () => {
 
   test('returns undefined when input is cancelled', async () => {
     // Mock cancelled input
-    vscode.window.showInputBox = async () => "";
+    vscode.window.showInputBox = async () => '';
 
     const result = await publicKeyFromPrivateKey(mockOutput);
     expect(result).toBeUndefined();
@@ -53,4 +53,4 @@ describe('publicKeyFromPrivateKey', () => {
     // Restore original function
     vscode.window.showInputBox = originalShowInputBox;
   });
-}); 
+});

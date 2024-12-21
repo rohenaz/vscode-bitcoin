@@ -1,8 +1,8 @@
-import { describe, expect, test, mock, afterAll } from 'bun:test';
-import vscode from '@test/setup';
-import { addressFromPublicKey } from './index';
-import type { OutputManager } from '../../output';
+import { afterAll, describe, expect, mock, test } from 'bun:test';
 import { PrivateKey, PublicKey } from '@bsv/sdk';
+import vscode from '@test/setup';
+import type { OutputManager } from '../../output';
+import { addressFromPublicKey } from './index';
 
 interface VSCodeOptions {
   placeHolder?: string;
@@ -32,7 +32,7 @@ describe('addressFromPublicKey', () => {
     vscode.window.showInputBox = async () => pubKey.toString();
 
     const result = await addressFromPublicKey(mockOutput);
-    
+
     // Check return value format
     expect(result).toBeDefined();
     expect(result).toEqual({
@@ -47,7 +47,7 @@ describe('addressFromPublicKey', () => {
 
   test('returns empty when input is cancelled', async () => {
     // Mock cancelled input
-    vscode.window.showInputBox = async () => "";
+    vscode.window.showInputBox = async () => '';
 
     const result = await addressFromPublicKey(mockOutput);
     expect(result).toBeUndefined();
@@ -57,11 +57,13 @@ describe('addressFromPublicKey', () => {
     // Mock invalid input
     vscode.window.showInputBox = async () => 'invalid';
 
-    await expect(addressFromPublicKey(mockOutput)).rejects.toThrow('Unknown point format');
+    await expect(addressFromPublicKey(mockOutput)).rejects.toThrow(
+      'Unknown point format',
+    );
   });
 
   afterAll(() => {
     // Restore original function
     vscode.window.showInputBox = originalShowInputBox;
   });
-}); 
+});

@@ -1,9 +1,12 @@
-import vscode from 'vscode';
 import { HD } from '@bsv/sdk';
-import type { OutputManager } from '../../output';
+import vscode from 'vscode';
 import type { KeyVault } from '../../keyVault';
+import type { OutputManager } from '../../output';
 
-export async function generateHDPublicKey(output: OutputManager, keyVault: KeyVault) {
+export async function generateHDPublicKey(
+  output: OutputManager,
+  keyVault: KeyVault,
+) {
   try {
     const hdPrivKey = HD.fromRandom();
     const hdPubKey = hdPrivKey.toPublic();
@@ -23,8 +26,10 @@ export async function generateHDPublicKey(output: OutputManager, keyVault: KeyVa
     };
   } catch (error) {
     vscode.window.showErrorMessage(
-      `Error generating HD public key: ${error instanceof Error ? error.message : String(error)}`,
+      `Error generating HD public key: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
     );
     throw error;
   }
-} 
+}

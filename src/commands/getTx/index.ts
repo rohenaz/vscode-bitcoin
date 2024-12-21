@@ -1,7 +1,9 @@
-import vsApi from '../../vsShim';
 import type { OutputManager } from '../../output';
+import vsApi from '../../vsShim';
 
-export async function handleGetTxCommand(outputManager: OutputManager): Promise<{ data: string; type: string; name?: string } | undefined> {
+export async function handleGetTxCommand(
+  outputManager: OutputManager,
+): Promise<{ data: string; type: string; name?: string } | undefined> {
   const txid = await vsApi.window.showInputBox({
     value: '',
     placeHolder: 'Ex: 4d03ff9062ac2e6...',
@@ -56,6 +58,6 @@ export async function handleGetTxCommand(outputManager: OutputManager): Promise<
   return {
     data: `Transaction ${txid} in ${format.value} format`,
     type: 'transactions',
-    name: txid
+    name: txid,
   };
 }

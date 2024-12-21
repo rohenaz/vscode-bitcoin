@@ -1,5 +1,5 @@
-import vscode from 'vscode';
 import { HD, Mnemonic } from '@bsv/sdk';
+import vscode from 'vscode';
 import type { OutputManager } from '../../output';
 
 export async function extendedPrivateKeyFromMnemonic(output: OutputManager) {
@@ -24,4 +24,4 @@ export async function extendedPrivateKeyFromMnemonic(output: OutputManager) {
     type: 'keys' as const,
     name: 'hdprivkey_from_mnemonic',
   };
-} 
+}

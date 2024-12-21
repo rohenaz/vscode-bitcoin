@@ -1,8 +1,8 @@
-import { describe, expect, test, mock, afterEach } from 'bun:test';
-import vscode from '../../test/setup';
-import type { OutputManager } from '../../output';
-import { handleAddressFromHDPrivateKeyCommand } from '.';
+import { afterEach, describe, expect, mock, test } from 'bun:test';
 import { HD } from '@bsv/sdk';
+import { handleAddressFromHDPrivateKeyCommand } from '.';
+import type { OutputManager } from '../../output';
+import vscode from '../../test/setup';
 
 const mockOutput = {
   handleOutput: mock(() => Promise.resolve()),
@@ -18,9 +18,9 @@ describe('addressFromHDPrivateKey', () => {
   test('should return undefined when xpriv input is cancelled', async () => {
     vscode.window = {
       ...originalWindow,
-      showInputBox: async () => undefined
+      showInputBox: async () => undefined,
     };
-    
+
     const result = await handleAddressFromHDPrivateKeyCommand(mockOutput);
     expect(result).toBeUndefined();
   });
@@ -32,9 +32,9 @@ describe('addressFromHDPrivateKey', () => {
       showInputBox: async () => {
         inputCount++;
         return inputCount === 1 ? 'xprv...' : undefined;
-      }
+      },
     };
-    
+
     const result = await handleAddressFromHDPrivateKeyCommand(mockOutput);
     expect(result).toBeUndefined();
   });
@@ -44,16 +44,20 @@ describe('addressFromHDPrivateKey', () => {
     let inputCount = 0;
     vscode.window = {
       ...originalWindow,
-      showInputBox: async (options?: { prompt?: string; value?: string; validateInput?: (text: string) => string | null }) => {
+      showInputBox: async (options?: {
+        prompt?: string;
+        value?: string;
+        validateInput?: (text: string) => string | null;
+      }) => {
         inputCount++;
         if (inputCount === 1 && options?.validateInput) {
           validationMessage = options.validateInput('invalid') || '';
           return undefined;
         }
         return undefined;
-      }
+      },
     };
-    
+
     await handleAddressFromHDPrivateKeyCommand(mockOutput);
     expect(validationMessage).toBe('Invalid extended private key!');
   });
@@ -64,15 +68,15 @@ describe('addressFromHDPrivateKey', () => {
     const xpriv = hdPrivKey.toString();
     const path = 'm/0/0';
     let inputCount = 0;
-    
+
     vscode.window = {
       ...originalWindow,
       showInputBox: async () => {
         inputCount++;
         return inputCount === 1 ? xpriv : path;
-      }
+      },
     };
-    
+
     const result = await handleAddressFromHDPrivateKeyCommand(mockOutput);
     expect(result).toBeDefined();
     expect(result?.type).toBe('addresses');
@@ -81,4 +85,4 @@ describe('addressFromHDPrivateKey', () => {
     expect(typeof result?.data).toBe('string');
     expect(result?.data.startsWith('1')).toBe(true);
   });
-}); 
+});

@@ -12,20 +12,53 @@
   - Support for base64-encoded data
   - Automatic detection of common formats (JPEG, PNG, JSON, XML)
   - Interactive content type selection when detection fails
+  - Improved handling of data URLs with MIME types
+  - Better support for hex and binary array inputs
 - Configurable output preferences:
   - Clipboard output (default)
   - File dialog save
   - Workspace save with organization
+- Transaction decoding and format conversion
+- Address generation and validation
+- Script operations and ASM conversion
+- UTXO fetching and management
+- BAP profile lookup
+- Data conversion utilities
+- Ordinals inscription fetching
+- File workspace management
+- Command organization structure
+- Comprehensive test suite
 
 ### Changed
 - Simplified output configuration with single preference setting
 - Improved file naming strategy to avoid sensitive information
 - Enhanced content type detection with user prompts
+- Improved decodeFile command:
+  - More efficient handling of base64, hex, and binary array inputs
+  - Better MIME type handling from data URLs
+  - Smarter format detection and conversion
+  - Cleaner code using spread operator for optional parameters
+- Simplified code by using existing utility functions
+- Enhanced error messages for better user feedback
+- Standardized command structure and testing patterns
 
 ### Fixed
 - Command registration and visibility issues
 - File naming sanitization
 - Content type detection reliability
+- Fixed decodeFile command:
+  - Correct handling of MIME types from data URLs
+  - Proper optional parameter handling in API calls
+  - Improved error handling in data format detection
+  - Fixed test assertions for optional parameters
+- Fixed optional parameter handling in API calls
+- Improved error handling in data format detection
+
+### Security
+- Added input validation for all commands
+- Improved type safety across the codebase
+- Added checks for empty or invalid inputs
+- Standardized error handling patterns
 
 ## [0.1.0] - 2024-01-26
 

@@ -1,6 +1,6 @@
 import { describe, expect, mock, test } from 'bun:test';
-import vscode from '@test/setup';
 import { PrivateKey } from '@bsv/sdk';
+import vscode from '@test/setup';
 import type { KeyVault } from '../../keyVault';
 import type { OutputManager } from '../../output';
 import { generateWIF } from './index';
@@ -16,12 +16,11 @@ const mockKeyVault = {
 
 // Mock window.showErrorMessage
 const originalShowErrorMessage = vscode.window.showErrorMessage;
-vscode.window.showErrorMessage = mock(async <T extends string>(
-  message: string,
-  ...items: T[]
-) => {
-  return items[0] || ('Error' as T);
-});
+vscode.window.showErrorMessage = mock(
+  async <T extends string>(message: string, ...items: T[]) => {
+    return items[0] || ('Error' as T);
+  },
+);
 
 describe('generateWIF', () => {
   test('generates valid WIF', async () => {

@@ -1,7 +1,7 @@
 import * as crypto from 'node:crypto';
 import { PrivateKey } from '@bsv/sdk';
-import vsApi from './vsShim';
 import type { KeyVault } from './keyVault';
+import vsApi from './vsShim';
 
 export class EncryptionService {
   constructor(private keyVault: KeyVault) {}

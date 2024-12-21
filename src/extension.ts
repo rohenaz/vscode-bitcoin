@@ -12,39 +12,41 @@ import {
 import { BMAP, type BobTx, TransformTx, allProtocols } from 'bmapjs';
 import { parse } from 'bpu-ts';
 import fetch from 'node-fetch';
-import vsApi, { 
-  ExtensionContext,
-  WebviewPanel,
-  WebviewView,
-  WebviewViewProvider
-} from './vsShim';
 import { BapPanel } from './bapPanel';
 import { BapService } from './bapService';
+import { handleAddressFromHDPrivateKeyCommand } from './commands/addressFromHDPrivateKey';
+import { handleAddressFromHDPublicKeyCommand } from './commands/addressFromHDPublicKey';
+import { handleAddressFromPrivateKeyCommand } from './commands/addressFromPrivateKey';
+import { addressFromPublicKey } from './commands/addressFromPublicKey';
+import { addressFromWIF } from './commands/addressFromWIF';
+import { asmFromScript } from './commands/asmFromScript';
+import { handleConvertDataCommand } from './commands/convertData';
+import { handleDecodeRawTxCommand } from './commands/decodeRawTx';
+import { extendedPrivateKeyFromMnemonic } from './commands/extendedPrivateKeyFromMnemonic';
 import { generateMnemonic } from './commands/generateMnemonic';
 import { generatePrivateKey } from './commands/generatePrivateKey';
 import { generatePublicKey } from './commands/generatePublicKey';
 import { generateWIF } from './commands/generateWIF';
+import { handleGetTxCommand } from './commands/getTx';
+import { handleGetUtxosForAddressCommand } from './commands/getUtxosForAddress';
+import { handleLookupBapProfileCommand } from './commands/lookupBapProfile';
+import { publicKeyFromPrivateKey } from './commands/publicKeyFromPrivateKey';
+import { publicKeyFromWIF } from './commands/publicKeyFromWIF';
+import { handleRawTxToBobCommand } from './commands/rawTxToBob';
+import { handleXPubFromXPrivCommand } from './commands/xPubFromxPriv';
 import { EncryptionService } from './encryption';
 import { KeyPanel } from './keyPanel';
 import { KeyVault } from './keyVault';
 import { OutputManager } from './output';
+import vsApi, {
+  ExtensionContext,
+  WebviewPanel,
+  WebviewView,
+  WebviewViewProvider,
+} from './vsShim';
 import { WelcomePanel } from './welcomePanel';
 import { WorkspaceManager } from './workspace';
-import { asmFromScript } from './commands/asmFromScript';
-import { extendedPrivateKeyFromMnemonic } from './commands/extendedPrivateKeyFromMnemonic';
-import { publicKeyFromPrivateKey } from './commands/publicKeyFromPrivateKey';
-import { addressFromWIF } from './commands/addressFromWIF';
-import { addressFromPublicKey } from './commands/addressFromPublicKey';
-import { publicKeyFromWIF } from './commands/publicKeyFromWIF';
-import { handleConvertDataCommand } from './commands/convertData';
-import { handleGetTxCommand } from './commands/getTx';
-import { handleDecodeRawTxCommand } from './commands/decodeRawTx';
-import { handleRawTxToBobCommand } from './commands/rawTxToBob';
-import { handleGetUtxosForAddressCommand } from './commands/getUtxosForAddress';
-import { handleLookupBapProfileCommand } from './commands/lookupBapProfile';
-import { handleAddressFromHDPublicKeyCommand } from './commands/addressFromHDPublicKey';
-import { handleAddressFromHDPrivateKeyCommand } from './commands/addressFromHDPrivateKey';
-import { handleAddressFromPrivateKeyCommand } from './commands/addressFromPrivateKey';
+import { handleDecodeFileCommand } from './commands/decodeFile';
 
 const { fromBase58Check, toBase64, toArray } = Utils;
 
@@ -249,7 +251,10 @@ export async function activate(context: ExtensionContext) {
   console.log('Bitcoin extension activating...');
 
   // Show welcome screen on first activation, but skip in tests
-  if (!context.globalState.get('bitcoin.hasShownWelcome') && process.env.TEST_ENV !== 'true') {
+  if (
+    !context.globalState.get('bitcoin.hasShownWelcome') &&
+    process.env.TEST_ENV !== 'true'
+  ) {
     WelcomePanel.show(context.extensionUri);
     context.globalState.update('bitcoin.hasShownWelcome', true);
   }
@@ -275,50 +280,20 @@ export async function activate(context: ExtensionContext) {
   });
   context.subscriptions.push(testCommand);
 
-  // Register convertData command
-  registerCommand(context, outputManager, 'bitcoin.convertData', handleConvertDataCommand);
-
   // Register detect and convert command
-  context.subscriptions.push(
-    vsApi.commands.registerCommand('bitcoin.detectAndConvert', async () => {
-      try {
-        const input = await vsApi.window.showInputBox({
-          prompt: 'Enter base64 encoded data to convert',
-          placeHolder: 'e.g. /9j/4AAQSkZJRg...',
-        });
+  registerCommand(
+    context,
+    outputManager,
+    'bitcoin.decodeFile',
+    async () => handleDecodeFileCommand(outputManager),
+  );
 
-        if (!input) {
-          return;
-        }
-
-        const uri = await workspaceManager.detectAndConvertContent(input);
-        if (!uri) {
-          vsApi.window.showErrorMessage(
-            'Failed to convert content. Please check the input data.',
-          );
-          return;
-        }
-
-        vsApi.window.showInformationMessage(
-          `Content saved to ${vsApi.workspace.asRelativePath(uri)}`,
-        );
-
-        // Open the file if it's an image or text
-        const contentType = path.extname(uri.fsPath).toLowerCase();
-        if (['.jpeg', '.jpg', '.png', '.gif', '.bmp'].includes(contentType)) {
-          vsApi.commands.executeCommand('vscode.open', uri);
-        } else if (['.json', '.xml', '.txt'].includes(contentType)) {
-          const doc = await vsApi.workspace.openTextDocument(uri);
-          await vsApi.window.showTextDocument(doc);
-        }
-      } catch (error) {
-        vsApi.window.showErrorMessage(
-          `Error converting content: ${
-            error instanceof Error ? error.message : String(error)
-          }`,
-        );
-      }
-    }),
+  // Register convertData command
+  registerCommand(
+    context,
+    outputManager,
+    'bitcoin.convertData',
+    handleConvertDataCommand,
   );
 
   // Register key generation commands
@@ -370,25 +345,7 @@ export async function activate(context: ExtensionContext) {
   );
 
   registerCommand(context, outputManager, 'bitcoin.xPubFromxPriv', async () => {
-    const xPriv = await vsApi.window.showInputBox({
-      value: '',
-      placeHolder: 'Ex: xprv9s21ZrQH143K...',
-      validateInput: (text) => {
-        return text.length !== 111 ? 'Invalid private key!' : null;
-      },
-    });
-
-    if (!xPriv) {
-      return undefined;
-    }
-
-    const hdPrivKey = HD.fromString(xPriv);
-    const hdPubKey = hdPrivKey.toPublic();
-    return {
-      data: hdPubKey.toString(),
-      type: 'keys',
-      name: 'derived_hdpubkey',
-    };
+    return handleXPubFromXPrivCommand(outputManager);
   });
 
   // Register address generation commands
@@ -428,9 +385,14 @@ export async function activate(context: ExtensionContext) {
     },
   );
 
-  registerCommand(context, outputManager, 'bitcoin.addressFromWIF', async () => {
-    return addressFromWIF(outputManager);
-  });
+  registerCommand(
+    context,
+    outputManager,
+    'bitcoin.addressFromWIF',
+    async () => {
+      return addressFromWIF(outputManager);
+    },
+  );
 
   // Register transaction commands
   registerCommand(context, outputManager, 'bitcoin.getTx', async () => {
@@ -703,9 +665,14 @@ export async function activate(context: ExtensionContext) {
   );
 
   // Register BAP profile lookup command
-  registerCommand(context, outputManager, 'bitcoin.lookupBapProfile', async () => {
-    return handleLookupBapProfileCommand(outputManager);
-  });
+  registerCommand(
+    context,
+    outputManager,
+    'bitcoin.lookupBapProfile',
+    async () => {
+      return handleLookupBapProfileCommand(outputManager);
+    },
+  );
 
   // Register fetch ordinals inscription command
   registerCommand(

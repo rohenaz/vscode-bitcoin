@@ -1,5 +1,5 @@
-import vscode from 'vscode';
 import { PublicKey } from '@bsv/sdk';
+import vscode from 'vscode';
 import type { OutputManager } from '../../output';
 
 export async function addressFromPublicKey(output: OutputManager) {
@@ -23,4 +23,4 @@ export async function addressFromPublicKey(output: OutputManager) {
     type: 'addresses' as const,
     name: 'from_pubkey',
   };
-} 
+}

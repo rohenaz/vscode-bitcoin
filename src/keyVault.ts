@@ -1,5 +1,10 @@
 import * as crypto from 'node:crypto';
-import vsApi, { SecretStorage, ExtensionContext, EventEmitter, Event } from './vsShim';
+import vsApi, {
+  SecretStorage,
+  ExtensionContext,
+  EventEmitter,
+  Event,
+} from './vsShim';
 
 export type KeyType =
   | 'private'

@@ -1,6 +1,6 @@
 import { Transaction } from '@bsv/sdk';
-import vsApi from '../../vsShim';
 import type { OutputManager } from '../../output';
+import vsApi from '../../vsShim';
 
 export async function handleDecodeRawTxCommand(outputManager: OutputManager) {
   const rawTxHex = await vsApi.window.showInputBox({
@@ -44,7 +44,9 @@ export async function handleDecodeRawTxCommand(outputManager: OutputManager) {
   } catch (error) {
     console.error('Transaction decode error:', error);
     throw new Error(
-      `Failed to decode transaction: ${error instanceof Error ? error.message : String(error)}. Please ensure the transaction hex is valid.`,
+      `Failed to decode transaction: ${
+        error instanceof Error ? error.message : String(error)
+      }. Please ensure the transaction hex is valid.`,
     );
   }
 }

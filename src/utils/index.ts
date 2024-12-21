@@ -74,7 +74,11 @@ export function convertData(
   fromFormat: DataFormat,
   toFormat: DataFormat,
 ): string {
-  console.log('Converting data:', { input: input.slice(0, 100), fromFormat, toFormat });
+  console.log('Converting data:', {
+    input: input.slice(0, 100),
+    fromFormat,
+    toFormat,
+  });
   let bytes: number[];
 
   // Convert input to bytes

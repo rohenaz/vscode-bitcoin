@@ -1,3 +1,4 @@
+import { createRequire } from 'module';
 import {
   existsSync,
   mkdirSync,
@@ -13,7 +14,6 @@ import type {
   Memento,
   Uri,
 } from 'vscode';
-import { createRequire } from 'module';
 
 // Set test environment flag before any imports
 process.env.TEST_ENV = 'true';
@@ -40,7 +40,6 @@ if (typeof globalThis.require === 'function') {
   globalThis.require = patchedRequire;
 }
 
-import { activate } from '../../extension';
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import {
   HD,
@@ -54,6 +53,7 @@ import {
 import { TransformTx, allProtocols } from 'bmapjs';
 import type { BobTx } from 'bmapjs';
 import { parse } from 'bpu-ts';
+import { activate } from '../../extension';
 
 const TEST_WORKSPACE_DIR = '.test-bitcoin-workspace';
 
@@ -149,7 +149,7 @@ describe('Bitcoin Extension Tests', () => {
   test('Extension activation', async () => {
     // Ensure test environment flag is set
     process.env.TEST_ENV = 'true';
-    
+
     await activate(mockContext as ExtensionContext);
     expect(mockContext.subscriptions).toHaveLength(30); // One for each command
   });
@@ -206,7 +206,9 @@ describe('Bitcoin Extension Tests', () => {
     const addressFromWif = Utils.toBase58Check(
       Utils.toArray(
         Script.fromASM(
-          `OP_DUP OP_HASH160 ${fromWif.toPublicKey().toHash('hex')} OP_EQUALVERIFY OP_CHECKSIG`,
+          `OP_DUP OP_HASH160 ${fromWif
+            .toPublicKey()
+            .toHash('hex')} OP_EQUALVERIFY OP_CHECKSIG`,
         ).toHex(),
       ),
     );
@@ -220,7 +222,9 @@ describe('Bitcoin Extension Tests', () => {
     const addressFromHD = Utils.toBase58Check(
       Utils.toArray(
         Script.fromASM(
-          `OP_DUP OP_HASH160 ${childPubKey.toHash('hex')} OP_EQUALVERIFY OP_CHECKSIG`,
+          `OP_DUP OP_HASH160 ${childPubKey.toHash(
+            'hex',
+          )} OP_EQUALVERIFY OP_CHECKSIG`,
         ).toHex(),
       ),
     );
@@ -295,7 +299,7 @@ describe('Bitcoin Extension Tests', () => {
       'bitcoin.encrypt',
       'bitcoin.decrypt',
       'bitcoin.lookupBapProfile',
-      'bitcoin.fetchOrdinalsInscription'
+      'bitcoin.fetchOrdinalsInscription',
     ];
 
     for (const cmd of expectedCommands) {
@@ -405,5 +409,4 @@ describe('Bitcoin Extension Tests', () => {
     expect(bmapResult).toBeDefined();
     expect(bmapResult.tx).toBeDefined();
   });
-
 });

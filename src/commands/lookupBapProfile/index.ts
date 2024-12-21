@@ -1,9 +1,11 @@
-import vsApi from '../../vsShim';
-import { BapService } from '../../bapService';
 import { BapPanel } from '../../bapPanel';
+import { BapService } from '../../bapService';
 import type { OutputManager } from '../../output';
+import vsApi from '../../vsShim';
 
-export async function handleLookupBapProfileCommand(outputManager: OutputManager) {
+export async function handleLookupBapProfileCommand(
+  outputManager: OutputManager,
+) {
   const bapService = new BapService();
 
   // Prompt for BAP ID

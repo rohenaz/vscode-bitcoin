@@ -1,7 +1,7 @@
-import { describe, expect, test, mock, afterEach } from 'bun:test';
-import vscode from '../../test/setup';
+import { afterEach, describe, expect, mock, test } from 'bun:test';
 import { handleRawTxToBobCommand } from '.';
 import type { OutputManager } from '../../output';
+import vscode from '../../test/setup';
 
 const mockOutput = {
   handleOutput: mock(() => Promise.resolve()),
@@ -17,9 +17,9 @@ describe('rawTxToBob', () => {
   test('returns undefined when input is cancelled', async () => {
     vscode.window = {
       ...originalWindow,
-      showInputBox: async () => undefined
+      showInputBox: async () => undefined,
     };
-    
+
     const result = await handleRawTxToBobCommand(mockOutput);
     expect(result).toBeUndefined();
   });
@@ -28,14 +28,18 @@ describe('rawTxToBob', () => {
     let validationMessage = '';
     vscode.window = {
       ...originalWindow,
-      showInputBox: async (options?: { prompt?: string; value?: string; validateInput?: (text: string) => string | null }) => {
+      showInputBox: async (options?: {
+        prompt?: string;
+        value?: string;
+        validateInput?: (text: string) => string | null;
+      }) => {
         if (options?.validateInput) {
           validationMessage = options.validateInput('not-hex') || '';
         }
         return undefined;
-      }
+      },
     };
-    
+
     await handleRawTxToBobCommand(mockOutput);
     expect(validationMessage).toBe('Invalid hex format');
   });
@@ -44,14 +48,18 @@ describe('rawTxToBob', () => {
     let validationMessage = '';
     vscode.window = {
       ...originalWindow,
-      showInputBox: async (options?: { prompt?: string; value?: string; validateInput?: (text: string) => string | null }) => {
+      showInputBox: async (options?: {
+        prompt?: string;
+        value?: string;
+        validateInput?: (text: string) => string | null;
+      }) => {
         if (options?.validateInput) {
           validationMessage = options.validateInput('') || '';
         }
         return undefined;
-      }
+      },
     };
-    
+
     await handleRawTxToBobCommand(mockOutput);
     expect(validationMessage).toBe('Transaction hex cannot be empty');
   });
@@ -60,14 +68,18 @@ describe('rawTxToBob', () => {
     let validationMessage = '';
     vscode.window = {
       ...originalWindow,
-      showInputBox: async (options?: { prompt?: string; value?: string; validateInput?: (text: string) => string | null }) => {
+      showInputBox: async (options?: {
+        prompt?: string;
+        value?: string;
+        validateInput?: (text: string) => string | null;
+      }) => {
         if (options?.validateInput) {
           validationMessage = options.validateInput('1234') || '';
         }
         return undefined;
-      }
+      },
     };
-    
+
     await handleRawTxToBobCommand(mockOutput);
     expect(validationMessage).toBe('Transaction hex too short');
   });
@@ -75,12 +87,12 @@ describe('rawTxToBob', () => {
   test('returns tx hash for non-BOB transaction', async () => {
     // Valid raw transaction hex (minimal tx with no inputs/outputs)
     const rawTxHex = '01000000000000000000';
-    
+
     vscode.window = {
       ...originalWindow,
-      showInputBox: async () => rawTxHex
+      showInputBox: async () => rawTxHex,
     };
-    
+
     const result = await handleRawTxToBobCommand(mockOutput);
     expect(result).toBeDefined();
     expect(result?.type).toBe('transactions');
@@ -92,12 +104,14 @@ describe('rawTxToBob', () => {
   test('handles invalid transaction hex', async () => {
     // Valid hex but invalid transaction format
     const rawTxHex = '0123456789abcdef';
-    
+
     vscode.window = {
       ...originalWindow,
-      showInputBox: async () => rawTxHex
+      showInputBox: async () => rawTxHex,
     };
-    
-    await expect(handleRawTxToBobCommand(mockOutput)).rejects.toThrow('Failed to parse transaction');
+
+    await expect(handleRawTxToBobCommand(mockOutput)).rejects.toThrow(
+      'Failed to parse transaction',
+    );
   });
 });

@@ -1,5 +1,5 @@
-import vsApi from '../../vsShim';
 import type { OutputManager } from '../../output';
+import vsApi from '../../vsShim';
 
 const API_HOST = 'https://ordinals.gorillapool.io/api';
 
@@ -122,8 +122,7 @@ export async function fetchOrdinalsInscription(
     }
   } catch (error) {
     console.error('Inscription fetch error:', error);
-    const errorMessage =
-      error instanceof Error ? error.message : String(error);
+    const errorMessage = error instanceof Error ? error.message : String(error);
     throw new Error(
       `Failed to fetch inscription from ${API_HOST}/txos/${outpoint}\nError: ${errorMessage}`,
     );

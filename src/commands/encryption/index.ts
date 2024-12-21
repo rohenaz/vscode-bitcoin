@@ -1,5 +1,5 @@
-import vsApi from '../../vsShim';
 import type { EncryptionService } from '../../encryption';
+import vsApi from '../../vsShim';
 import type { WorkspaceManager } from '../../workspace';
 
 export async function encrypt(
@@ -35,10 +35,14 @@ export async function encrypt(
     const fileName = editor.document.uri.fsPath.split('/').pop() || 'unknown';
 
     // Encrypt the data
-    const { encryptedData, privateKey } = await encryptionService.encrypt(text, key, {
-      fileName,
-      command: 'bitcoin.encrypt',
-    });
+    const { encryptedData, privateKey } = await encryptionService.encrypt(
+      text,
+      key,
+      {
+        fileName,
+        command: 'bitcoin.encrypt',
+      },
+    );
 
     // Save the encrypted data
     const uri = await workspaceManager.saveFile(
@@ -56,11 +60,15 @@ export async function encrypt(
     await vsApi.window.showInformationMessage(wif, { modal: true });
 
     // Open the encrypted file
-    const doc = await vsApi.workspace.openTextDocument(vsApi.Uri.file(uri.fsPath));
+    const doc = await vsApi.workspace.openTextDocument(
+      vsApi.Uri.file(uri.fsPath),
+    );
     await vsApi.window.showTextDocument(doc);
   } catch (error) {
     vsApi.window.showErrorMessage(
-      `Encryption failed: ${error instanceof Error ? error.message : String(error)}`,
+      `Encryption failed: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
     );
   }
 }
@@ -104,7 +112,9 @@ export async function decrypt(
     await vsApi.window.showTextDocument(doc);
   } catch (error) {
     vsApi.window.showErrorMessage(
-      `Decryption failed: ${error instanceof Error ? error.message : String(error)}`,
+      `Decryption failed: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
     );
   }
 }

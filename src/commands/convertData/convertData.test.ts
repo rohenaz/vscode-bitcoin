@@ -1,8 +1,8 @@
-import { describe, expect, test, mock } from 'bun:test';
-import vscode from '../../test/setup';
+import { describe, expect, mock, test } from 'bun:test';
 import { convertData } from '.';
 import type { OutputManager } from '../../output';
-import { detectFormat, type DataFormat } from '../../utils';
+import vscode from '../../test/setup';
+import { type DataFormat, detectFormat } from '../../utils';
 
 // Create a minimal mock that only implements what we need
 const mockOutput = {

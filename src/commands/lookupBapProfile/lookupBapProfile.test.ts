@@ -1,8 +1,8 @@
-import type { Progress, CancellationToken } from 'vscode';
-import { describe, expect, test, mock, afterEach } from 'bun:test';
-import vscode from '../../test/setup';
-import type { OutputManager } from '../../output';
+import { afterEach, describe, expect, mock, test } from 'bun:test';
+import type { CancellationToken, Progress } from 'vscode';
 import { handleLookupBapProfileCommand } from '.';
+import type { OutputManager } from '../../output';
+import vscode from '../../test/setup';
 
 const mockOutput = {
   handleOutput: mock(() => Promise.resolve()),
@@ -18,9 +18,9 @@ describe('lookupBapProfile', () => {
   test('should return undefined when user cancels input', async () => {
     vscode.window = {
       ...originalWindow,
-      showInputBox: async () => undefined
+      showInputBox: async () => undefined,
     };
-    
+
     const result = await handleLookupBapProfileCommand(mockOutput);
     expect(result).toBeUndefined();
   });
@@ -29,14 +29,18 @@ describe('lookupBapProfile', () => {
     let validationMessage = '';
     vscode.window = {
       ...originalWindow,
-      showInputBox: async (options?: { prompt?: string; value?: string; validateInput?: (text: string) => string | null }) => {
+      showInputBox: async (options?: {
+        prompt?: string;
+        value?: string;
+        validateInput?: (text: string) => string | null;
+      }) => {
         if (options?.validateInput) {
           validationMessage = options.validateInput('') || '';
         }
         return undefined;
-      }
+      },
     };
-    
+
     await handleLookupBapProfileCommand(mockOutput);
     expect(validationMessage).toBe('BAP ID cannot be empty');
   });
@@ -45,33 +49,42 @@ describe('lookupBapProfile', () => {
     let validationMessage = '';
     vscode.window = {
       ...originalWindow,
-      showInputBox: async (options?: { prompt?: string; value?: string; validateInput?: (text: string) => string | null }) => {
+      showInputBox: async (options?: {
+        prompt?: string;
+        value?: string;
+        validateInput?: (text: string) => string | null;
+      }) => {
         if (options?.validateInput) {
           validationMessage = options.validateInput('invalid!@#') || '';
         }
         return undefined;
-      }
+      },
     };
-    
+
     await handleLookupBapProfileCommand(mockOutput);
     expect(validationMessage).toBe('Invalid BAP ID format');
   });
 
   test('should handle API error with appropriate error message', async () => {
     const bapId = 'Go8vCHAa4S6AhXKTABGpANiz35J';
-    
+
     vscode.window = {
       ...originalWindow,
       showInputBox: async () => bapId,
       withProgress: async <T>(
         options: { location: number; title?: string; cancellable?: boolean },
-        task: (progress: Progress<{ message?: string; increment?: number }>, token: CancellationToken) => Promise<T>
+        task: (
+          progress: Progress<{ message?: string; increment?: number }>,
+          token: CancellationToken,
+        ) => Promise<T>,
       ): Promise<T> => {
         throw new Error('API error');
-      }
+      },
     };
-    
-    await expect(handleLookupBapProfileCommand(mockOutput)).rejects.toThrow('Failed to lookup BAP profile');
+
+    await expect(handleLookupBapProfileCommand(mockOutput)).rejects.toThrow(
+      'Failed to lookup BAP profile',
+    );
   });
 
   test('should return correctly formatted profile data for valid BAP ID', async () => {
@@ -83,28 +96,31 @@ describe('lookupBapProfile', () => {
       rootAddress: '1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa',
       identity: {
         alternateName: 'Test User',
-        description: 'Test profile'
+        description: 'Test profile',
       },
       addresses: [
         {
           address: '1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa',
           txId: 'fbbb60a4887725d8b5005b73b996387ba26993ed8ffec44933333b8f4ecfac74',
-          block: 0
-        }
-      ]
+          block: 0,
+        },
+      ],
     };
-    
+
     vscode.window = {
       ...originalWindow,
       showInputBox: async () => bapId,
       withProgress: async <T>(
         options: { location: number; title?: string; cancellable?: boolean },
-        task: (progress: Progress<{ message?: string; increment?: number }>, token: CancellationToken) => Promise<T>
+        task: (
+          progress: Progress<{ message?: string; increment?: number }>,
+          token: CancellationToken,
+        ) => Promise<T>,
       ): Promise<T> => {
         return mockProfile as T;
-      }
+      },
     };
-    
+
     const result = await handleLookupBapProfileCommand(mockOutput);
     expect(result).toBeDefined();
     expect(result?.type).toBe('bap');

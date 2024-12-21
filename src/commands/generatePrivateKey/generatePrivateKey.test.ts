@@ -1,9 +1,9 @@
 import { describe, expect, mock, test } from 'bun:test';
 
 import { PrivateKey } from '@bsv/sdk';
-import vscode from '../../test/setup';
 import type { KeyVault } from '../../keyVault';
 import type { OutputManager } from '../../output';
+import vscode from '../../test/setup';
 import { generatePrivateKey } from './index';
 
 // Create a minimal mock that only implements what we need
@@ -17,7 +17,7 @@ const mockKeyVault = {
 
 // Mock window.showErrorMessage
 const originalShowErrorMessage = vscode.window.showErrorMessage;
-vscode.window.showErrorMessage = mock(() => Promise.resolve(""));
+vscode.window.showErrorMessage = mock(() => Promise.resolve(''));
 
 describe('generatePrivateKey', () => {
   test('generates valid private key', async () => {

@@ -1,10 +1,12 @@
-import vsApi from '../../vsShim';
 import type { OutputManager } from '../../output';
-import { convertData, detectFormat, type DataFormat } from '../../utils';
+import { type DataFormat, convertData, detectFormat } from '../../utils';
+import vsApi from '../../vsShim';
 
-export async function handleConvertDataCommand(): Promise<{ data: string; type: string; name?: string } | undefined> {
+export async function handleConvertDataCommand(): Promise<
+  { data: string; type: string; name?: string } | undefined
+> {
   console.log('Starting data conversion command...');
-  
+
   const input = await vsApi.window.showInputBox({
     placeHolder: 'Enter data to convert (hex, base64, or binary array)',
     validateInput: (text) => {
@@ -22,20 +24,22 @@ export async function handleConvertDataCommand(): Promise<{ data: string; type: 
   console.log('Detecting input format...');
   const inputFormat = detectFormat(input);
   console.log('Detected format:', inputFormat);
-  
+
   if (!inputFormat) {
     console.log('Failed to detect format');
-    throw new Error('Unable to detect input format. Please ensure input is valid hex, base64, or binary array.');
+    throw new Error(
+      'Unable to detect input format. Please ensure input is valid hex, base64, or binary array.',
+    );
   }
 
   const formats = ['hex', 'base64', 'binary'];
   console.log('Showing format picker...');
-  const targetFormat = await vsApi.window.showQuickPick(
+  const targetFormat = (await vsApi.window.showQuickPick(
     formats.filter((f) => f !== inputFormat),
     {
       placeHolder: `Convert from ${inputFormat} to:`,
     },
-  ) as DataFormat;
+  )) as DataFormat;
 
   console.log('Selected target format:', targetFormat);
 

@@ -86,11 +86,18 @@ export class WorkspaceManager {
       const config = vsApi.workspace.getConfiguration('bitcoin');
       return {
         path: config.get('workspace.path') ?? defaultConfig.path,
-        detectContentType: config.get('workspace.detectContentType') ?? defaultConfig.detectContentType,
-        organizeFolders: config.get('workspace.organizeFolders') ?? defaultConfig.organizeFolders,
+        detectContentType:
+          config.get('workspace.detectContentType') ??
+          defaultConfig.detectContentType,
+        organizeFolders:
+          config.get('workspace.organizeFolders') ??
+          defaultConfig.organizeFolders,
       };
     } catch (error) {
-      console.warn('Failed to get VS Code configuration, using defaults:', error);
+      console.warn(
+        'Failed to get VS Code configuration, using defaults:',
+        error,
+      );
       return defaultConfig;
     }
   }
@@ -155,9 +162,7 @@ export class WorkspaceManager {
       }
     } catch (error) {
       console.error('Failed to check .gitignore:', error);
-      vsApi.window.showErrorMessage(
-        'Failed to check .gitignore configuration',
-      );
+      vsApi.window.showErrorMessage('Failed to check .gitignore configuration');
     }
   }
 
@@ -238,90 +243,108 @@ export class WorkspaceManager {
   /**
    * Detect content type and convert data to appropriate format
    * @param base64Data Base64 encoded data
+   * @param mimeType Optional MIME type for the content
    * @returns The URI of the saved file, or undefined if conversion failed
    */
-  async detectAndConvertContent(
-    base64Data: string,
-  ): Promise<Uri | undefined> {
+  async detectAndConvertContent(base64Data: string, mimeType?: string): Promise<Uri | undefined> {
     try {
-      // Decode base64 data
-      const buffer = Buffer.from(base64Data, 'base64');
-      if (buffer.length === 0) {
-        return undefined;
+      // Convert base64 to byte array using Utils.toArray
+      const bytes = Utils.toArray(base64Data);
+
+      // If MIME type is provided, use it to determine file extension
+      let extension = '';
+      if (mimeType) {
+        switch (mimeType.toLowerCase()) {
+          case 'image/jpeg':
+          case 'image/jpg': {
+            extension = '.jpg';
+            break;
+          }
+          case 'image/png': {
+            extension = '.png';
+            break;
+          }
+          case 'image/gif': {
+            extension = '.gif';
+            break;
+          }
+          case 'image/webp': {
+            extension = '.webp';
+            break;
+          }
+          case 'image/svg+xml': {
+            extension = '.svg';
+            break;
+          }
+          case 'application/json': {
+            extension = '.json';
+            break;
+          }
+          case 'text/plain': {
+            extension = '.txt';
+            break;
+          }
+          case 'text/html': {
+            extension = '.html';
+            break;
+          }
+          case 'text/xml': {
+            extension = '.xml';
+            break;
+          }
+          default: {
+            // Try to extract extension from MIME type
+            const match = mimeType.match(/^[^/]+\/(?:x-)?(.+)$/);
+            if (match) {
+              extension = `.${match[1]}`;
+            }
+            break;
+          }
+        }
       }
 
-      // Detect content type
-      const contentType = this.detectContentType
-        ? await this.detectType(buffer)
-        : await this.promptContentType();
-
-      if (!contentType) {
-        return undefined;
+      // If no extension determined from MIME type, try to detect from content
+      if (!extension) {
+        // Check for common file signatures
+        if (bytes[0] === 0xFF && bytes[1] === 0xD8 && bytes[2] === 0xFF) {
+          extension = '.jpg';
+        } else if (
+          bytes[0] === 0x89 &&
+          bytes[1] === 0x50 &&
+          bytes[2] === 0x4E &&
+          bytes[3] === 0x47
+        ) {
+          extension = '.png';
+        } else if (bytes[0] === 0x47 && bytes[1] === 0x49 && bytes[2] === 0x46) {
+          extension = '.gif';
+        } else {
+          // Try to detect text content
+          try {
+            const text = Utils.toUTF8(bytes);
+            if (text.trim().startsWith('{') && text.trim().endsWith('}')) {
+              extension = '.json';
+            } else if (text.trim().startsWith('<')) {
+              extension = text.includes('<?xml') ? '.xml' : '.html';
+            } else {
+              extension = '.txt';
+            }
+          } catch {
+            extension = '.bin';
+          }
+        }
       }
 
-      // Generate appropriate extension
-      const extension = this.getExtensionForType(contentType);
+      // Save the file with detected extension
+      const uri = await this.saveFile(
+        Buffer.from(bytes), // Convert back to Buffer for file system operations
+        'media',
+        `content${extension}`,
+      );
 
-      // Save to workspace
-      const result = await this.saveFile(buffer, 'media', `content${extension}`);
-      return isUri(result) ? result : vsApi.Uri.file(result.fsPath);
-    } catch {
+      return isUri(uri) ? uri : vsApi.Uri.file(uri.fsPath);
+    } catch (error) {
+      console.error('Failed to convert content:', error);
       return undefined;
-    }
-  }
-
-  private async detectType(buffer: Buffer): Promise<string | undefined> {
-    // Check for common file signatures
-    if (buffer.length >= 4) {
-      // JPEG
-      if (buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) {
-        return 'image/jpeg';
-      }
-
-      // PNG
-      if (
-        buffer[0] === 0x89 &&
-        buffer[1] === 0x50 &&
-        buffer[2] === 0x4e &&
-        buffer[3] === 0x47
-      ) {
-        return 'image/png';
-      }
-    }
-
-    // If no match found, prompt user
-    return this.promptContentType();
-  }
-
-  private async promptContentType(): Promise<string | undefined> {
-    const contentTypes = [
-      'text/plain',
-      'image/jpeg',
-      'image/png',
-      'application/json',
-      'application/xml',
-      'application/octet-stream',
-    ];
-
-    return vsApi.window.showQuickPick(contentTypes, {
-      placeHolder: 'Select content type',
-    });
-  }
-
-  private getExtensionForType(contentType: string): string {
-    switch (contentType) {
-      case 'text/plain':
-        return '.txt';
-      case 'image/jpeg':
-        return '.jpg';
-      case 'image/png':
-        return '.png';
-      case 'application/json':
-        return '.json';
-      case 'application/xml':
-        return '.xml';
-      default:
-        return '.bin';
     }
   }
 }

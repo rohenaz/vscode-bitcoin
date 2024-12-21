@@ -1,8 +1,8 @@
-import vscode from '@test/setup';
-import { describe, expect, test, mock, afterAll } from 'bun:test';
-import { extendedPrivateKeyFromMnemonic } from './index';
-import type { OutputManager } from '../../output';
+import { afterAll, describe, expect, mock, test } from 'bun:test';
 import { HD, Mnemonic } from '@bsv/sdk';
+import vscode from '@test/setup';
+import type { OutputManager } from '../../output';
+import { extendedPrivateKeyFromMnemonic } from './index';
 
 interface VSCodeOptions {
   placeHolder?: string;
@@ -24,11 +24,12 @@ const originalShowInputBox = vscode.window.showInputBox;
 describe('extendedPrivateKeyFromMnemonic', () => {
   test('generates valid extended private key from mnemonic', async () => {
     // Mock user input with a valid 12-word mnemonic
-    const validMnemonic = 'solid drastic bone type leopard law virtual share agree way bacon noise';
+    const validMnemonic =
+      'solid drastic bone type leopard law virtual share agree way bacon noise';
     vscode.window.showInputBox = async () => validMnemonic;
 
     const result = await extendedPrivateKeyFromMnemonic(mockOutput);
-    
+
     // Check return value format
     expect(result).toBeDefined();
     expect(result).toEqual({
@@ -45,7 +46,7 @@ describe('extendedPrivateKeyFromMnemonic', () => {
 
   test('returns undefined when input is cancelled', async () => {
     // Mock cancelled input
-    vscode.window.showInputBox = async () => "";
+    vscode.window.showInputBox = async () => '';
 
     const result = await extendedPrivateKeyFromMnemonic(mockOutput);
     expect(result).toBeUndefined();
@@ -53,7 +54,7 @@ describe('extendedPrivateKeyFromMnemonic', () => {
 
   test('validates mnemonic length', async () => {
     // Mock invalid mnemonic input (not 12 words)
-    vscode.window.showInputBox = async () => "";
+    vscode.window.showInputBox = async () => '';
 
     const result = await extendedPrivateKeyFromMnemonic(mockOutput);
     expect(result).toBeUndefined();
@@ -63,4 +64,4 @@ describe('extendedPrivateKeyFromMnemonic', () => {
     // Restore original function
     vscode.window.showInputBox = originalShowInputBox;
   });
-}); 
+});

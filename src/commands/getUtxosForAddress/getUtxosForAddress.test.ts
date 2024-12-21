@@ -1,7 +1,7 @@
-import { describe, expect, test, mock, afterEach } from 'bun:test';
-import vscode from '../../test/setup';
+import { afterEach, describe, expect, mock, test } from 'bun:test';
 import { handleGetUtxosForAddressCommand } from '.';
 import type { OutputManager } from '../../output';
+import vscode from '../../test/setup';
 
 const mockOutput = {
   handleOutput: mock(() => Promise.resolve()),
@@ -19,9 +19,9 @@ describe('getUtxosForAddress', () => {
   test('returns undefined when input is cancelled', async () => {
     vscode.window = {
       ...originalWindow,
-      showInputBox: async () => undefined
+      showInputBox: async () => undefined,
     };
-    
+
     const result = await handleGetUtxosForAddressCommand(mockOutput);
     expect(result).toBeUndefined();
   });
@@ -30,14 +30,18 @@ describe('getUtxosForAddress', () => {
     let validationMessage = '';
     vscode.window = {
       ...originalWindow,
-      showInputBox: async (options?: { prompt?: string; value?: string; validateInput?: (text: string) => string | null }) => {
+      showInputBox: async (options?: {
+        prompt?: string;
+        value?: string;
+        validateInput?: (text: string) => string | null;
+      }) => {
         if (options?.validateInput) {
           validationMessage = options.validateInput('') || '';
         }
         return undefined;
-      }
+      },
     };
-    
+
     await handleGetUtxosForAddressCommand(mockOutput);
     expect(validationMessage).toBe('Address cannot be empty');
   });
@@ -46,24 +50,28 @@ describe('getUtxosForAddress', () => {
     let validationMessage = '';
     vscode.window = {
       ...originalWindow,
-      showInputBox: async (options?: { prompt?: string; value?: string; validateInput?: (text: string) => string | null }) => {
+      showInputBox: async (options?: {
+        prompt?: string;
+        value?: string;
+        validateInput?: (text: string) => string | null;
+      }) => {
         if (options?.validateInput) {
           validationMessage = options.validateInput('invalid-address') || '';
         }
         return undefined;
-      }
+      },
     };
-    
+
     await handleGetUtxosForAddressCommand(mockOutput);
     expect(validationMessage).toBe('Invalid address format');
   });
 
   test('handles no UTXOs found', async () => {
     const address = '1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa';
-    
+
     vscode.window = {
       ...originalWindow,
-      showInputBox: async () => address
+      showInputBox: async () => address,
     };
 
     // Mock fetch to return 404
@@ -74,7 +82,7 @@ describe('getUtxosForAddress', () => {
         statusText: 'Not Found',
       } as Response;
     };
-    
+
     const result = await handleGetUtxosForAddressCommand(mockOutput);
     expect(result).toBeDefined();
     expect(result?.type).toBe('utxos');
@@ -83,16 +91,16 @@ describe('getUtxosForAddress', () => {
       address,
       utxoCount: 0,
       totalSatoshis: 0,
-      utxos: []
+      utxos: [],
     });
   });
 
   test('handles API error', async () => {
     const address = '1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa';
-    
+
     vscode.window = {
       ...originalWindow,
-      showInputBox: async () => address
+      showInputBox: async () => address,
     };
 
     // Mock fetch to return error
@@ -104,16 +112,18 @@ describe('getUtxosForAddress', () => {
         json: async () => ({ message: 'Server error' }),
       } as Response;
     };
-    
-    await expect(handleGetUtxosForAddressCommand(mockOutput)).rejects.toThrow('Failed to fetch UTXOs');
+
+    await expect(handleGetUtxosForAddressCommand(mockOutput)).rejects.toThrow(
+      'Failed to fetch UTXOs',
+    );
   });
 
   test('handles BAP ID error', async () => {
     const address = '1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa';
-    
+
     vscode.window = {
       ...originalWindow,
-      showInputBox: async () => address
+      showInputBox: async () => address,
     };
 
     // Mock fetch to return checksum error
@@ -125,8 +135,10 @@ describe('getUtxosForAddress', () => {
         json: async () => ({ message: 'Checksum mismatch' }),
       } as Response;
     };
-    
-    await expect(handleGetUtxosForAddressCommand(mockOutput)).rejects.toThrow('Invalid address format. If this is a BAP ID');
+
+    await expect(handleGetUtxosForAddressCommand(mockOutput)).rejects.toThrow(
+      'Invalid address format. If this is a BAP ID',
+    );
   });
 
   test('returns formatted UTXOs', async () => {
@@ -136,19 +148,19 @@ describe('getUtxosForAddress', () => {
         txid: '1234567890abcdef',
         vout: 0,
         satoshis: 1000,
-        script: 'script1'
+        script: 'script1',
       },
       {
         txid: 'abcdef1234567890',
         vout: 1,
         satoshis: 2000,
-        script: 'script2'
-      }
+        script: 'script2',
+      },
     ];
-    
+
     vscode.window = {
       ...originalWindow,
-      showInputBox: async () => address
+      showInputBox: async () => address,
     };
 
     // Mock fetch to return UTXOs
@@ -158,7 +170,7 @@ describe('getUtxosForAddress', () => {
         json: async () => mockUtxos,
       } as Response;
     };
-    
+
     const result = await handleGetUtxosForAddressCommand(mockOutput);
     expect(result).toBeDefined();
     expect(result?.type).toBe('utxos');

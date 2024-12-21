@@ -1,5 +1,5 @@
-import vscode from 'vscode';
 import { PrivateKey } from '@bsv/sdk';
+import vscode from 'vscode';
 import type { OutputManager } from '../../output';
 
 export async function addressFromWIF(output: OutputManager) {
@@ -23,4 +23,4 @@ export async function addressFromWIF(output: OutputManager) {
     type: 'addresses' as const,
     name: 'from_wif',
   };
-} 
+}

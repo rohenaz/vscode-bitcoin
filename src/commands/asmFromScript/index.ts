@@ -1,5 +1,5 @@
-import vscode from 'vscode';
 import { Script } from '@bsv/sdk';
+import vscode from 'vscode';
 import type { OutputManager } from '../../output';
 
 export async function asmFromScript(output: OutputManager) {
@@ -23,4 +23,4 @@ export async function asmFromScript(output: OutputManager) {
     type: 'scripts' as const,
     name: `asm_${new Date().toISOString().replace(/[:.]/g, '-')}`,
   };
-} 
+}

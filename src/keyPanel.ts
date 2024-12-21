@@ -1,5 +1,5 @@
-import vsApi, { WebviewPanel, Disposable } from './vsShim';
 import type { KeyEntry, KeyVault } from './keyVault';
+import vsApi, { WebviewPanel, Disposable } from './vsShim';
 
 export class KeyPanel {
   public static currentPanel: KeyPanel | undefined;

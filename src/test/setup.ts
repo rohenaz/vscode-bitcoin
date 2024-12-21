@@ -1,4 +1,23 @@
-import type { WebviewOptions, WebviewPanel, Uri, ViewColumn, Disposable, WebviewPanelOptions, WebviewPanelOnDidChangeViewStateEvent, ExtensionContext, Event, OutputChannel, WebviewView, WebviewViewProvider, TextDocument, TextEditor, TextDocumentShowOptions, ProgressLocation, Progress, CancellationToken } from 'vscode';
+import type {
+  CancellationToken,
+  Disposable,
+  Event,
+  ExtensionContext,
+  OutputChannel,
+  Progress,
+  ProgressLocation,
+  TextDocument,
+  TextDocumentShowOptions,
+  TextEditor,
+  Uri,
+  ViewColumn,
+  WebviewOptions,
+  WebviewPanel,
+  WebviewPanelOnDidChangeViewStateEvent,
+  WebviewPanelOptions,
+  WebviewView,
+  WebviewViewProvider,
+} from 'vscode';
 
 // Re-export types that our code needs
 export type {
@@ -108,7 +127,7 @@ interface VSCodeMock {
   EventEmitter: typeof EventEmitter;
   SecretStorage: typeof SecretStorage;
   ExtensionContext: {
-    new(): {
+    new (): {
       subscriptions: Disposable[];
       secrets: SecretStorage;
       extensionPath: string;
@@ -123,12 +142,31 @@ interface VSCodeMock {
     };
   };
   window: {
-    createWebviewPanel: (viewType: string, title: string, column: ViewColumn, options: WebviewPanelOptions & WebviewOptions) => WebviewPanel;
-    showInformationMessage: <T extends string>(message: string, ...items: T[]) => Promise<T | undefined>;
-    showWarningMessage: <T extends string>(message: string, ...items: T[]) => Promise<T | undefined>;
-    showErrorMessage: <T extends string>(message: string, ...items: T[]) => Promise<T | undefined>;
-    showInputBox: (options?: { prompt?: string; value?: string }) => Promise<string | undefined>;
-    showQuickPick: (items: string[], options?: { placeHolder?: string }) => Promise<string | undefined>;
+    createWebviewPanel: (
+      viewType: string,
+      title: string,
+      column: ViewColumn,
+      options: WebviewPanelOptions & WebviewOptions,
+    ) => WebviewPanel;
+    showInformationMessage: <T extends string>(
+      message: string,
+      ...items: T[]
+    ) => Promise<T | undefined>;
+    showWarningMessage: <T extends string>(
+      message: string,
+      ...items: T[]
+    ) => Promise<T | undefined>;
+    showErrorMessage: <T extends string>(
+      message: string,
+      ...items: T[]
+    ) => Promise<T | undefined>;
+    showInputBox: (options?: { prompt?: string; value?: string }) => Promise<
+      string | undefined
+    >;
+    showQuickPick: (
+      items: string[],
+      options?: { placeHolder?: string },
+    ) => Promise<string | undefined>;
     showTextDocument: (document: { uri: Uri }) => Promise<void>;
     activeTextEditor: {
       document: { getText: () => string; uri: { fsPath: string } };
@@ -147,13 +185,22 @@ interface VSCodeMock {
     ) => Promise<T>;
   };
   commands: {
-    registerCommand: (command: string, callback: (...args: unknown[]) => unknown) => Disposable;
+    registerCommand: (
+      command: string,
+      callback: (...args: unknown[]) => unknown,
+    ) => Disposable;
     executeCommand: <T>(command: string, ...args: unknown[]) => Promise<T>;
     getCommands: () => Promise<string[]>;
   };
   workspace: {
-    workspaceFolders: { uri: { fsPath: string }; name: string; index: number }[];
-    openTextDocument: (uri: Uri) => Promise<{ getText: () => string; save: () => Promise<void> }>;
+    workspaceFolders: {
+      uri: { fsPath: string };
+      name: string;
+      index: number;
+    }[];
+    openTextDocument: (
+      uri: Uri,
+    ) => Promise<{ getText: () => string; save: () => Promise<void> }>;
     getConfiguration: (section?: string) => {
       get: <T>(key: string) => T | undefined;
       update: <T>(key: string, value: T) => Promise<void>;
@@ -163,7 +210,12 @@ interface VSCodeMock {
       writeFile: (uri: Uri, content: Uint8Array) => Promise<void>;
       readFile: (uri: Uri) => Promise<Uint8Array>;
       createDirectory: (uri: Uri) => Promise<void>;
-      stat: (uri: Uri) => Promise<{ type: number; size: number; ctime: number; mtime: number }>;
+      stat: (uri: Uri) => Promise<{
+        type: number;
+        size: number;
+        ctime: number;
+        mtime: number;
+      }>;
       readDirectory: (uri: Uri) => Promise<[string, number][]>;
     };
   };
@@ -203,7 +255,12 @@ const mockVSCode: VSCodeMock = {
     };
   },
   window: {
-    createWebviewPanel: (_viewType: string, _title: string, _column: ViewColumn, _options: WebviewPanelOptions & WebviewOptions): WebviewPanel => ({
+    createWebviewPanel: (
+      _viewType: string,
+      _title: string,
+      _column: ViewColumn,
+      _options: WebviewPanelOptions & WebviewOptions,
+    ): WebviewPanel => ({
       webview: {
         html: '',
         onDidReceiveMessage: () => ({ dispose: () => {} }),
@@ -221,11 +278,16 @@ const mockVSCode: VSCodeMock = {
       viewColumn: _column,
       active: true,
       visible: true,
-      onDidChangeViewState: (_listener: (e: WebviewPanelOnDidChangeViewStateEvent) => unknown) => ({ dispose: () => {} }),
+      onDidChangeViewState: (
+        _listener: (e: WebviewPanelOnDidChangeViewStateEvent) => unknown,
+      ) => ({ dispose: () => {} }),
     }),
     showInformationMessage: async () => undefined,
     showWarningMessage: async () => undefined,
-    showErrorMessage: async <T extends string>(_message: string, ..._items: T[]) => undefined,
+    showErrorMessage: async <T extends string>(
+      _message: string,
+      ..._items: T[]
+    ) => undefined,
     showInputBox: async () => '',
     showQuickPick: async () => '',
     showTextDocument: async () => Promise.resolve(),
@@ -263,12 +325,18 @@ const mockVSCode: VSCodeMock = {
     getCommands: async () => mockCommands,
   },
   workspace: {
-    workspaceFolders: [{ uri: { fsPath: '/test/workspace' }, name: 'test', index: 0 }],
-    openTextDocument: async () => ({ getText: () => '', save: () => Promise.resolve() }),
+    workspaceFolders: [
+      { uri: { fsPath: '/test/workspace' }, name: 'test', index: 0 },
+    ],
+    openTextDocument: async () => ({
+      getText: () => '',
+      save: () => Promise.resolve(),
+    }),
     getConfiguration: (section?: string) => ({
       get: <T>(key: string): T | undefined => {
         if (section === 'bitcoin') {
-          const value = defaultWorkspaceConfig[key as keyof typeof defaultWorkspaceConfig];
+          const value =
+            defaultWorkspaceConfig[key as keyof typeof defaultWorkspaceConfig];
           return value as T;
         }
         return undefined;
@@ -292,17 +360,21 @@ const mockVSCode: VSCodeMock = {
       path,
       query: '',
       fragment: '',
-      with: function() { return this; },
+      with: function () {
+        return this;
+      },
       toJSON: () => ({}),
     }),
-    parse: (path: string): Uri => ({ 
+    parse: (path: string): Uri => ({
       fsPath: path,
       scheme: 'file',
       authority: '',
       path,
       query: '',
       fragment: '',
-      with: function() { return this; },
+      with: function () {
+        return this;
+      },
       toJSON: () => ({}),
     }),
   },

@@ -109,8 +109,8 @@
         "title": "Bitcoin: Raw Tx to Bob"
       },
       {
-        "command": "bitcoin.detectAndConvert",
-        "title": "Bitcoin: Detect and Convert Content",
+        "command": "bitcoin.decodeFile",
+        "title": "Bitcoin: Decode Base64 Content to File",
         "category": "Bitcoin"
       },
       {

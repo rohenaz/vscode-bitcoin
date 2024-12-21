@@ -55,7 +55,9 @@ export class OutputManager {
         try {
           const uri = await this.workspaceManager.saveFile(data, type, name);
           vsApi.window.showInformationMessage(`File saved: ${uri.fsPath}`);
-          const doc = await vsApi.workspace.openTextDocument(vsApi.Uri.file(uri.fsPath));
+          const doc = await vsApi.workspace.openTextDocument(
+            vsApi.Uri.file(uri.fsPath),
+          );
           await vsApi.window.showTextDocument(doc, {
             preview: false,
             preserveFocus: true,
@@ -72,13 +74,18 @@ export class OutputManager {
     }
   }
 
-  public async detectAndConvert(data: string): Promise<void> {
+  public async detectAndConvert(data: string, mimeType?: string): Promise<void> {
     try {
-      const uri = await this.workspaceManager.detectAndConvertContent(data);
+      const uri = await this.workspaceManager.detectAndConvertContent(data, mimeType);
       if (uri) {
-        vsApi.window.showInformationMessage(`File saved: ${uri.fsPath}`);
-        // For images and other binary content, use the system default application
-        await vsApi.env.openExternal(uri);
+        const openFile = 'Open File';
+        const result = await vsApi.window.showInformationMessage(
+          `File saved: ${uri.fsPath}`,
+          openFile
+        );
+        if (result === openFile) {
+          await vsApi.env.openExternal(uri);
+        }
       } else {
         vsApi.window.showWarningMessage(
           'Could not detect content type or convert data',

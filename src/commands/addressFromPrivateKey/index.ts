@@ -1,8 +1,10 @@
-import vsApi from '../../vsShim';
-import type { OutputManager } from '../../output';
 import { PrivateKey } from '@bsv/sdk';
+import type { OutputManager } from '../../output';
+import vsApi from '../../vsShim';
 
-export async function handleAddressFromPrivateKeyCommand(outputManager: OutputManager) {
+export async function handleAddressFromPrivateKeyCommand(
+  outputManager: OutputManager,
+) {
   const privKey = await vsApi.window.showInputBox({
     value: '',
     placeHolder: 'Ex: L...',
@@ -24,4 +26,4 @@ export async function handleAddressFromPrivateKeyCommand(outputManager: OutputMa
     type: 'addresses',
     name: 'from_privkey',
   };
-} 
+}

@@ -1,6 +1,6 @@
 import { P2PKH, Utils } from '@bsv/sdk';
-import vsApi from '../../vsShim';
 import type { OutputManager } from '../../output';
+import vsApi from '../../vsShim';
 
 const { fromBase58Check } = Utils;
 
@@ -28,9 +28,9 @@ const fetchPayUtxos = async (
     return []; // No UTXOs found for this address
   }
   if (!payRes.ok) {
-    const error = await payRes
+    const error = (await payRes
       .json()
-      .catch(() => ({ message: payRes.statusText })) as ApiError;
+      .catch(() => ({ message: payRes.statusText }))) as ApiError;
     // If it's a checksum mismatch, it might be a BAP ID
     if (error.message === 'Checksum mismatch') {
       throw new Error(
@@ -43,11 +43,11 @@ const fetchPayUtxos = async (
       }`,
     );
   }
-  let payUtxos = (await payRes.json()) as (Utxo & { lock?: { address: string; until: number } })[];
+  let payUtxos = (await payRes.json()) as (Utxo & {
+    lock?: { address: string; until: number };
+  })[];
   // exclude all 1 satoshi utxos and locked utxos
-  payUtxos = payUtxos.filter(
-    (u) => u.satoshis !== 1 && !u.lock,
-  );
+  payUtxos = payUtxos.filter((u) => u.satoshis !== 1 && !u.lock);
 
   // Get pubkey hash from address
   const pubKeyHash = fromBase58Check(address);
@@ -64,7 +64,9 @@ const fetchPayUtxos = async (
   return payUtxos;
 };
 
-export async function handleGetUtxosForAddressCommand(outputManager: OutputManager) {
+export async function handleGetUtxosForAddressCommand(
+  outputManager: OutputManager,
+) {
   const address = await vsApi.window.showInputBox({
     value: '',
     placeHolder: 'Ex: 1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa',
@@ -106,10 +108,7 @@ export async function handleGetUtxosForAddressCommand(outputManager: OutputManag
     const result = {
       address,
       utxoCount: utxos.length,
-      totalSatoshis: utxos.reduce(
-        (sum, utxo) => sum + (utxo.satoshis || 0),
-        0,
-      ),
+      totalSatoshis: utxos.reduce((sum, utxo) => sum + (utxo.satoshis || 0), 0),
       utxos: utxos.map((utxo) => ({
         txid: utxo.txid,
         vout: utxo.vout,
@@ -125,8 +124,7 @@ export async function handleGetUtxosForAddressCommand(outputManager: OutputManag
     };
   } catch (error) {
     console.error('UTXO fetch error:', error);
-    const errorMessage =
-      error instanceof Error ? error.message : String(error);
+    const errorMessage = error instanceof Error ? error.message : String(error);
     throw new Error(
       `Failed to fetch UTXOs from ${API_HOST}/txos/address/${address}/unspent?bsv20=false\nError: ${errorMessage}`,
     );
