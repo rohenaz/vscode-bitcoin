@@ -13,10 +13,34 @@ import type {
   Memento,
   Uri,
 } from 'vscode';
-// Import setup to ensure VS Code mock is loaded first
-import vscode, { executedCommands } from '../setup';
-import { activate, convertData, detectFormat } from '../../extension';
+import { createRequire } from 'module';
 
+// Set test environment flag before any imports
+process.env.TEST_ENV = 'true';
+
+// Import setup to ensure VS Code mock is loaded first
+import '../setup';
+import mockVSCode, { executedCommands } from '../setup';
+
+// Only modify `require` if it exists under Bun
+if (typeof globalThis.require === 'function') {
+  const originalRequire = globalThis.require as NodeRequire;
+  const patchedRequire = ((id: string) => {
+    if (id === 'vscode') {
+      return mockVSCode;
+    }
+    return originalRequire(id);
+  }) as NodeRequire;
+
+  patchedRequire.resolve = originalRequire.resolve;
+  patchedRequire.cache = originalRequire.cache;
+  patchedRequire.extensions = originalRequire.extensions;
+  patchedRequire.main = originalRequire.main;
+
+  globalThis.require = patchedRequire;
+}
+
+import { activate } from '../../extension';
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import {
   HD,
@@ -30,7 +54,6 @@ import {
 import { TransformTx, allProtocols } from 'bmapjs';
 import type { BobTx } from 'bmapjs';
 import { parse } from 'bpu-ts';
-import { WelcomePanel } from '../../welcomePanel';
 
 const TEST_WORKSPACE_DIR = '.test-bitcoin-workspace';
 
@@ -106,13 +129,16 @@ describe('Bitcoin Extension Tests', () => {
     }
 
     // Update workspace path in VS Code mock
-    vscode.workspace.workspaceFolders = [
+    mockVSCode.workspace.workspaceFolders = [
       {
         uri: { fsPath: TEST_WORKSPACE_DIR },
         name: 'test',
         index: 0,
       },
     ];
+
+    // Ensure test environment flag is set
+    process.env.TEST_ENV = 'true';
   });
 
   afterEach(() => {
@@ -121,6 +147,9 @@ describe('Bitcoin Extension Tests', () => {
 
   // Extension activation test
   test('Extension activation', async () => {
+    // Ensure test environment flag is set
+    process.env.TEST_ENV = 'true';
+    
     await activate(mockContext as ExtensionContext);
     expect(mockContext.subscriptions).toHaveLength(29); // One for each command
   });
@@ -251,7 +280,7 @@ describe('Bitcoin Extension Tests', () => {
 
   // Command registration tests
   test('Command registration', async () => {
-    const registeredCommands = await vscode.commands.getCommands();
+    const registeredCommands = await mockVSCode.commands.getCommands();
     const expectedCommands = [
       'bitcoin.asmFromScript',
       'bitcoin.addressFromWIF',

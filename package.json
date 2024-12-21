@@ -173,7 +173,7 @@
   },
   "scripts": {
     "vscode:prepublish": "bun run build",
-    "build": "vite build",
+    "build": "VITE_CJS_IGNORE_WARNING=true vite build",
     "build:test": "tsc -p ./",
     "dev": "vite build --watch",
     "lint": "biome lint .",

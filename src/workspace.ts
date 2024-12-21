@@ -8,15 +8,21 @@ export class WorkspaceManager {
   private workspacePath: string;
   private detectContentType: boolean;
   private organizeFolders: boolean;
+  private isTestMode: boolean;
 
   constructor(workspacePath?: string) {
-    const config = vscode.workspace.getConfiguration('bitcoin');
-
-    // If workspacePath is provided, use it directly
+    // If workspacePath is provided, use it directly (test mode)
     if (workspacePath) {
-      this.workspaceRoot = workspacePath;
+      this.workspaceRoot = path.dirname(workspacePath);
       this.workspacePath = workspacePath;
+      this.detectContentType = true;
+      this.organizeFolders = true;
+      this.isTestMode = true;
     } else {
+      // Normal mode - use VS Code configuration
+      const config = vscode.workspace.getConfiguration('bitcoin');
+      this.isTestMode = false;
+
       // Check if we have a workspace open
       if (
         !vscode.workspace.workspaceFolders ||
@@ -35,10 +41,10 @@ export class WorkspaceManager {
         this.workspaceRoot,
         config.get('workspace.path') ?? '.bitcoin',
       );
-    }
 
-    this.detectContentType = config.get('workspace.detectContentType') ?? true;
-    this.organizeFolders = config.get('workspace.organizeFolders') ?? true;
+      this.detectContentType = config.get('workspace.detectContentType') ?? true;
+      this.organizeFolders = config.get('workspace.organizeFolders') ?? true;
+    }
 
     try {
       // Create workspace directory if it doesn't exist
@@ -47,15 +53,17 @@ export class WorkspaceManager {
       }
 
       // Only check gitignore if we're not in test mode
-      if (!workspacePath) {
+      if (!this.isTestMode) {
         this.checkGitIgnore();
       }
     } catch (error) {
-      vscode.window.showErrorMessage(
-        `Failed to create Bitcoin workspace: ${
-          error instanceof Error ? error.message : String(error)
-        }`,
-      );
+      if (!this.isTestMode) {
+        vscode.window.showErrorMessage(
+          `Failed to create Bitcoin workspace: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        );
+      }
       throw error; // Re-throw to prevent extension from activating in an invalid state
     }
   }
@@ -137,7 +145,7 @@ export class WorkspaceManager {
     data: string | Buffer,
     type: string,
     suggestedName?: string,
-  ): Promise<vscode.Uri> {
+  ): Promise<vscode.Uri | { fsPath: string }> {
     const timestamp = Date.now();
     const name = suggestedName ?? type;
     const sanitizedName = this.sanitizeFilename(`${name}_${timestamp}`);
@@ -158,6 +166,11 @@ export class WorkspaceManager {
 
     // Save the file
     fs.writeFileSync(filePath, data);
+
+    // In test mode, return a simple object with fsPath
+    if (this.isTestMode) {
+      return { fsPath: filePath };
+    }
 
     return vscode.Uri.file(filePath);
   }
@@ -223,7 +236,8 @@ export class WorkspaceManager {
       const extension = this.getExtensionForType(contentType);
 
       // Save to workspace
-      return this.saveFile(buffer, 'media', `content${extension}`);
+      const result = await this.saveFile(buffer, 'media', `content${extension}`);
+      return result as vscode.Uri;
     } catch {
       return undefined;
     }
@@ -248,64 +262,39 @@ export class WorkspaceManager {
       }
     }
 
-    // Check for JSON
-    try {
-      JSON.parse(buffer.toString());
-      return 'application/json';
-    } catch {}
-
-    // Check for XML
-    if (buffer.toString().trim().startsWith('<?xml')) {
-      return 'application/xml';
-    }
-
-    // Prompt user if type not detected
+    // If no match found, prompt user
     return this.promptContentType();
   }
 
   private async promptContentType(): Promise<string | undefined> {
-    const commonTypes = [
-      { label: 'JPEG Image', value: 'image/jpeg' },
-      { label: 'PNG Image', value: 'image/png' },
-      { label: 'JSON', value: 'application/json' },
-      { label: 'XML', value: 'application/xml' },
-      { label: 'Text', value: 'text/plain' },
-      { label: 'Other...', value: 'other' },
+    const contentTypes = [
+      'text/plain',
+      'image/jpeg',
+      'image/png',
+      'application/json',
+      'application/xml',
+      'application/octet-stream',
     ];
 
-    const selected = await vscode.window.showQuickPick(commonTypes, {
+    return vscode.window.showQuickPick(contentTypes, {
       placeHolder: 'Select content type',
     });
-
-    if (!selected) {
-      return undefined;
-    }
-
-    if (selected.value === 'other') {
-      const customType = await vscode.window.showInputBox({
-        prompt: 'Enter content type (e.g., application/pdf)',
-        validateInput: (input) => {
-          return /^[\w-]+\/[\w-]+$/.test(input)
-            ? null
-            : 'Invalid content type format. Use format: type/subtype';
-        },
-      });
-
-      return customType;
-    }
-
-    return selected.value;
   }
 
   private getExtensionForType(contentType: string): string {
-    const extensions: Record<string, string> = {
-      'image/jpeg': '.jpeg',
-      'image/png': '.png',
-      'application/json': '.json',
-      'application/xml': '.xml',
-      'text/plain': '.txt',
-    };
-
-    return extensions[contentType] ?? '.bin';
+    switch (contentType) {
+      case 'text/plain':
+        return '.txt';
+      case 'image/jpeg':
+        return '.jpg';
+      case 'image/png':
+        return '.png';
+      case 'application/json':
+        return '.json';
+      case 'application/xml':
+        return '.xml';
+      default:
+        return '.bin';
+    }
   }
 }

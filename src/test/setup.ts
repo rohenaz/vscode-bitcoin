@@ -1,44 +1,7 @@
-class MockEventEmitter<T> {
-  private listeners: Array<(e: T) => void> = [];
+import type { WebviewOptions, WebviewPanel, Uri, ViewColumn, Disposable, WebviewPanelOptions, WebviewPanelOnDidChangeViewStateEvent } from 'vscode';
 
-  fire(data: T): void {
-    for (const listener of this.listeners) {
-      listener(data);
-    }
-  }
-
-  event(listener: (e: T) => void): { dispose: () => void } {
-    this.listeners.push(listener);
-    return {
-      dispose: () => {
-        const idx = this.listeners.indexOf(listener);
-        if (idx >= 0) {
-          this.listeners.splice(idx, 1);
-        }
-      },
-    };
-  }
-}
-
-class MockExtensionContext {
-  subscriptions: { dispose(): void }[] = [];
-  globalState = { get: () => undefined, update: () => Promise.resolve() };
-  workspaceState = { get: () => undefined, update: () => Promise.resolve() };
-  extensionUri = { fsPath: '' };
-  asAbsolutePath(relativePath: string): string {
-    return relativePath;
-  }
-  storagePath = '';
-  globalStoragePath = '';
-  logPath = '';
-  extensionPath = '';
-  environmentVariableCollection = { replace: () => {}, persistent: true };
-  secrets = {
-    store: () => Promise.resolve(),
-    get: () => Promise.resolve(''),
-    delete: () => Promise.resolve(),
-  };
-}
+// Track executed commands
+const executedCommands: string[] = [];
 
 // Mock commands
 const mockCommands = [
@@ -72,158 +35,154 @@ const mockCommands = [
   'bitcoin.fetchOrdinalsInscription',
 ];
 
-interface VSCodeOptions {
-  placeHolder?: string;
-  prompt?: string;
-  value?: string;
-  password?: boolean;
-  ignoreFocusOut?: boolean;
-}
-
-interface VSCodeQuickPickOptions {
-  placeHolder?: string;
-  ignoreFocusOut?: boolean;
-  matchOnDescription?: boolean;
-  matchOnDetail?: boolean;
-}
-
-const executedCommands: string[] = [];
-
-const vscode = {
-  EventEmitter: MockEventEmitter,
+interface VSCodeMock {
   window: {
-    showInformationMessage: async () => {},
-    showWarningMessage: async (_message: string) => {},
-    showErrorMessage: async (_message: string, ..._items: string[]): Promise<string> => 'Error',
-    showInputBox: async (_options: VSCodeOptions) => '',
-    showQuickPick: async (_items: string[], _options: VSCodeQuickPickOptions) =>
-      '',
-    createWebviewPanel: (
-      viewType: string,
-      title: string,
-      column: number,
-      options: { enableScripts?: boolean }
-    ) => ({
+    createWebviewPanel: (viewType: string, title: string, column: ViewColumn, options: WebviewPanelOptions & WebviewOptions) => WebviewPanel;
+    showInformationMessage: <T extends string>(message: string, ...items: T[]) => Promise<T | undefined>;
+    showWarningMessage: <T extends string>(message: string, ...items: T[]) => Promise<T | undefined>;
+    showErrorMessage: <T extends string>(message: string, ...items: T[]) => Promise<T | undefined>;
+    showInputBox: (options?: { prompt?: string; value?: string }) => Promise<string | undefined>;
+    showQuickPick: (items: string[], options?: { placeHolder?: string }) => Promise<string | undefined>;
+    showTextDocument: (document: { uri: Uri }) => Promise<void>;
+    activeTextEditor: {
+      document: { getText: () => string; uri: { fsPath: string } };
+      selection: { isEmpty: boolean };
+    };
+  };
+  commands: {
+    registerCommand: (command: string, callback: (...args: unknown[]) => unknown) => Disposable;
+    executeCommand: <T>(command: string, ...args: unknown[]) => Promise<T>;
+    getCommands: () => Promise<string[]>;
+  };
+  workspace: {
+    workspaceFolders: { uri: { fsPath: string }; name: string; index: number }[];
+    openTextDocument: (uri: Uri) => Promise<{ getText: () => string; save: () => Promise<void> }>;
+    getConfiguration: (section?: string) => {
+      get: <T>(key: string) => T | undefined;
+      update: <T>(key: string, value: T) => Promise<void>;
+    };
+    fs: {
+      writeFile: (uri: Uri, content: Uint8Array) => Promise<void>;
+      readFile: (uri: Uri) => Promise<Uint8Array>;
+      createDirectory: (uri: Uri) => Promise<void>;
+      stat: (uri: Uri) => Promise<{ type: number; size: number; ctime: number; mtime: number }>;
+      readDirectory: (uri: Uri) => Promise<[string, number][]>;
+    };
+  };
+  Uri: {
+    file: (path: string) => Uri;
+    parse: (path: string) => Uri;
+  };
+  ViewColumn: {
+    One: number;
+    Two: number;
+    Three: number;
+    Active: number;
+    Beside: number;
+  };
+}
+
+// Create mock VS Code instance
+const mockVSCode: VSCodeMock = {
+  window: {
+    createWebviewPanel: (_viewType: string, _title: string, _column: ViewColumn, _options: WebviewPanelOptions & WebviewOptions): WebviewPanel => ({
       webview: {
         html: '',
         onDidReceiveMessage: () => ({ dispose: () => {} }),
-        postMessage: () => Promise.resolve(),
+        postMessage: async () => Promise.resolve(true),
+        asWebviewUri: (uri: Uri) => uri,
+        options: _options,
+        cspSource: 'mockCspSource',
       },
       onDidDispose: () => ({ dispose: () => {} }),
       reveal: () => {},
       dispose: () => {},
+      title: _title,
+      viewType: _viewType,
+      options: _options,
+      viewColumn: _column,
+      active: true,
+      visible: true,
+      onDidChangeViewState: (listener: (e: WebviewPanelOnDidChangeViewStateEvent) => unknown) => ({ dispose: () => {} }),
     }),
-    showTextDocument: async () => {},
+    showInformationMessage: async () => undefined,
+    showWarningMessage: async () => undefined,
+    showErrorMessage: async <T extends string>(_message: string, ..._items: T[]) => undefined,
+    showInputBox: async () => '',
+    showQuickPick: async () => '',
+    showTextDocument: async () => Promise.resolve(),
     activeTextEditor: {
-      document: {
-        getText: () => '',
-        uri: { fsPath: '' },
-      },
-      selection: {
-        isEmpty: true,
-      },
+      document: { getText: () => '', uri: { fsPath: '' } },
+      selection: { isEmpty: true },
     },
   },
   commands: {
-    registerCommand: (_cmd: string, _callback: () => void) => ({
-      dispose: () => {},
-    }),
-    executeCommand: async (command: string) => {
+    registerCommand: () => ({ dispose: () => {} }),
+    executeCommand: async <T>(command: string): Promise<T> => {
       executedCommands.push(command);
-      return command;
+      return undefined as unknown as T;
     },
     getCommands: async () => mockCommands,
   },
-  env: {
-    clipboard: {
-      writeText: async (_text: string) => {},
-      readText: async () => '',
-    },
-  },
   workspace: {
-    workspaceFolders: [
-      {
-        uri: { fsPath: '/test/workspace' },
-        name: 'test',
-        index: 0,
-      },
-    ],
-    openTextDocument: async (_uri: { fsPath: string }) => ({
-      getText: () => '',
-      save: () => Promise.resolve(),
-    }),
+    workspaceFolders: [{ uri: { fsPath: '/test/workspace' }, name: 'test', index: 0 }],
+    openTextDocument: async () => ({ getText: () => '', save: () => Promise.resolve() }),
     getConfiguration: (section?: string) => ({
-      get: (key: string) => {
-        switch (key) {
-          case 'workspace.path':
-            return '.bitcoin';
-          case 'workspace.detectContentType':
-            return true;
-          case 'workspace.organizeFolders':
-            return true;
-          default:
-            return undefined;
+      get: <T>(key: string): T | undefined => {
+        if (section === 'bitcoin') {
+          switch (key) {
+            case 'workspace.path':
+              return '.bitcoin' as unknown as T;
+            case 'workspace.detectContentType':
+              return true as unknown as T;
+            case 'workspace.organizeFolders':
+              return true as unknown as T;
+            default:
+              return undefined;
+          }
         }
+        return undefined;
       },
+      update: async () => Promise.resolve(),
     }),
     fs: {
-      writeFile: async (_uri: { fsPath: string }, _content: Uint8Array) => {},
-      readFile: async (_uri: { fsPath: string }) => new Uint8Array(),
-      createDirectory: async (_uri: { fsPath: string }) => {},
-      stat: async (_uri: { fsPath: string }) => ({
-        type: 1,
-        size: 0,
-        ctime: 0,
-        mtime: 0,
-      }),
-      readDirectory: async (_uri: { fsPath: string }) => [],
+      writeFile: async () => {},
+      readFile: async () => new Uint8Array(),
+      createDirectory: async () => {},
+      stat: async () => ({ type: 1, size: 0, ctime: 0, mtime: 0 }),
+      readDirectory: async () => [],
     },
   },
-  ExtensionContext: MockExtensionContext,
   Uri: {
-    file: (path: string) => ({
+    file: (path: string): Uri => ({
       fsPath: path,
       scheme: 'file',
       authority: '',
-      path: path,
+      path,
       query: '',
       fragment: '',
-      with: function () {
-        return this;
-      },
+      with: function() { return this; },
       toJSON: () => ({}),
     }),
-    parse: (path: string) => ({ fsPath: path }),
+    parse: (path: string): Uri => ({ 
+      fsPath: path,
+      scheme: 'file',
+      authority: '',
+      path,
+      query: '',
+      fragment: '',
+      with: function() { return this; },
+      toJSON: () => ({}),
+    }),
   },
-  ViewColumn: {
-    One: 1,
-    Two: 2,
-    Three: 3,
-    Active: -1,
-    Beside: -2,
-  },
+  ViewColumn: { One: 1, Two: 2, Three: 3, Active: -1, Beside: -2 },
 };
 
-declare global {
-  var require: NodeRequire;
-}
+// Register mock globally
+(globalThis as unknown as { vscode: VSCodeMock }).vscode = mockVSCode;
 
-(globalThis.require as unknown as (id: string) => unknown) = (id: string) => {
-  if (id === 'vscode') return vscode;
-  if (id === 'fs')
-    return {
-      existsSync: () => true,
-      mkdirSync: () => {},
-      writeFileSync: () => {},
-      readFileSync: () => Buffer.from(''),
-      readdirSync: () => [],
-      statSync: () => ({
-        isDirectory: () => true,
-        isFile: () => true,
-      }),
-    };
-  throw new Error(`Cannot find module '${id}'`);
-};
-
+// Export for direct imports
 export { executedCommands };
-export default vscode;
+export default mockVSCode;
+
+// ... rest of the existing code ...

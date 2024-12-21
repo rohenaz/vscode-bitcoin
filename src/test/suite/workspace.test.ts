@@ -60,15 +60,28 @@ describe('Workspace Manager Tests', () => {
   });
 
   test('saveFile', async () => {
+    // Create workspace directory if it doesn't exist
+    if (!existsSync(TEST_BITCOIN_DIR)) {
+      mkdirSync(TEST_BITCOIN_DIR, { recursive: true });
+    }
+
     const workspaceManager = new WorkspaceManager(TEST_BITCOIN_DIR);
+    Object.assign(workspaceManager, {
+      detectContentType: true,
+      organizeFolders: true,
+    });
+
     const content = 'test content';
     const type = 'text/plain';
     const name = 'test';
 
-    const uri = await workspaceManager.saveFile(content, type, name);
-    expect(uri).toBeDefined();
-    expect(uri.fsPath).toContain(TEST_BITCOIN_DIR);
-    expect(uri.fsPath).toContain('text/plain');
-    expect(uri.fsPath).toMatch(/test_\d+$/);
+    const result = await workspaceManager.saveFile(content, type, name);
+    expect(result).toBeDefined();
+    expect(result.fsPath).toContain(TEST_BITCOIN_DIR);
+    expect(result.fsPath).toContain('text/plain');
+    expect(result.fsPath).toMatch(/test_\d+$/);
+
+    // Verify file was actually created
+    expect(existsSync(result.fsPath)).toBe(true);
   });
 });
