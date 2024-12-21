@@ -1,9 +1,12 @@
-import vscode from 'vscode';
 import { PrivateKey } from '@bsv/sdk';
-import type { OutputManager } from '../../output';
+import vscode from 'vscode';
 import type { KeyVault } from '../../keyVault';
+import type { OutputManager } from '../../output';
 
-export async function generatePrivateKey(output: OutputManager, keyVault: KeyVault) {
+export async function generatePrivateKey(
+  output: OutputManager,
+  keyVault: KeyVault,
+) {
   try {
     const privateKey = PrivateKey.fromRandom();
     const hex = privateKey.toString();
@@ -14,7 +17,7 @@ export async function generatePrivateKey(output: OutputManager, keyVault: KeyVau
       `Private Key (hex): ${hex}\nPrivate Key (WIF): ${wif}`,
       'bitcoin.generatePrivateKey',
       'keys',
-      'privkey'
+      'privkey',
     );
 
     // Store in vault

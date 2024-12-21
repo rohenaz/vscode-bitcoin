@@ -1,4 +1,5 @@
 # Dependencies
+.bitcoin
 node_modules/
 .pnp
 .pnp.js

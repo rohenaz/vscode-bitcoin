@@ -15,12 +15,21 @@ import fetch from 'node-fetch';
 import * as vscode from 'vscode';
 import { BapPanel } from './bapPanel';
 import { BapService } from './bapService';
+import { generateMnemonic } from './commands/generateMnemonic';
+import { generatePrivateKey } from './commands/generatePrivateKey';
+import { generatePublicKey } from './commands/generatePublicKey';
+import { generateWIF } from './commands/generateWIF';
 import { EncryptionService } from './encryption';
 import { KeyPanel } from './keyPanel';
 import { KeyVault } from './keyVault';
 import { OutputManager } from './output';
 import { WelcomePanel } from './welcomePanel';
 import { WorkspaceManager } from './workspace';
+import { asmFromScript } from './commands/asmFromScript';
+import { extendedPrivateKeyFromMnemonic } from './commands/extendedPrivateKeyFromMnemonic';
+import { publicKeyFromPrivateKey } from './commands/publicKeyFromPrivateKey';
+import { addressFromWIF } from './commands/addressFromWIF';
+import { addressFromPublicKey } from './commands/addressFromPublicKey';
 
 const { toArray, toHex, toBase64 } = Utils;
 const { fromBase58Check } = Utils;
@@ -601,26 +610,7 @@ export async function activate(context: vscode.ExtensionContext) {
     outputManager,
     'bitcoin.addressFromPublicKey',
     async () => {
-      const pubKey = await vscode.window.showInputBox({
-        value: '',
-        placeHolder: 'Ex: 02...',
-        validateInput: (_text) => {
-          return null;
-        },
-      });
-
-      if (!pubKey) {
-        return undefined;
-      }
-
-      const publicKey = PublicKey.fromString(pubKey);
-      const address = publicKey.toAddress();
-
-      return {
-        data: address,
-        type: 'addresses',
-        name: 'from_pubkey',
-      };
+      return addressFromPublicKey(outputManager);
     },
   );
 
@@ -653,34 +643,9 @@ export async function activate(context: vscode.ExtensionContext) {
     },
   );
 
-  registerCommand(
-    context,
-    outputManager,
-    'bitcoin.addressFromWIF',
-    async () => {
-      const wif = await vscode.window.showInputBox({
-        value: '',
-        placeHolder: 'Ex: L...',
-        validateInput: (_text) => {
-          return null;
-        },
-      });
-
-      if (!wif) {
-        return undefined;
-      }
-
-      const privateKey = PrivateKey.fromWif(wif);
-      const publicKey = privateKey.toPublicKey();
-      const address = publicKey.toAddress();
-
-      return {
-        data: address,
-        type: 'addresses',
-        name: 'from_wif',
-      };
-    },
-  );
+  registerCommand(context, outputManager, 'bitcoin.addressFromWIF', async () => {
+    return addressFromWIF(outputManager);
+  });
 
   // Register transaction commands
   registerCommand(context, outputManager, 'bitcoin.getTx', async () => {
@@ -990,84 +955,30 @@ export async function activate(context: vscode.ExtensionContext) {
 
   // Register script commands
   registerCommand(context, outputManager, 'bitcoin.asmFromScript', async () => {
-    const scriptHex = await vscode.window.showInputBox({
-      value: '',
-      placeHolder: 'Ex: 006a0c74657374206d657373616765...',
-      validateInput: (_text) => {
-        return null;
-      },
-    });
-
-    if (!scriptHex) {
-      return undefined;
-    }
-
-    const script = Script.fromHex(scriptHex);
-    const asmString = script.toASM();
-
-    return {
-      data: asmString,
-      type: 'scripts',
-      name: `asm_${new Date().toISOString().replace(/[:.]/g, '-')}`,
-    };
+    return asmFromScript(outputManager);
   });
 
   // Register key generation commands
   registerCommand(
     context,
     outputManager,
-    'bitcoin.generatePublicKey',
+    'bitcoin.generatePrivateKey',
     async () => {
-      const privKey = PrivateKey.fromRandom();
-      const publicKey = privKey.toPublicKey();
-
-      return {
-        data: publicKey.toString(),
-        type: 'keys',
-        name: 'pubkey',
-      };
+      return generatePrivateKey(outputManager, keyVault);
     },
   );
 
   registerCommand(
     context,
     outputManager,
-    'bitcoin.generatePrivateKey',
+    'bitcoin.generatePublicKey',
     async () => {
-      const privKey = PrivateKey.fromRandom();
-      const value = privKey.toString();
-
-      // Store in vault
-      await keyVault.storeKey({
-        type: 'private',
-        value,
-        label: 'Generated Private Key',
-      });
-
-      return {
-        data: value,
-        type: 'keys',
-        name: 'privkey',
-      };
+      return generatePublicKey(outputManager);
     },
   );
 
   registerCommand(context, outputManager, 'bitcoin.generateWIF', async () => {
-    const privKey = PrivateKey.fromRandom();
-    const value = privKey.toWif();
-
-    // Store in vault
-    await keyVault.storeKey({
-      type: 'wif',
-      value,
-      label: 'Generated WIF',
-    });
-
-    return {
-      data: value,
-      type: 'keys',
-      name: 'wif',
-    };
+    return generateWIF(outputManager, keyVault);
   });
 
   registerCommand(
@@ -1075,21 +986,7 @@ export async function activate(context: vscode.ExtensionContext) {
     outputManager,
     'bitcoin.generateMnemonic',
     async () => {
-      const mnemonic = Mnemonic.fromRandom();
-      const value = mnemonic.toString();
-
-      // Store in vault
-      await keyVault.storeKey({
-        type: 'mnemonic',
-        value,
-        label: 'Generated Mnemonic',
-      });
-
-      return {
-        data: value,
-        type: 'keys',
-        name: 'mnemonic',
-      };
+      return generateMnemonic(outputManager, keyVault);
     },
   );
 
@@ -1098,27 +995,7 @@ export async function activate(context: vscode.ExtensionContext) {
     outputManager,
     'bitcoin.extendedPrivateKeyFromMnemonic',
     async () => {
-      const mnemonicStr = await vscode.window.showInputBox({
-        value: '',
-        placeHolder:
-          'Ex: solid drastic bone type leopard law virtual share agree way bacon noise',
-        validateInput: (text) => {
-          return text.split(' ').length !== 12 ? 'Invalid mnemonic!' : null;
-        },
-      });
-
-      if (!mnemonicStr) {
-        return undefined;
-      }
-
-      const mnemonic = Mnemonic.fromString(mnemonicStr);
-      const hdPrivKey = HD.fromSeed(mnemonic.toSeed());
-
-      return {
-        data: hdPrivKey.toString(),
-        type: 'keys',
-        name: 'hdprivkey_from_mnemonic',
-      };
+      return extendedPrivateKeyFromMnemonic(outputManager);
     },
   );
 
@@ -1127,26 +1004,7 @@ export async function activate(context: vscode.ExtensionContext) {
     outputManager,
     'bitcoin.publicKeyFromPrivateKey',
     async () => {
-      const privKeyStr = await vscode.window.showInputBox({
-        value: '',
-        placeHolder: 'Ex: L...',
-        validateInput: (_text) => {
-          return null;
-        },
-      });
-
-      if (!privKeyStr) {
-        return undefined;
-      }
-
-      const privKey = PrivateKey.fromString(privKeyStr);
-      const pubKey = privKey.toPublicKey();
-
-      return {
-        data: pubKey.toString(),
-        type: 'keys',
-        name: 'pubkey_from_privkey',
-      };
+      return publicKeyFromPrivateKey(outputManager);
     },
   );
 
@@ -1433,8 +1291,10 @@ export async function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(
     vscode.commands.registerCommand('bitcoin.resetWelcomeScreen', async () => {
       await context.globalState.update('bitcoin.hasShownWelcome', false);
-      vscode.window.showInformationMessage('Welcome screen has been reset. Please reload VS Code to see it.');
-    })
+      vscode.window.showInformationMessage(
+        'Welcome screen has been reset. Please reload VS Code to see it.',
+      );
+    }),
   );
 
   console.log('Bitcoin extension activated successfully!');

@@ -95,7 +95,7 @@ const vscode = {
     showInformationMessage: async () => {},
     showWarningMessage: async (_message: string) => {},
     showErrorMessage: async (_message: string) => {},
-    showInputBox: async (_options: VSCodeOptions) => '',
+    showInputBox: async (_options: VSCodeOptions) => undefined as string | undefined,
     showQuickPick: async (_items: string[], _options: VSCodeQuickPickOptions) =>
       '',
     createWebviewPanel: () => ({

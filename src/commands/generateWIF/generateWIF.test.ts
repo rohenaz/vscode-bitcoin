@@ -3,7 +3,7 @@ import { PrivateKey } from '@bsv/sdk';
 import vscode from '../../../setup';
 import type { KeyVault } from '../../keyVault';
 import type { OutputManager } from '../../output';
-import { generatePrivateKey } from './index';
+import { generateWIF } from './index';
 
 // Create a minimal mock that only implements what we need
 const mockOutput = {
@@ -18,31 +18,22 @@ const mockKeyVault = {
 const originalShowErrorMessage = vscode.window.showErrorMessage;
 vscode.window.showErrorMessage = mock(() => Promise.resolve());
 
-describe('generatePrivateKey', () => {
-  test('generates valid private key', async () => {
-    const result = await generatePrivateKey(mockOutput, mockKeyVault);
+describe('generateWIF', () => {
+  test('generates valid WIF', async () => {
+    const result = await generateWIF(mockOutput, mockKeyVault);
 
     // Check return value format
     expect(result).toEqual({
-      data: expect.stringMatching(/^[0-9a-f]{64}$/),
+      data: expect.stringMatching(/^[KL][1-9A-HJ-NP-Za-km-z]{51}$/),
       type: 'keys',
-      name: 'privkey',
+      name: 'wif',
     });
-
-    // Verify output was handled
-    expect(mockOutput.handleOutput).toHaveBeenCalledTimes(1);
-    expect(mockOutput.handleOutput).toHaveBeenCalledWith(
-      expect.stringContaining('Private Key (hex):'),
-      'bitcoin.generatePrivateKey',
-      'keys',
-      'privkey',
-    );
 
     // Verify key was stored in vault
     expect(mockKeyVault.storeKey).toHaveBeenCalledWith({
-      type: 'private',
-      value: expect.stringMatching(/^[0-9a-f]{64}$/),
-      label: 'Generated Private Key',
+      type: 'wif',
+      value: expect.stringMatching(/^[KL][1-9A-HJ-NP-Za-km-z]{51}$/),
+      label: 'Generated WIF',
     });
   });
 
@@ -54,11 +45,11 @@ describe('generatePrivateKey', () => {
     };
 
     try {
-      await expect(
-        generatePrivateKey(mockOutput, mockKeyVault),
-      ).rejects.toThrow('Test error');
+      await expect(generateWIF(mockOutput, mockKeyVault)).rejects.toThrow(
+        'Test error',
+      );
       expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
-        'Error generating private key: Error: Test error',
+        'Error generating WIF: Error: Test error',
       );
     } finally {
       // Restore original functions

@@ -143,36 +143,6 @@ describe('Bitcoin Extension Tests', () => {
     expect(hdPub.toString()).toMatch(/^xpub/);
   });
 
-  test('Private key operations', () => {
-    // Test random generation
-    const privKey = PrivateKey.fromRandom();
-    expect(privKey).toBeDefined();
-    expect(privKey.toWif()).toMatch(/^[KL][1-9A-HJ-NP-Za-km-z]{51}/);
-
-    // Test WIF conversion
-    const wif = privKey.toWif();
-    const fromWif = PrivateKey.fromWif(wif);
-    expect(fromWif.toString()).toBe(privKey.toString());
-
-    // Test hex conversion
-    const hex = privKey.toString();
-    const fromHex = PrivateKey.fromString(hex);
-    expect(fromHex.toString()).toBe(hex);
-  });
-
-  test('Public key operations', () => {
-    // Test public key derivation
-    const privKey = PrivateKey.fromRandom();
-    const pubKey = privKey.toPublicKey();
-    expect(pubKey).toBeDefined();
-    expect(pubKey.toString()).toMatch(/^0[2-3][0-9A-Fa-f]{64}/);
-
-    // Test public key from string
-    const pubKeyStr = pubKey.toString();
-    const fromStr = PublicKey.fromString(pubKeyStr);
-    expect(fromStr.toString()).toBe(pubKeyStr);
-  });
-
   test('Script operations', () => {
     const privKey = PrivateKey.fromRandom();
     const pubKey = privKey.toPublicKey();
@@ -277,22 +247,6 @@ describe('Bitcoin Extension Tests', () => {
 
     expect(tx.inputs).toHaveLength(1);
     expect(tx.outputs).toHaveLength(1);
-  });
-
-  test('Mnemonic operations', () => {
-    // Test mnemonic generation
-    const mnemonic = Mnemonic.fromRandom();
-    expect(mnemonic).toBeDefined();
-    expect(mnemonic.toString().split(' ').length).toBe(12);
-
-    // Test seed generation
-    const seed = mnemonic.toSeed();
-    expect(seed).toBeDefined();
-
-    // Test HD key from mnemonic
-    const hdKey = HD.fromSeed(seed);
-    expect(hdKey).toBeDefined();
-    expect(hdKey.toString()).toMatch(/^xprv/);
   });
 
   // Command registration tests
@@ -620,8 +574,13 @@ describe('Bitcoin Extension Tests', () => {
       expect(panel).toBeDefined();
 
       // Access _handleMessage through type assertion
-      type MessageHandler = (message: { command: string; feature?: string }) => Promise<void>;
-      const handleMessage = ((panel as unknown as { _handleMessage: MessageHandler })._handleMessage).bind(panel);
+      type MessageHandler = (message: {
+        command: string;
+        feature?: string;
+      }) => Promise<void>;
+      const handleMessage = (
+        panel as unknown as { _handleMessage: MessageHandler }
+      )._handleMessage.bind(panel);
       await handleMessage({
         command: 'tryFeature',
         feature: 'generatePrivateKey',
@@ -640,7 +599,9 @@ describe('Bitcoin Extension Tests', () => {
 
       // Access _handleMessage through type assertion
       type MessageHandler = (message: { command: string }) => Promise<void>;
-      const handleMessage = ((panel as unknown as { _handleMessage: MessageHandler })._handleMessage).bind(panel);
+      const handleMessage = (
+        panel as unknown as { _handleMessage: MessageHandler }
+      )._handleMessage.bind(panel);
       await handleMessage({ command: 'openSettings' });
       expect(executedCommands[executedCommands.length - 1]).toBe(
         'workbench.action.openSettings',
