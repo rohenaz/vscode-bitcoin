@@ -1,4 +1,4 @@
-import vsApi, { WebviewPanel } from './vsShim';
+import vsApi, { Uri, WebviewPanel, Disposable } from './vsShim';
 
 interface WebviewMessage {
   command: 'tryFeature' | 'openKeybindings' | 'openSettings';
@@ -8,10 +8,10 @@ interface WebviewMessage {
 export class WelcomePanel {
   public static currentPanel: WelcomePanel | undefined;
   private readonly _panel: WebviewPanel;
-  private readonly _extensionUri: vsApi.Uri;
-  private _disposables: vsApi.Disposable[] = [];
+  private readonly _extensionUri: Uri;
+  private _disposables: Disposable[] = [];
 
-  private constructor(panel: WebviewPanel, extensionUri: vsApi.Uri) {
+  private constructor(panel: WebviewPanel, extensionUri: Uri) {
     this._panel = panel;
     this._extensionUri = extensionUri;
     this._panel.onDidDispose(() => this.dispose(), null, this._disposables);
@@ -23,7 +23,7 @@ export class WelcomePanel {
     this._updateWebview();
   }
 
-  public static show(extensionUri: vsApi.Uri) {
+  public static show(extensionUri: Uri) {
     if (process.env.TEST_ENV === 'true') {
       return;
     }

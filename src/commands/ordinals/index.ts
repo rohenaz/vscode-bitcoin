@@ -76,7 +76,7 @@ async function fetchInscriptionContent(
 }
 
 export async function fetchOrdinalsInscription(
-  outputManager: OutputManager,
+  _outputManager: OutputManager,
 ): Promise<{ data: string; type: string; name?: string } | undefined> {
   const outpoint = await vsApi.window.showInputBox({
     value: '',

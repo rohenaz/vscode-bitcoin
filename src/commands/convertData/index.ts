@@ -1,72 +1,43 @@
+import vsApi from '../../vsShim';
 import type { OutputManager } from '../../output';
-import { detectFormat } from '../../utils';
-import { Utils } from '@bsv/sdk';
-const { toArray, toHex, toBase64 } = Utils;
+import { convertData, detectFormat, type DataFormat } from '../../utils';
 
-function isHex(str: string): boolean {
-  return /^[0-9A-Fa-f]*$/.test(str);
-}
+export async function handleConvertDataCommand(): Promise<{ data: string; type: string; name?: string } | undefined> {
+  const input = await vsApi.window.showInputBox({
+    placeHolder: 'Enter data to convert (hex, base64, or binary array)',
+    validateInput: (text) => {
+      return text.length === 0 ? 'Input cannot be empty' : null;
+    },
+  });
 
-function isBase64(str: string): boolean {
-  return /^[A-Za-z0-9+/]*={0,2}$/.test(str);
-}
-
-export function convertData(
-  input: string,
-  fromFormat: string,
-  toFormat: string,
-): string {
-  let bytes: number[];
-
-  // First convert input to byte array using toArray
-  switch (fromFormat) {
-    case 'hex':
-      try {
-        if (!isHex(input)) {
-          throw new Error('Invalid hex string');
-        }
-        bytes = toArray(Buffer.from(input, 'hex'));
-      } catch (e) {
-        throw new Error('Invalid hex input');
-      }
-      break;
-    case 'base64':
-      try {
-        if (!isBase64(input)) {
-          throw new Error('Invalid base64 string');
-        }
-        bytes = toArray(Buffer.from(input, 'base64'));
-      } catch (e) {
-        throw new Error('Invalid base64 input');
-      }
-      break;
-    case 'binary':
-      try {
-        const arr = JSON.parse(input);
-        if (
-          !Array.isArray(arr) ||
-          !arr.every((n) => typeof n === 'number' && n >= 0 && n <= 255)
-        ) {
-          throw new Error('Invalid binary array');
-        }
-        bytes = arr;
-      } catch (e) {
-        throw new Error('Invalid binary array input');
-      }
-      break;
-    default:
-      throw new Error('Unsupported input format');
+  if (!input) {
+    return undefined;
   }
 
-  // Then convert byte array to desired output format using Utils functions
-  switch (toFormat) {
-    case 'hex':
-      return toHex(bytes);
-    case 'base64':
-      return toBase64(bytes);
-    case 'binary':
-      return JSON.stringify(bytes);
-    default:
-      throw new Error('Unsupported output format');
+  const inputFormat = detectFormat(input);
+  if (!inputFormat) {
+    throw new Error('Unable to detect input format. Please ensure input is valid hex, base64, or binary array.');
   }
+
+  const formats = ['hex', 'base64', 'binary'];
+  const targetFormat = await vsApi.window.showQuickPick(
+    formats.filter((f) => f !== inputFormat),
+    {
+      placeHolder: `Convert from ${inputFormat} to:`,
+    },
+  ) as DataFormat;
+
+  if (!targetFormat) {
+    return undefined;
+  }
+
+  const result = convertData(input, inputFormat, targetFormat);
+  return {
+    data: `Original (${inputFormat}):\n${input}\n\nConverted (${targetFormat}):\n${result}`,
+    type: 'conversions',
+    name: `${inputFormat}_to_${targetFormat}`,
+  };
 }
+
+// Re-export the sync version for use in tests and other places
+export { convertData } from '../../utils';

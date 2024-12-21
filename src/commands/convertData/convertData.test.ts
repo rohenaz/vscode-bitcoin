@@ -2,13 +2,12 @@ import { describe, expect, test, mock } from 'bun:test';
 import vscode from '../../test/setup';
 import { convertData } from '.';
 import type { OutputManager } from '../../output';
-import { detectFormat } from '../../utils';
+import { detectFormat, type DataFormat } from '../../utils';
 
 // Create a minimal mock that only implements what we need
 const mockOutput = {
   handleOutput: mock(() => Promise.resolve()),
 } as unknown as OutputManager;
-
 
 // Data conversion tests
 describe('Data Conversion', () => {
@@ -68,11 +67,11 @@ describe('Data Conversion', () => {
     // Invalid binary array
     expect(() => convertData('[1,2,invalid]', 'binary', 'hex')).toThrow();
 
-    // Invalid format types
-    expect(() => convertData('48656c6c6f', 'hex', 'invalid-format')).toThrow(
+    // Test with invalid format by casting (to test runtime behavior)
+    expect(() => convertData('48656c6c6f', 'hex', 'xyz' as DataFormat)).toThrow(
       'Unsupported output format',
     );
-    expect(() => convertData('48656c6c6f', 'invalid-format', 'hex')).toThrow(
+    expect(() => convertData('48656c6c6f', 'xyz' as DataFormat, 'hex')).toThrow(
       'Unsupported input format',
     );
   });

@@ -36,7 +36,7 @@ import { publicKeyFromPrivateKey } from './commands/publicKeyFromPrivateKey';
 import { addressFromWIF } from './commands/addressFromWIF';
 import { addressFromPublicKey } from './commands/addressFromPublicKey';
 import { publicKeyFromWIF } from './commands/publicKeyFromWIF';
-import { convertData, detectFormat, type DataFormat } from './utils';
+import { handleConvertDataCommand } from './commands/convertData';
 
 const { fromBase58Check } = Utils;
 
@@ -269,54 +269,7 @@ export async function activate(context: ExtensionContext) {
 
   // Register convertData command
   context.subscriptions.push(
-    vsApi.commands.registerCommand('bitcoin.convertData', async () => {
-      try {
-        const input = await vsApi.window.showInputBox({
-          placeHolder: 'Enter data to convert (hex, base64, or binary array)',
-          validateInput: (text) => {
-            return text.length === 0 ? 'Input cannot be empty' : null;
-          },
-        });
-
-        if (!input) {
-          return;
-        }
-
-        const inputFormat = detectFormat(input);
-        if (!inputFormat) {
-          vsApi.window.showErrorMessage(
-            'Unable to detect input format. Please ensure input is valid hex, base64, or binary array.',
-          );
-          return;
-        }
-
-        const formats = ['hex', 'base64', 'binary'];
-        const targetFormat = await vsApi.window.showQuickPick(
-          formats.filter((f) => f !== inputFormat),
-          {
-            placeHolder: `Convert from ${inputFormat} to:`,
-          },
-        ) as DataFormat;
-
-        if (!targetFormat) {
-          return;
-        }
-
-        const result = convertData(input, inputFormat, targetFormat);
-        await vsApi.commands.executeCommand(
-          'bitcoin.handleOutput',
-          `Original (${inputFormat}):\n${input}\n\nConverted (${targetFormat}):\n${result}`,
-          'conversions',
-          `${inputFormat}_to_${targetFormat}`,
-        );
-      } catch (error) {
-        vsApi.window.showErrorMessage(
-          `Command failed: ${
-            error instanceof Error ? error.message : 'Unknown error'
-          }`,
-        );
-      }
-    }),
+    vsApi.commands.registerCommand('bitcoin.convertData', handleConvertDataCommand)
   );
 
   // Register detect and convert command

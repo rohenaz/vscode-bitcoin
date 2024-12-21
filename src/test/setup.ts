@@ -221,7 +221,7 @@ const mockVSCode: VSCodeMock = {
       viewColumn: _column,
       active: true,
       visible: true,
-      onDidChangeViewState: (listener: (e: WebviewPanelOnDidChangeViewStateEvent) => unknown) => ({ dispose: () => {} }),
+      onDidChangeViewState: (_listener: (e: WebviewPanelOnDidChangeViewStateEvent) => unknown) => ({ dispose: () => {} }),
     }),
     showInformationMessage: async () => undefined,
     showWarningMessage: async () => undefined,
@@ -234,7 +234,7 @@ const mockVSCode: VSCodeMock = {
       selection: { isEmpty: true },
     },
     withProgress: async <T>(
-      options: {
+      _options: {
         location: number;
         title?: string;
         cancellable?: boolean;
