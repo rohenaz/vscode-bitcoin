@@ -98,7 +98,12 @@ const vscode = {
     showInputBox: async (_options: VSCodeOptions) => '',
     showQuickPick: async (_items: string[], _options: VSCodeQuickPickOptions) =>
       '',
-    createWebviewPanel: () => ({
+    createWebviewPanel: (
+      viewType: string,
+      title: string,
+      column: number,
+      options: { enableScripts?: boolean }
+    ) => ({
       webview: {
         html: '',
         onDidReceiveMessage: () => ({ dispose: () => {} }),
@@ -147,7 +152,7 @@ const vscode = {
       getText: () => '',
       save: () => Promise.resolve(),
     }),
-    getConfiguration: () => ({
+    getConfiguration: (section?: string) => ({
       get: (key: string) => {
         switch (key) {
           case 'workspace.path':

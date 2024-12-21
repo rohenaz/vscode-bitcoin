@@ -46,7 +46,7 @@ describe('addressFromWIF', () => {
 
   test('returns undefined when input is cancelled', async () => {
     // Mock cancelled input
-    vscode.window.showInputBox = async () => undefined;
+    vscode.window.showInputBox = async () => "";
 
     const result = await addressFromWIF(mockOutput);
     expect(result).toBeUndefined();

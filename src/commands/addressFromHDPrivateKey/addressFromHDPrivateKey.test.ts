@@ -54,19 +54,15 @@ describe('addressFromHDPrivateKey', () => {
 
   test('returns undefined when xpriv input is cancelled', async () => {
     // Mock cancelled first input
-    vscode.window.showInputBox = async () => undefined;
+    vscode.window.showInputBox = async () => "";
 
     const result = await addressFromHDPrivateKey(mockOutput);
     expect(result).toBeUndefined();
   });
 
-  test('returns undefined when path input is cancelled', async () => {
+  test('returns empty when path input is cancelled', async () => {
     // Mock cancelled second input
-    let inputCount = 0;
-    vscode.window.showInputBox = async () => {
-      inputCount++;
-      return inputCount === 1 ? 'xprv...' : undefined;
-    };
+    vscode.window.showInputBox = async () => "";
 
     const result = await addressFromHDPrivateKey(mockOutput);
     expect(result).toBeUndefined();

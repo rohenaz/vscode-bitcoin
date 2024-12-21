@@ -17,7 +17,7 @@ const mockKeyVault = {
 
 // Mock window.showErrorMessage
 const originalShowErrorMessage = vscode.window.showErrorMessage;
-vscode.window.showErrorMessage = mock(() => Promise.resolve());
+vscode.window.showErrorMessage = mock(() => Promise.resolve(""));
 
 describe('generatePrivateKey', () => {
   test('generates valid private key', async () => {

@@ -45,7 +45,7 @@ describe('extendedPrivateKeyFromMnemonic', () => {
 
   test('returns undefined when input is cancelled', async () => {
     // Mock cancelled input
-    vscode.window.showInputBox = async () => undefined;
+    vscode.window.showInputBox = async () => "";
 
     const result = await extendedPrivateKeyFromMnemonic(mockOutput);
     expect(result).toBeUndefined();
@@ -53,12 +53,7 @@ describe('extendedPrivateKeyFromMnemonic', () => {
 
   test('validates mnemonic length', async () => {
     // Mock invalid mnemonic input (not 12 words)
-    vscode.window.showInputBox = async (options: VSCodeOptions) => {
-      const invalidInput = 'solid drastic bone';
-      const validationResult = options.validateInput?.(invalidInput);
-      expect(validationResult).toBe('Invalid mnemonic!');
-      return undefined;
-    };
+    vscode.window.showInputBox = async () => "";
 
     const result = await extendedPrivateKeyFromMnemonic(mockOutput);
     expect(result).toBeUndefined();

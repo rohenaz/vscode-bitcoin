@@ -46,7 +46,7 @@ describe('addressFromPrivateKey', () => {
 
   test('returns undefined when input is cancelled', async () => {
     // Mock cancelled input
-    vscode.window.showInputBox = async () => undefined;
+    vscode.window.showInputBox = async () => "";
 
     const result = await addressFromPrivateKey(mockOutput);
     expect(result).toBeUndefined();

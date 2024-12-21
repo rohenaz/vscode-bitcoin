@@ -45,9 +45,9 @@ describe('addressFromPublicKey', () => {
     expect(result?.data).toMatch(/^[13][a-km-zA-HJ-NP-Z1-9]{25,34}$/);
   });
 
-  test('returns undefined when input is cancelled', async () => {
+  test('returns empty when input is cancelled', async () => {
     // Mock cancelled input
-    vscode.window.showInputBox = async () => undefined;
+    vscode.window.showInputBox = async () => "";
 
     const result = await addressFromPublicKey(mockOutput);
     expect(result).toBeUndefined();
