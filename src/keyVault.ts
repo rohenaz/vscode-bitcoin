@@ -22,11 +22,13 @@ export interface KeyEntry {
   value: string;
   timestamp: number;
   metadata?: Record<string, string>;
+  isEncryptionKey?: boolean;
 }
 
 export class KeyVault {
   private storage: SecretStorage;
   private keyListKey = 'bitcoin.keyList';
+  private encryptionKeyIdKey = 'bitcoin.encryptionKeyId';
   private onKeyListChanged: EventEmitter<void>;
 
   constructor(context: ExtensionContext) {
@@ -126,6 +128,46 @@ export class KeyVault {
     };
 
     await this.storage.store(id, JSON.stringify(updatedEntry));
+    this.onKeyListChanged.fire();
+  }
+
+  async getEncryptionKey(): Promise<KeyEntry | undefined> {
+    const encryptionKeyId = await this.storage.get(this.encryptionKeyIdKey);
+    if (!encryptionKeyId) return undefined;
+    return this.getKey(encryptionKeyId);
+  }
+
+  async setEncryptionKey(id: string): Promise<void> {
+    const key = await this.getKey(id);
+    if (!key) {
+      throw new Error('Key not found');
+    }
+
+    // Clear isEncryptionKey flag from all keys
+    const allKeys = await this.getAllKeys();
+    await Promise.all(
+      allKeys
+        .filter(k => k.isEncryptionKey)
+        .map(async k => {
+          const updated = { ...k, isEncryptionKey: false };
+          await this.storage.store(k.id, JSON.stringify(updated));
+        })
+    );
+
+    // Set the new encryption key
+    const updatedKey = { ...key, isEncryptionKey: true };
+    await this.storage.store(id, JSON.stringify(updatedKey));
+    await this.storage.store(this.encryptionKeyIdKey, id);
+    this.onKeyListChanged.fire();
+  }
+
+  async clearEncryptionKey(): Promise<void> {
+    const key = await this.getEncryptionKey();
+    if (key) {
+      const updatedKey = { ...key, isEncryptionKey: false };
+      await this.storage.store(key.id, JSON.stringify(updatedKey));
+    }
+    await this.storage.delete(this.encryptionKeyIdKey);
     this.onKeyListChanged.fire();
   }
 }

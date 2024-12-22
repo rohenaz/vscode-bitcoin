@@ -5,24 +5,29 @@ import type { WorkspaceManager } from '../../workspace';
 export async function encrypt(
   encryptionService: EncryptionService,
   workspaceManager: WorkspaceManager,
+  initialText?: string,
 ): Promise<void> {
   try {
-    // Get active text editor
-    const editor = vsApi.window.activeTextEditor;
-    if (!editor) {
-      vsApi.window.showErrorMessage('No active text editor');
-      return;
-    }
+    let text = initialText;
 
-    // Get selected text or entire document
-    const selection = editor.selection;
-    const text = selection.isEmpty
-      ? editor.document.getText()
-      : editor.document.getText(selection);
-
+    // If no initial text provided, get from editor
     if (!text) {
-      vsApi.window.showErrorMessage('No text to encrypt');
-      return;
+      const editor = vsApi.window.activeTextEditor;
+      if (!editor) {
+        vsApi.window.showErrorMessage('No active text editor');
+        return;
+      }
+
+      // Get selected text or entire document
+      const selection = editor.selection;
+      text = selection.isEmpty
+        ? editor.document.getText()
+        : editor.document.getText(selection);
+
+      if (!text) {
+        vsApi.window.showErrorMessage('No text to encrypt');
+        return;
+      }
     }
 
     // Get encryption key
@@ -31,8 +36,13 @@ export async function encrypt(
       return; // User cancelled
     }
 
-    // Generate filename from source
-    const fileName = editor.document.uri.fsPath.split('/').pop() || 'unknown';
+    // Check if this is a system key
+    const isSystemKey = await encryptionService.isSystemKey(key);
+
+    // Generate filename from source and public key
+    const sourceFile = vsApi.window.activeTextEditor?.document.uri.fsPath.split('/').pop() || 'unknown';
+    const pubKey = key.toPublicKey().toString().slice(0, 8); // Use first 8 chars of public key
+    const fileName = `encrypted_${sourceFile}_${pubKey}.dat`;
 
     // Encrypt the data
     const { encryptedData, privateKey } = await encryptionService.encrypt(
@@ -48,21 +58,26 @@ export async function encrypt(
     const uri = await workspaceManager.saveFile(
       encryptedData,
       'encrypted',
-      `encrypted_${fileName}.dat`,
+      fileName,
     );
 
-    // Show success message with key
-    const wif = privateKey.toWif();
-    await vsApi.window.showInformationMessage(
-      'Data encrypted and saved. Keep this key safe:',
-      { modal: true },
-    );
-    await vsApi.window.showInformationMessage(wif, { modal: true });
+    // Show success message with key if it's not from the key vault
+    if (!isSystemKey) {
+      const wif = privateKey.toWif();
+      await vsApi.window.showInformationMessage(
+        'Data encrypted and saved. Keep this key safe:',
+        { modal: true },
+      );
+      await vsApi.window.showInformationMessage(wif, { modal: true });
+    } else {
+      await vsApi.window.showInformationMessage(
+        'Data encrypted and saved using system key.',
+        { modal: true },
+      );
+    }
 
     // Open the encrypted file
-    const doc = await vsApi.workspace.openTextDocument(
-      vsApi.Uri.file(uri.fsPath),
-    );
+    const doc = await vsApi.workspace.openTextDocument(uri.fsPath);
     await vsApi.window.showTextDocument(doc);
   } catch (error) {
     vsApi.window.showErrorMessage(
@@ -75,24 +90,29 @@ export async function encrypt(
 
 export async function decrypt(
   encryptionService: EncryptionService,
+  initialText?: string,
 ): Promise<void> {
   try {
-    // Get active text editor
-    const editor = vsApi.window.activeTextEditor;
-    if (!editor) {
-      vsApi.window.showErrorMessage('No active text editor');
-      return;
-    }
+    let text = initialText;
 
-    // Get selected text or entire document
-    const selection = editor.selection;
-    const text = selection.isEmpty
-      ? editor.document.getText()
-      : editor.document.getText(selection);
-
+    // If no initial text provided, get from editor
     if (!text) {
-      vsApi.window.showErrorMessage('No text to decrypt');
-      return;
+      const editor = vsApi.window.activeTextEditor;
+      if (!editor) {
+        vsApi.window.showErrorMessage('No active text editor');
+        return;
+      }
+
+      // Get selected text or entire document
+      const selection = editor.selection;
+      text = selection.isEmpty
+        ? editor.document.getText()
+        : editor.document.getText(selection);
+
+      if (!text) {
+        vsApi.window.showErrorMessage('No text to decrypt');
+        return;
+      }
     }
 
     // Get decryption key

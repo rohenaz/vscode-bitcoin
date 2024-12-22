@@ -7,6 +7,16 @@ export class EncryptionService {
   constructor(private keyVault: KeyVault) {}
 
   /**
+   * Check if a private key is the current system key
+   * @param key The private key to check
+   * @returns true if the key is the current system key
+   */
+  async isSystemKey(key: PrivateKey): Promise<boolean> {
+    const systemKey = await this.keyVault.getEncryptionKey();
+    return systemKey ? systemKey.value === key.toWif() : false;
+  }
+
+  /**
    * Encrypt data using a private key
    * @param data The data to encrypt
    * @param privateKey Optional private key to use. If not provided, a new one will be generated
@@ -113,8 +123,13 @@ export class EncryptionService {
   async promptForKey(
     mode: 'encrypt' | 'decrypt',
   ): Promise<PrivateKey | undefined> {
+    // Check if we have a system key
+    const systemKey = await this.keyVault.getEncryptionKey();
+
     if (mode === 'encrypt') {
-      const options = ['Generate New Key', 'Use Existing Key (WIF)'];
+      const options = systemKey 
+        ? ['Use System Key', 'Generate New Key', 'Use Existing Key (WIF)']
+        : ['Generate New Key', 'Use Existing Key (WIF)'];
       const selection = await vsApi.window.showQuickPick(options, {
         placeHolder: 'Select encryption key source',
       });
@@ -123,8 +138,28 @@ export class EncryptionService {
         return undefined;
       }
 
-      if (selection === options[0]) {
+      if (selection === 'Use System Key' && systemKey) {
+        return PrivateKey.fromWif(systemKey.value);
+      }
+
+      if (selection === 'Generate New Key') {
         return PrivateKey.fromRandom();
+      }
+    } else {
+      // For decryption, check if we have a system key
+      if (systemKey) {
+        const options = ['Use System Key', 'Enter Key'];
+        const selection = await vsApi.window.showQuickPick(options, {
+          placeHolder: 'Choose decryption key source',
+        });
+
+        if (!selection) {
+          return undefined;
+        }
+
+        if (selection === 'Use System Key') {
+          return PrivateKey.fromWif(systemKey.value);
+        }
       }
     }
 

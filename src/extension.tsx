@@ -38,6 +38,7 @@ import {
 } from './vsShim';
 import { WelcomePanel } from './welcomePanel';
 import { WorkspaceManager } from './workspace';
+import { encrypt, decrypt } from './commands/encryption';
 
 const { fromBase58Check, toBase64, toArray } = Utils;
 
@@ -621,44 +622,7 @@ export async function activate(context: ExtensionContext) {
           return;
         }
 
-        // Get encryption key
-        const key = await encryptionService.promptForKey('encrypt');
-        if (!key) {
-          return; // User cancelled
-        }
-
-        // Generate filename from source
-        const fileName =
-          editor.document.uri.fsPath.split('/').pop() || 'unknown';
-
-        // Encrypt the data
-        const { encryptedData, privateKey } = await encryptionService.encrypt(
-          text,
-          key,
-          {
-            fileName,
-            command: 'bitcoin.encrypt',
-          },
-        );
-
-        // Save the encrypted data
-        const uri = await workspaceManager.saveFile(
-          encryptedData,
-          'encrypted',
-          `encrypted_${fileName}.dat`,
-        );
-
-        // Show success message with key
-        const wif = privateKey.toWif();
-        await vsApi.window.showInformationMessage(
-          'Data encrypted and saved. Keep this key safe:',
-          { modal: true },
-        );
-        await vsApi.window.showInformationMessage(wif, { modal: true });
-
-        // Open the encrypted file
-        const doc = await vsApi.workspace.openTextDocument(uri.fsPath);
-        await vsApi.window.showTextDocument(doc);
+        await encrypt(encryptionService, workspaceManager, text);
       } catch (error) {
         vsApi.window.showErrorMessage(
           `Encryption failed: ${
@@ -688,21 +652,7 @@ export async function activate(context: ExtensionContext) {
           return;
         }
 
-        // Get decryption key
-        const key = await encryptionService.promptForKey('decrypt');
-        if (!key) {
-          return; // User cancelled
-        }
-
-        // Decrypt the data
-        const decrypted = await encryptionService.decrypt(text, key);
-
-        // Create new document with decrypted content
-        const doc = await vsApi.workspace.openTextDocument({
-          content: decrypted.toString(),
-          language: 'plaintext',
-        });
-        await vsApi.window.showTextDocument(doc);
+        await decrypt(encryptionService, text);
       } catch (error) {
         vsApi.window.showErrorMessage(
           `Decryption failed: ${

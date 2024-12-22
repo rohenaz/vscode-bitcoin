@@ -147,6 +147,18 @@ export class KeyPanel {
             .type-hdpublic { background: var(--vscode-notificationsInfoIcon-foreground); }
             .type-mnemonic { background: var(--vscode-warningForeground); }
             .type-encryption { background: var(--vscode-errorForeground); }
+            .encryption-key {
+                border: 2px solid var(--vscode-focusBorder) !important;
+            }
+            .encryption-key-badge {
+                display: inline-block;
+                padding: 2px 6px;
+                margin: 4px 0;
+                background: var(--vscode-badge-background);
+                color: var(--vscode-badge-foreground);
+                border-radius: 4px;
+                font-size: 0.8em;
+            }
         </style>
     </head>
     <body>
@@ -181,6 +193,14 @@ export class KeyPanel {
                 }
             }
 
+            function setEncryptionKey(id) {
+                vscode.postMessage({ command: 'setEncryptionKey', id });
+            }
+
+            function clearEncryptionKey() {
+                vscode.postMessage({ command: 'clearEncryptionKey' });
+            }
+
             function searchKeys(query) {
                 const filteredKeys = keyData.filter(key => {
                     const searchStr = (key.label || '').toLowerCase();
@@ -192,17 +212,22 @@ export class KeyPanel {
                         const date = new Date(key.timestamp).toLocaleString();
                         const label = key.label || 'Untitled';
                         return \`
-                            <div class="key-entry" data-id="\${key.id}">
+                            <div class="key-entry \${key.isEncryptionKey ? 'encryption-key' : ''}" data-id="\${key.id}">
                                 <div class="key-header">
                                     <div class="key-type type-\${key.type}">\${key.type}</div>
                                     <div class="key-label" onclick="editLabel('\${key.id}', '\${label}')">\${label}</div>
                                     <div class="key-actions">
                                         <button onclick="copyValue('\${key.id}')" title="Copy Value">📋</button>
+                                        \${!key.isEncryptionKey ? 
+                                          \`<button onclick="setEncryptionKey('\${key.id}')" title="Set as Encryption Key">🔐</button>\` :
+                                          \`<button onclick="clearEncryptionKey()" title="Clear Encryption Key">🔓</button>\`
+                                        }
                                         <button onclick="deleteKey('\${key.id}')" title="Delete Key">🗑️</button>
                                     </div>
                                 </div>
                                 <div class="key-details">
                                     <div class="key-date">\${date}</div>
+                                    \${key.isEncryptionKey ? '<div class="encryption-key-badge">Encryption Key</div>' : ''}
                                     <div class="key-value">\${maskValue(key.value)}</div>
                                 </div>
                             </div>
@@ -223,19 +248,22 @@ export class KeyPanel {
     const date = new Date(key.timestamp).toLocaleString();
     const label = key.label || 'Untitled';
     return `
-      <div class="key-entry" data-id="${key.id}">
+      <div class="key-entry ${key.isEncryptionKey ? 'encryption-key' : ''}" data-id="${key.id}">
         <div class="key-header">
           <div class="key-type type-${key.type}">${key.type}</div>
-          <div class="key-label" onclick="editLabel('${
-            key.id
-          }', '${label}')">${label}</div>
+          <div class="key-label" onclick="editLabel('${key.id}', '${label}')">${label}</div>
           <div class="key-actions">
             <button onclick="copyValue('${key.id}')" title="Copy Value">📋</button>
+            ${!key.isEncryptionKey ? 
+              `<button onclick="setEncryptionKey('${key.id}')" title="Set as Encryption Key">🔐</button>` :
+              `<button onclick="clearEncryptionKey()" title="Clear Encryption Key">🔓</button>`
+            }
             <button onclick="deleteKey('${key.id}')" title="Delete Key">🗑️</button>
           </div>
         </div>
         <div class="key-details">
           <div class="key-date">${date}</div>
+          ${key.isEncryptionKey ? '<div class="encryption-key-badge">Encryption Key</div>' : ''}
           <div class="key-value">${this.maskValue(key.value)}</div>
         </div>
       </div>
@@ -248,7 +276,7 @@ export class KeyPanel {
   }
 
   private handleMessage(message: {
-    command: 'copyValue' | 'deleteKey' | 'updateLabel';
+    command: 'copyValue' | 'deleteKey' | 'updateLabel' | 'setEncryptionKey' | 'clearEncryptionKey';
     id: string;
     label?: string;
   }) {
@@ -265,12 +293,28 @@ export class KeyPanel {
             .updateKeyLabel(message.id, message.label)
             .catch((error) => {
               vsApi.window.showErrorMessage(
-                `Failed to update label: ${
-                  error instanceof Error ? error.message : String(error)
-                }`,
+                `Failed to update label: ${error instanceof Error ? error.message : String(error)}`,
               );
             });
         }
+        break;
+      case 'setEncryptionKey':
+        this._vault.setEncryptionKey(message.id)
+          .then(() => vsApi.window.showInformationMessage('Encryption key set'))
+          .catch((error) => {
+            vsApi.window.showErrorMessage(
+              `Failed to set encryption key: ${error instanceof Error ? error.message : String(error)}`,
+            );
+          });
+        break;
+      case 'clearEncryptionKey':
+        this._vault.clearEncryptionKey()
+          .then(() => vsApi.window.showInformationMessage('Encryption key cleared'))
+          .catch((error) => {
+            vsApi.window.showErrorMessage(
+              `Failed to clear encryption key: ${error instanceof Error ? error.message : String(error)}`,
+            );
+          });
         break;
     }
   }
@@ -291,8 +335,32 @@ export class KeyPanel {
     }
   }
 
-  private async deleteKey(id: string) {
+  private async deleteKey(id: string): Promise<void> {
     try {
+      // Check if this is the system key
+      const key = await this._vault.getKey(id);
+      if (key?.isEncryptionKey) {
+        const result = await vsApi.window.showWarningMessage(
+          'This is your system encryption key. Any data encrypted with this key will be unreadable if the key is destroyed. Are you sure you want to delete it?',
+          { modal: true },
+          'Delete',
+          'Cancel'
+        );
+        if (result !== 'Delete') {
+          return;
+        }
+      } else {
+        const result = await vsApi.window.showWarningMessage(
+          'Are you sure you want to delete this key?',
+          { modal: true },
+          'Delete',
+          'Cancel'
+        );
+        if (result !== 'Delete') {
+          return;
+        }
+      }
+
       await this._vault.deleteKey(id);
       vsApi.window.showInformationMessage('Key deleted');
     } catch (error) {

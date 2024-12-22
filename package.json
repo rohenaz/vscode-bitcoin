@@ -27,117 +27,137 @@
       },
       {
         "command": "bitcoin.test",
-        "title": "Bitcoin: Test Command"
+        "title": "Test Command",
+        "category": "Bitcoin"
       },
       {
         "command": "bitcoin.asmFromScript",
-        "title": "Bitcoin: ASM from Script"
+        "title": "ASM from Script",
+        "category": "Bitcoin"
       },
       {
         "command": "bitcoin.addressFromWIF",
-        "title": "Bitcoin: Address from WIF"
+        "title": "Address from WIF",
+        "category": "Bitcoin"
       },
       {
         "command": "bitcoin.addressFromPublicKey",
-        "title": "Bitcoin: Address from Public Key"
+        "title": "Address from Public Key",
+        "category": "Bitcoin"
       },
       {
         "command": "bitcoin.addressFromPrivateKey",
-        "title": "Bitcoin: Address From Private Key"
+        "title": "Address From Private Key",
+        "category": "Bitcoin"
       },
       {
         "command": "bitcoin.addressFromHDPublicKey",
-        "title": "Bitcoin: Address From Extended Public Key"
+        "title": "Address From Extended Public Key",
+        "category": "Bitcoin"
       },
       {
         "command": "bitcoin.addressFromHDPrivateKey",
-        "title": "Bitcoin: Address From Extended Private Key"
+        "title": "Address From Extended Private Key",
+        "category": "Bitcoin"
       },
       {
         "command": "bitcoin.generatePublicKey",
-        "title": "Bitcoin: Generate Public Key"
+        "title": "Generate Public Key",
+        "category": "Bitcoin"
       },
       {
         "command": "bitcoin.generatePrivateKey",
-        "title": "Bitcoin: Generate Private Key"
+        "title": "Generate Private Key",
+        "category": "Bitcoin"
       },
       {
         "command": "bitcoin.generateHDPublicKey",
-        "title": "Bitcoin: Generate Extended Public Key"
+        "title": "Generate Extended Public Key",
+        "category": "Bitcoin"
       },
       {
         "command": "bitcoin.getUtxosForAddress",
-        "title": "Bitcoin: Get UTXOs for Address"
+        "title": "Get UTXOs for Address",
+        "category": "Bitcoin"
       },
       {
         "command": "bitcoin.xPubFromxPriv",
-        "title": "Bitcoin: Extended Public Key from Extended Private Key"
+        "title": "Extended Public Key from Extended Private Key",
+        "category": "Bitcoin"
       },
       {
         "command": "bitcoin.extendedPrivateKeyFromMnemonic",
-        "title": "Bitcoin: Extended Private Key from Mnemonic"
+        "title": "Extended Private Key from Mnemonic",
+        "category": "Bitcoin"
       },
       {
         "command": "bitcoin.generateHDPrivateKey",
-        "title": "Bitcoin: Generate ExtendedPrivate Key"
+        "title": "Generate Extended Private Key",
+        "category": "Bitcoin"
       },
       {
         "command": "bitcoin.generateMnemonic",
-        "title": "Bitcoin: Generate Mnemonic"
+        "title": "Generate Mnemonic",
+        "category": "Bitcoin"
       },
       {
         "command": "bitcoin.generateWIF",
-        "title": "Bitcoin: Generate WIF"
+        "title": "Generate WIF",
+        "category": "Bitcoin"
       },
       {
         "command": "bitcoin.getTx",
-        "title": "Bitcoin: Fetch Transaction",
+        "title": "Fetch Transaction",
         "category": "Bitcoin"
       },
       {
         "command": "bitcoin.publicKeyFromPrivateKey",
-        "title": "Bitcoin: Public Key From Private Key"
+        "title": "Public Key From Private Key",
+        "category": "Bitcoin"
       },
       {
         "command": "bitcoin.publicKeyFromWIF",
-        "title": "Bitcoin: Public Key From WIF"
+        "title": "Public Key From WIF",
+        "category": "Bitcoin"
       },
       {
         "command": "bitcoin.decodeRawTx",
-        "title": "Bitcoin: Decode Raw Transaction"
+        "title": "Decode Raw Transaction",
+        "category": "Bitcoin"
       },
       {
         "command": "bitcoin.rawTxToBob",
-        "title": "Bitcoin: Raw Tx to Bob"
+        "title": "Raw Tx to Bob",
+        "category": "Bitcoin"
       },
       {
         "command": "bitcoin.decodeFile",
-        "title": "Bitcoin: Decode Base64 Content to File",
+        "title": "Decode Base64 Content to File",
         "category": "Bitcoin"
       },
       {
         "command": "bitcoin.showKeyVault",
-        "title": "Bitcoin: Show Key Vault",
+        "title": "Show Key Vault",
         "category": "Bitcoin"
       },
       {
         "command": "bitcoin.encrypt",
-        "title": "Bitcoin: Encrypt Data",
+        "title": "Encrypt Data",
         "category": "Bitcoin"
       },
       {
         "command": "bitcoin.decrypt",
-        "title": "Bitcoin: Decrypt Data",
+        "title": "Decrypt Data",
         "category": "Bitcoin"
       },
       {
         "command": "bitcoin.lookupBapProfile",
-        "title": "Bitcoin: Lookup BAP Profile",
+        "title": "Lookup BAP Profile",
         "category": "Bitcoin"
       },
       {
         "command": "bitcoin.resetWelcomeScreen",
-        "title": "Bitcoin: Reset Welcome Screen",
+        "title": "Reset Welcome Screen",
         "category": "Bitcoin"
       },
       {
@@ -152,32 +172,32 @@
       },
       {
         "command": "bitcoin.convertToHex",
-        "title": "Bitcoin: Convert to Hex",
+        "title": "Convert to Hex",
         "category": "Bitcoin"
       },
       {
         "command": "bitcoin.convertToBase64",
-        "title": "Bitcoin: Convert to Base64",
+        "title": "Convert to Base64",
         "category": "Bitcoin"
       },
       {
         "command": "bitcoin.convertToBinary",
-        "title": "Bitcoin: Convert to Binary",
+        "title": "Convert to Binary",
         "category": "Bitcoin"
       },
       {
         "command": "bitcoin.decodeHex",
-        "title": "Bitcoin: Decode Hex",
+        "title": "Decode Hex",
         "category": "Bitcoin"
       },
       {
         "command": "bitcoin.decodeBase64",
-        "title": "Bitcoin: Decode Base64",
+        "title": "Decode Base64",
         "category": "Bitcoin"
       },
       {
         "command": "bitcoin.exploreAddress",
-        "title": "Bitcoin: Explore Address on WhatsOnChain",
+        "title": "Explore Address on WhatsOnChain",
         "category": "Bitcoin"
       },
       {
@@ -260,30 +280,6 @@
           "command": "bitcoin.getUtxosForAddress",
           "title": "Get UTXOs for Address",
           "group": "lookup@2"
-        },
-        {
-          "when": "editorHasSelection && editorTextFocus && selection =~ /^[0-9a-fA-F]+$/",
-          "command": "bitcoin.convertData",
-          "title": "Convert from Hex",
-          "group": "conversion@1"
-        },
-        {
-          "when": "editorHasSelection && editorTextFocus && selection =~ /^[A-Za-z0-9+/=]+$/",
-          "command": "bitcoin.convertData",
-          "title": "Convert from Base64",
-          "group": "conversion@2"
-        },
-        {
-          "when": "editorHasSelection",
-          "command": "bitcoin.encrypt",
-          "title": "Encrypt Data",
-          "group": "encryption@1"
-        },
-        {
-          "when": "editorHasSelection",
-          "command": "bitcoin.decrypt",
-          "title": "Decrypt Data",
-          "group": "encryption@2"
         },
         {
           "command": "bitcoin.openConversionTool",
