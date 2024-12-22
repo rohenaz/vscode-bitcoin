@@ -8,6 +8,7 @@ import { handleAddressFromPrivateKeyCommand } from './commands/addressFromPrivat
 import { addressFromPublicKey } from './commands/addressFromPublicKey';
 import { addressFromWIF } from './commands/addressFromWIF';
 import { asmFromScript } from './commands/asmFromScript';
+import { ConversionViewProvider } from './commands/convertData';
 import { openConversionTool } from './commands/convertData/index';
 import { handleDecodeFileCommand } from './commands/decodeFile';
 import { handleDecodeRawTxCommand } from './commands/decodeRawTx';
@@ -23,6 +24,7 @@ import { publicKeyFromPrivateKey } from './commands/publicKeyFromPrivateKey';
 import { publicKeyFromWIF } from './commands/publicKeyFromWIF';
 import { handleRawTxToBobCommand } from './commands/rawTxToBob';
 import { handleXPubFromXPrivCommand } from './commands/xPubFromxPriv';
+import { API_HOST } from './constants';
 import { EncryptionService } from './encryption';
 import { KeyPanel } from './keyPanel';
 import { KeyVault } from './keyVault';
@@ -36,8 +38,6 @@ import {
 } from './vsShim';
 import { WelcomePanel } from './welcomePanel';
 import { WorkspaceManager } from './workspace';
-import { API_HOST } from './constants';
-import { ConversionViewProvider } from './commands/convertData';
 
 const { fromBase58Check, toBase64, toArray } = Utils;
 
@@ -77,7 +77,6 @@ interface Utxo {
   satoshis: number;
   script: string;
 }
-
 
 const fetchPayUtxos = async (
   address: string,
@@ -252,11 +251,11 @@ export async function activate(context: ExtensionContext) {
       const selection = editor.selection;
       const selectedText = editor.document.getText(selection);
       const isTxid = /^[a-fA-F0-9]{64}$/.test(selectedText);
-      
+
       vsApi.window.showInformationMessage(
-        `Selected text: "${selectedText}"\nMatches txid pattern: ${isTxid}\nLength: ${selectedText.length}`
+        `Selected text: "${selectedText}"\nMatches txid pattern: ${isTxid}\nLength: ${selectedText.length}`,
       );
-    })
+    }),
   );
 
   // We can skip the welcome screen if in test env
@@ -269,7 +268,9 @@ export async function activate(context: ExtensionContext) {
   const outputManager = new OutputManager();
 
   // Register conversion view provider
-  const conversionViewProvider = new ConversionViewProvider(context.extensionUri);
+  const conversionViewProvider = new ConversionViewProvider(
+    context.extensionUri,
+  );
   context.subscriptions.push(
     vsApi.window.registerWebviewViewProvider(
       ConversionViewProvider.viewType,
@@ -788,6 +789,117 @@ export async function activate(context: ExtensionContext) {
       vsApi.window.showInformationMessage(
         'Welcome screen has been reset. Please reload VS Code to see it.',
       );
+    }),
+  );
+
+  // Register conversion tool commands
+  context.subscriptions.push(
+    vsApi.commands.registerCommand('bitcoin.convertToHex', async () => {
+      const editor = vsApi.window.activeTextEditor;
+      if (!editor) return;
+
+      const selection = editor.selection;
+      const text = editor.document.getText(selection);
+      if (!text) return;
+
+      const detected = detectFormat(text);
+      try {
+        // First try to use the sidebar view
+        await vsApi.commands.executeCommand('bitcoin.conversionView.focus');
+        conversionViewProvider.initializeWithInput(text, detected, 'hex');
+      } catch (error) {
+        // Fallback to panel if sidebar fails
+        await openConversionTool(text, detected, 'hex');
+      }
+    }),
+
+    vsApi.commands.registerCommand('bitcoin.convertToBase64', async () => {
+      const editor = vsApi.window.activeTextEditor;
+      if (!editor) return;
+
+      const selection = editor.selection;
+      const text = editor.document.getText(selection);
+      if (!text) return;
+
+      const detected = detectFormat(text);
+      try {
+        // First try to use the sidebar view
+        await vsApi.commands.executeCommand('bitcoin.conversionView.focus');
+        conversionViewProvider.initializeWithInput(text, detected, 'base64');
+      } catch (error) {
+        // Fallback to panel if sidebar fails
+        await openConversionTool(text, detected, 'base64');
+      }
+    }),
+
+    vsApi.commands.registerCommand('bitcoin.convertToBinary', async () => {
+      const editor = vsApi.window.activeTextEditor;
+      if (!editor) return;
+
+      const selection = editor.selection;
+      const text = editor.document.getText(selection);
+      if (!text) return;
+
+      const detected = detectFormat(text);
+      try {
+        // First try to use the sidebar view
+        await vsApi.commands.executeCommand('bitcoin.conversionView.focus');
+        conversionViewProvider.initializeWithInput(text, detected, 'binary');
+      } catch (error) {
+        // Fallback to panel if sidebar fails
+        await openConversionTool(text, detected, 'binary');
+      }
+    }),
+
+    vsApi.commands.registerCommand('bitcoin.decodeHex', async () => {
+      const editor = vsApi.window.activeTextEditor;
+      if (!editor) return;
+
+      const selection = editor.selection;
+      const text = editor.document.getText(selection);
+      if (!text) return;
+
+      try {
+        // First try to use the sidebar view
+        await vsApi.commands.executeCommand('bitcoin.conversionView.focus');
+        conversionViewProvider.initializeWithInput(text, 'hex', 'utf8');
+      } catch (error) {
+        // Fallback to panel if sidebar fails
+        await openConversionTool(text, 'hex', 'utf8');
+      }
+    }),
+
+    vsApi.commands.registerCommand('bitcoin.decodeBase64', async () => {
+      const editor = vsApi.window.activeTextEditor;
+      if (!editor) return;
+
+      const selection = editor.selection;
+      const text = editor.document.getText(selection);
+      if (!text) return;
+
+      try {
+        // First try to use the sidebar view
+        await vsApi.commands.executeCommand('bitcoin.conversionView.focus');
+        conversionViewProvider.initializeWithInput(text, 'base64', 'utf8');
+      } catch (error) {
+        // Fallback to panel if sidebar fails
+        await openConversionTool(text, 'base64', 'utf8');
+      }
+    }),
+  );
+
+  // Register explore address command
+  context.subscriptions.push(
+    vsApi.commands.registerCommand('bitcoin.exploreAddress', async () => {
+      const editor = vsApi.window.activeTextEditor;
+      if (!editor) return;
+
+      const selection = editor.selection;
+      const address = editor.document.getText(selection);
+      if (!address) return;
+
+      const url = `https://whatsonchain.com/address/${address}`;
+      await vsApi.env.openExternal(vsApi.Uri.parse(url));
     }),
   );
 

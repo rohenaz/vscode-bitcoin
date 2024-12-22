@@ -3,7 +3,7 @@ import { css } from '../../utils/css';
 export const styles = css`
   body {
     margin: 0;
-    padding: 16px;
+    padding: 12px;
     font-family: var(--vscode-font-family);
     color: var(--vscode-foreground);
     background-color: var(--vscode-editor-background);
@@ -17,43 +17,45 @@ export const styles = css`
   .panel {
     background-color: var(--vscode-panel-background);
     border: 1px solid var(--vscode-panel-border);
-    border-radius: 6px;
-    padding: 20px;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+    border-radius: 4px;
+    padding: 12px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
   }
 
   .form-group {
-    margin-bottom: 20px;
+    margin-bottom: 12px;
   }
 
   label {
     display: block;
-    margin-bottom: 8px;
+    margin-bottom: 6px;
     font-weight: 500;
+    font-size: 12px;
     color: var(--vscode-foreground);
+    opacity: 0.8;
   }
 
   select, textarea {
     width: 100%;
     box-sizing: border-box;
-    padding: 8px 12px;
-    margin-bottom: 8px;
+    padding: 6px 8px;
+    margin-bottom: 6px;
     font-family: var(--vscode-editor-font-family);
     font-size: var(--vscode-editor-font-size);
     background-color: var(--vscode-input-background);
     color: var(--vscode-input-foreground);
     border: 1px solid var(--vscode-input-border);
-    border-radius: 4px;
+    border-radius: 3px;
   }
 
   textarea {
-    min-height: 120px;
+    min-height: 80px;
     resize: vertical;
     line-height: 1.4;
   }
 
   select {
-    height: 36px;
+    height: 28px;
   }
 
   select:focus, textarea:focus {
@@ -63,41 +65,59 @@ export const styles = css`
 
   .format-selectors {
     display: flex;
-    gap: 12px;
-    margin-bottom: 16px;
+    flex-direction: column;
+    gap: 6px;
+    margin-bottom: 12px;
+  }
+
+  .format-group {
+    display: flex;
+    gap: 6px;
     align-items: center;
   }
 
   .format-selectors select {
     flex: 1;
+    min-width: 80px;
+    margin-bottom: 0;
   }
 
   .arrow-icon {
     display: flex;
     align-items: center;
+    justify-content: center;
     color: var(--vscode-foreground);
-    opacity: 0.7;
-    font-size: 16px;
+    opacity: 0.5;
+    width: 12px;
+    height: 12px;
+    flex-shrink: 0;
+  }
+
+  .arrow-icon svg {
+    width: 12px;
+    height: 12px;
+    fill: currentColor;
   }
 
   .convert-button {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 36px;
-    height: 36px;
-    padding: 0;
-    font-size: 16px;
+    width: 100%;
+    height: 28px;
+    padding: 0 12px;
     color: var(--vscode-button-foreground);
-    background-color: var(--vscode-button-background);
+    background-color: var(--vscode-button-secondaryBackground);
     border: none;
-    border-radius: 4px;
+    border-radius: 3px;
     cursor: pointer;
     transition: background-color 0.2s;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    opacity: 0.8;
   }
 
   .convert-button:hover {
-    background-color: var(--vscode-button-hoverBackground);
+    background-color: var(--vscode-button-secondaryHoverBackground);
+    opacity: 1;
   }
 
   .convert-button:active {
@@ -111,52 +131,69 @@ export const styles = css`
   #output {
     width: 100%;
     box-sizing: border-box;
-    padding-right: 48px;
+    padding-right: 36px;
   }
 
   .copy-button {
     position: absolute;
-    right: 8px;
-    top: 8px;
+    right: 4px;
+    top: 4px;
     min-width: auto;
-    height: 28px;
-    padding: 0 12px;
-    font-size: 14px;
-    background-color: var(--vscode-button-secondaryBackground);
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    background-color: transparent;
     color: var(--vscode-button-secondaryForeground);
-    opacity: 0.8;
+    opacity: 0.6;
     display: inline-flex;
     align-items: center;
-    gap: 4px;
+    justify-content: center;
     border: none;
-    border-radius: 4px;
+    border-radius: 3px;
     cursor: pointer;
   }
 
+  .copy-button svg {
+    width: 14px;
+    height: 14px;
+  }
+
   .copy-button:hover {
-    background-color: var(--vscode-button-secondaryHoverBackground);
+    background-color: var(--vscode-button-secondaryBackground);
     opacity: 1;
   }
 
   .status-message {
-    margin-top: 12px;
-    padding: 8px;
+    margin-top: 8px;
+    padding: 6px;
     text-align: center;
-    font-size: 13px;
+    font-size: 11px;
     color: var(--vscode-notificationsInfoIcon-foreground);
     background-color: var(--vscode-notifications-background);
-    border-radius: 4px;
+    border-radius: 3px;
     opacity: 0;
-    transition: opacity 0.3s;
+    transition: opacity 0.2s;
   }
 
   .status-message.visible {
     opacity: 1;
   }
 
-  .codicon {
-    font-family: codicon;
-    font-size: 16px;
-    line-height: 16px;
+  @media (max-width: 280px) {
+    body {
+      padding: 8px;
+    }
+
+    .panel {
+      padding: 8px;
+    }
+
+    .format-group {
+      width: 100%;
+    }
+
+    #output {
+      padding-right: 32px;
+    }
   }
 `;

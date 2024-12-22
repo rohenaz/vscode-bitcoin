@@ -40,7 +40,7 @@ if (typeof globalThis.require === 'function') {
   globalThis.require = patchedRequire;
 }
 
-import { afterEach, beforeEach, describe, expect, test, mock } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
 import {
   HD,
   Mnemonic,
@@ -160,7 +160,10 @@ describe('Bitcoin Extension Tests', () => {
 
     registeredCommands = [];
     // Override registerCommand to track registered commands
-    mockVSCode.commands.registerCommand = (command: string, _callback: (...args: unknown[]) => unknown) => {
+    mockVSCode.commands.registerCommand = (
+      command: string,
+      _callback: (...args: unknown[]) => unknown,
+    ) => {
       registeredCommands.push(command);
       return { dispose: () => {} };
     };

@@ -91,7 +91,8 @@
       },
       {
         "command": "bitcoin.getTx",
-        "title": "Bitcoin: Fetch a Tx by Transaction ID"
+        "title": "Bitcoin: Fetch Transaction",
+        "category": "Bitcoin"
       },
       {
         "command": "bitcoin.publicKeyFromPrivateKey",
@@ -148,6 +149,41 @@
         "command": "bitcoin.debugSelection",
         "title": "Debug Selection",
         "category": "Bitcoin"
+      },
+      {
+        "command": "bitcoin.convertToHex",
+        "title": "Bitcoin: Convert to Hex",
+        "category": "Bitcoin"
+      },
+      {
+        "command": "bitcoin.convertToBase64",
+        "title": "Bitcoin: Convert to Base64",
+        "category": "Bitcoin"
+      },
+      {
+        "command": "bitcoin.convertToBinary",
+        "title": "Bitcoin: Convert to Binary",
+        "category": "Bitcoin"
+      },
+      {
+        "command": "bitcoin.decodeHex",
+        "title": "Bitcoin: Decode Hex",
+        "category": "Bitcoin"
+      },
+      {
+        "command": "bitcoin.decodeBase64",
+        "title": "Bitcoin: Decode Base64",
+        "category": "Bitcoin"
+      },
+      {
+        "command": "bitcoin.exploreAddress",
+        "title": "Bitcoin: Explore Address on WhatsOnChain",
+        "category": "Bitcoin"
+      },
+      {
+        "command": "bitcoin.fetchOrdinalsInscription",
+        "title": "Fetch Ordinals Inscription",
+        "category": "Bitcoin"
       }
     ],
     "menus": {
@@ -158,19 +194,69 @@
           "group": "bitcoin@0"
         },
         {
-          "when": "editorHasSelection",
-          "command": "bitcoin.getTx",
+          "when": "editorHasSelection && selection =~ /^[1][a-km-zA-HJ-NP-Z1-9]{25,34}$/",
+          "command": "bitcoin.getUtxosForAddress",
           "group": "bitcoin@1"
         },
         {
-          "when": "editorHasSelection",
-          "submenu": "bitcoin.contextMenu",
+          "when": "editorHasSelection && selection =~ /^[1][a-km-zA-HJ-NP-Z1-9]{25,34}$/",
+          "command": "bitcoin.exploreAddress",
+          "group": "bitcoin@1"
+        },
+        {
+          "when": "editorHasSelection && selection =~ /^[1][a-km-zA-HJ-NP-Z1-9]{25,34}$/",
+          "command": "bitcoin.convertToHex",
+          "group": "bitcoin@1"
+        },
+        {
+          "when": "editorHasSelection && selection =~ /^[0-9a-fA-F]{64}$/",
+          "command": "bitcoin.getTx",
           "group": "bitcoin@2"
+        },
+        {
+          "when": "editorHasSelection && selection =~ /^[0-9a-fA-F]{64}_[0-9]+$/",
+          "command": "bitcoin.fetchOrdinalsInscription",
+          "group": "bitcoin@2"
+        },
+        {
+          "when": "editorHasSelection && !(selection =~ /^[1][a-km-zA-HJ-NP-Z1-9]{25,34}$/) && !(selection =~ /^[0-9a-fA-F]+$/)",
+          "command": "bitcoin.convertToHex",
+          "group": "bitcoin.convert@1"
+        },
+        {
+          "when": "editorHasSelection && !(selection =~ /^[A-Za-z0-9+/=]+$/)",
+          "command": "bitcoin.convertToBase64",
+          "group": "bitcoin.convert@2"
+        },
+        {
+          "when": "editorHasSelection && !(selection =~ /^[01]+$/)",
+          "command": "bitcoin.convertToBinary",
+          "group": "bitcoin.convert@3"
+        },
+        {
+          "when": "editorHasSelection && selection =~ /^[0-9a-fA-F]+$/",
+          "command": "bitcoin.decodeHex",
+          "group": "bitcoin.decode@1"
+        },
+        {
+          "when": "editorHasSelection && selection =~ /^[A-Za-z0-9+/=]+$/",
+          "command": "bitcoin.decodeBase64",
+          "group": "bitcoin.decode@2"
+        },
+        {
+          "when": "editorHasSelection",
+          "command": "bitcoin.encrypt",
+          "group": "bitcoin.encrypt@1"
+        },
+        {
+          "when": "editorHasSelection",
+          "command": "bitcoin.decrypt",
+          "group": "bitcoin.encrypt@2"
         }
       ],
       "bitcoin.contextMenu": [
         {
-          "when": "editorHasSelection && editorTextFocus && selection =~ /^[13][a-km-zA-HJ-NP-Z1-9]{25,34}$/",
+          "when": "editorHasSelection && editorTextFocus && selection =~ /^[1][a-km-zA-HJ-NP-Z1-9]{25,34}$/",
           "command": "bitcoin.getUtxosForAddress",
           "title": "Get UTXOs for Address",
           "group": "lookup@2"

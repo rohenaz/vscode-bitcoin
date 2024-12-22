@@ -1,7 +1,7 @@
 import fetch from 'node-fetch';
+import { API_HOST } from '../../constants';
 import type { OutputManager } from '../../output';
 import vsApi from '../../vsShim';
-import { API_HOST } from '../../constants';
 interface Inscription {
   txid: string;
   vout: number;

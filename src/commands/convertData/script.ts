@@ -146,5 +146,98 @@ export const webviewScript = js`
     } else {
       bindEvents();
     }
+
+    // Handle messages from the extension
+    window.addEventListener('message', (event) => {
+      const message = event.data;
+
+      if (message.type === 'initialize') {
+        const input = document.getElementById('input');
+        const fromFormat = document.getElementById('fromFormat');
+        const toFormat = document.getElementById('toFormat');
+        const output = document.getElementById('output');
+
+        if (message.input) {
+          input.value = message.input;
+        }
+
+        if (message.fromFormat) {
+          fromFormat.value = message.fromFormat;
+        } else if (message.detectedFormat) {
+          fromFormat.value = message.detectedFormat;
+        }
+
+        if (message.toFormat) {
+          toFormat.value = message.toFormat;
+        }
+
+        if (message.value) {
+          output.value = message.value;
+        }
+
+        // If we have input and both formats, trigger conversion
+        if (input.value && fromFormat.value && toFormat.value) {
+          convert();
+        }
+      } else if (message.type === 'result') {
+        const output = document.getElementById('output');
+        output.value = message.value;
+        showStatus('Conversion successful');
+      }
+    });
+
+    // Handle conversion
+    function convert() {
+      const input = document.getElementById('input').value;
+      const fromFormat = document.getElementById('fromFormat').value;
+      const toFormat = document.getElementById('toFormat').value;
+
+      if (!input) {
+        showStatus('Please enter input data');
+        return;
+      }
+
+      // Send conversion request to extension
+      vscode.postMessage({
+        type: 'convert',
+        input,
+        fromFormat,
+        toFormat
+      });
+    }
+
+    // Handle copy
+    function copy() {
+      const output = document.getElementById('output');
+      output.select();
+      document.execCommand('copy');
+      vscode.postMessage({ type: 'copy' });
+    }
+
+    // Show status message
+    function showStatus(message, type = 'info') {
+      const status = document.getElementById('statusMessage');
+      status.textContent = message;
+      status.className = 'status-message ' + type;
+      setTimeout(() => {
+        status.textContent = '';
+        status.className = 'status-message';
+      }, 3000);
+    }
+
+    // Bind event handlers
+    document.getElementById('convertButton').addEventListener('click', convert);
+    document.getElementById('copyButton').addEventListener('click', copy);
+
+    // Also convert when formats change
+    document.getElementById('fromFormat').addEventListener('change', convert);
+    document.getElementById('toFormat').addEventListener('change', convert);
+
+    // Convert when input changes (with debounce)
+    let timeout;
+    document.getElementById('input').addEventListener('input', () => {
+      clearTimeout(timeout);
+      timeout = setTimeout(convert, 500);
+    });
   })();
 `;

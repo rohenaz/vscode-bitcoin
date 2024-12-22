@@ -1,6 +1,6 @@
+import { API_HOST } from '../../constants';
 import type { OutputManager } from '../../output';
 import vsApi from '../../vsShim';
-import { API_HOST } from '../../constants';
 
 export interface Inscription {
   txid: string;

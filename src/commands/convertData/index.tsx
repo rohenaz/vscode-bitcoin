@@ -1,22 +1,26 @@
-import * as vscode from 'vscode';
-import { Utils } from '@bsv/sdk';
 import { createElement as h } from 'typed-html';
+import * as vscode from 'vscode';
 import { convertData } from '../../utils';
 import vsApi from '../../vsShim';
-import { styles } from './styles';
 import { webviewScript } from './script';
+import { styles } from './styles';
 
 type DataFormat = 'binary' | 'hex' | 'base64' | 'utf8';
 
-interface ConversionMessage {
-  type: 'initialize' | 'result' | 'copy' | 'convert';
-  input?: string;
-  value?: string;
-  detectedFormat?: DataFormat;
-  fromFormat?: DataFormat;
-  toFormat?: DataFormat;
-}
+export type ConversionMessage =
+  | { type: 'convert'; input: string; fromFormat: DataFormat; toFormat: DataFormat }
+  | { type: 'result'; value: string }
+  | { type: 'copy' }
+  | {
+    type: 'initialize';
+    input?: string;
+    detectedFormat?: DataFormat;
+    fromFormat?: DataFormat;
+    toFormat?: DataFormat;
+    value?: string;
+  };
 
+  
 // Helper function to detect format
 function detectFormat(input: string): DataFormat | undefined {
   if (!input) return undefined;
@@ -63,45 +67,53 @@ export class ConversionViewProvider implements vscode.WebviewViewProvider {
   private _pendingInput?: string;
   private _pendingFormat?: DataFormat;
 
-  constructor(
-    private readonly _extensionUri: vscode.Uri,
-  ) {}
+  constructor(private readonly _extensionUri: vscode.Uri) {}
 
-  public initializeWithInput(input?: string, detectedFormat?: DataFormat) {
-    console.log("Initializing with input:", input, "format:", detectedFormat);
+  public initializeWithInput(input?: string, fromFormat?: DataFormat, toFormat?: DataFormat) {
     if (!this._view) {
       // Store as pending if view isn't created yet
       this._pendingInput = input;
-      this._pendingFormat = detectedFormat || (input ? detectFormat(input) : undefined);
+      this._pendingFormat = fromFormat;
       return;
     }
 
-    // Detect format if not provided
-    const format = detectedFormat || (input ? detectFormat(input) : undefined);
-
-    // Update the HTML with the new input
-    this._view.webview.html = getConversionWebviewContent(input, format);
-    
-    // Also send a message to ensure the view updates
-    this._view.webview.postMessage({
-      type: 'initialize',
-      input,
-      detectedFormat: format
-    } as ConversionMessage);
+    // If we have both formats, trigger initial conversion
+    if (input && fromFormat && toFormat) {
+      try {
+        const result = convertData(input, fromFormat, toFormat);
+        this._view.webview.postMessage({
+          type: 'initialize',
+          input,
+          fromFormat,
+          toFormat,
+          value: result
+        });
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+        vsApi.window.showErrorMessage(`Conversion failed: ${errorMessage}`);
+      }
+    } else {
+      // Just initialize with input and detected format
+      this._view.webview.postMessage({
+        type: 'initialize',
+        input,
+        fromFormat,
+        toFormat,
+        detectedFormat: fromFormat
+      });
+    }
   }
 
   public resolveWebviewView(
     webviewView: vscode.WebviewView,
-    context: vscode.WebviewViewResolveContext,
+    _context: vscode.WebviewViewResolveContext,
     _token: vscode.CancellationToken,
-  ) {
+  ): void {
     this._view = webviewView;
 
     webviewView.webview.options = {
       enableScripts: true,
-      localResourceRoots: [
-        this._extensionUri
-      ]
+      localResourceRoots: [this._extensionUri],
     };
 
     // Use any pending input when creating the initial HTML
@@ -110,28 +122,20 @@ export class ConversionViewProvider implements vscode.WebviewViewProvider {
       this._pendingFormat
     );
 
-    webviewView.webview.onDidReceiveMessage(async (data: ConversionMessage) => {
-      console.log("Received message:", data);
-      // Handle conversion request
-      if (data.type === 'convert' && data.input && data.fromFormat && data.toFormat) {
-        try {
-          const result = await convertData(
-            data.input,
-            data.fromFormat,
-            data.toFormat
-          );
-          webviewView.webview.postMessage({
-            type: 'result',
-            value: result
-          } as ConversionMessage);
-        } catch (err) {
-          console.error('Conversion error:', err);
-          vscode.window.showErrorMessage(`Conversion failed: ${err}`);
+    // Handle messages from the webview
+    webviewView.webview.onDidReceiveMessage(async (message: ConversionMessage) => {
+      try {
+        if (message.type === 'copy') {
+          vsApi.window.showInformationMessage('Output copied to clipboard');
+          return;
         }
-      }
-      // Handle copy notification
-      else if (data.type === 'copy') {
-        vscode.window.showInformationMessage('Copied to clipboard');
+        if (message.type === 'convert' && message.input && message.fromFormat && message.toFormat) {
+          const result = convertData(message.input, message.fromFormat, message.toFormat);
+          webviewView.webview.postMessage({ type: 'result', value: result });
+        }
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+        vsApi.window.showErrorMessage(`Conversion failed: ${errorMessage}`);
       }
     });
 
@@ -141,7 +145,7 @@ export class ConversionViewProvider implements vscode.WebviewViewProvider {
         type: 'initialize',
         input: this._pendingInput,
         detectedFormat: this._pendingFormat
-      } as ConversionMessage);
+      });
       // Clear pending input once used
       this._pendingInput = undefined;
       this._pendingFormat = undefined;
@@ -153,36 +157,72 @@ export class ConversionViewProvider implements vscode.WebviewViewProvider {
  * Fallback function to open the same conversion UI in a dedicated panel,
  * e.g. if the user does not want or cannot use the sidebar webview.
  */
-export async function openConversionTool(initialInput?: string) {
+export async function openConversionTool(
+  initialInput?: string,
+  fromFormat?: DataFormat,
+  toFormat?: DataFormat,
+) {
   const panel = vsApi.window.createWebviewPanel(
     'conversionTool',
     'Data Conversion Tool',
     vsApi.ViewColumn.One,
-    { enableScripts: true }, // to allow script messaging
+    { enableScripts: true },
   );
 
-  const detected = initialInput ? detectFormat(initialInput) : undefined;
+  const detected =
+    fromFormat || (initialInput ? detectFormat(initialInput) : undefined);
   panel.webview.html = getConversionWebviewContent(initialInput, detected);
 
   // The same message handling as the side panel
-  panel.webview.onDidReceiveMessage(async (message) => {
+  panel.webview.onDidReceiveMessage(async (message: ConversionMessage) => {
     try {
       if (message.type === 'copy') {
         vsApi.window.showInformationMessage('Output copied to clipboard');
         return;
       }
-      const result = convertData(
-        message.input,
-        message.fromFormat,
-        message.toFormat,
-      );
-      panel.webview.postMessage({ type: 'result', value: result });
+      if (
+        message.type === 'convert' &&
+        message.input &&
+        message.fromFormat &&
+        message.toFormat
+      ) {
+        const result = convertData(
+          message.input,
+          message.fromFormat,
+          message.toFormat,
+        );
+        panel.webview.postMessage({ type: 'result', value: result });
+      }
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error occurred';
       vsApi.window.showErrorMessage(`Conversion failed: ${errorMessage}`);
     }
   });
+
+  // If we have both formats, trigger initial conversion
+  if (initialInput && fromFormat && toFormat) {
+    try {
+      const result = convertData(initialInput, fromFormat, toFormat);
+      panel.webview.postMessage({
+        type: 'initialize',
+        input: initialInput,
+        detectedFormat: fromFormat,
+        value: result,
+      });
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error occurred';
+      vsApi.window.showErrorMessage(`Conversion failed: ${errorMessage}`);
+    }
+  } else {
+    // Just initialize with input and detected format
+    panel.webview.postMessage({
+      type: 'initialize',
+      input: initialInput,
+      detectedFormat: detected,
+    });
+  }
 }
 
 /**
@@ -199,7 +239,9 @@ function InputSection({ initialValue }: { initialValue: string }) {
   return (
     <div class="form-group">
       <label for="input">Input Data</label>
-      <textarea id="input" placeholder="Paste or type data to convert">{initialValue}</textarea>
+      <textarea id="input" placeholder="Paste or type data to convert">
+        {initialValue}
+      </textarea>
     </div>
   );
 }
@@ -210,21 +252,30 @@ function InputSection({ initialValue }: { initialValue: string }) {
 function FormatSelector() {
   return (
     <div class="format-selectors">
-      <select id="fromFormat">
-        <option value="binary">Binary Array</option>
-        <option value="hex">Hex</option>
-        <option value="base64">Base64</option>
-        <option value="utf8">UTF-8</option>
-      </select>
-      <span class="arrow-icon">→</span>
-      <select id="toFormat">
-        <option value="binary">Binary Array</option>
-        <option value="hex">Hex</option>
-        <option value="base64">Base64</option>
-        <option value="utf8">UTF-8</option>
-      </select>
-      <button id="convertButton" class="convert-button" type="button" title="Convert">
-        <span class="codicon">$(sync)</span>
+      <div class="format-group">
+        <select id="fromFormat">
+          <option value="binary">Binary</option>
+          <option value="hex">Hex</option>
+          <option value="base64">Base64</option>
+          <option value="utf8">UTF-8</option>
+        </select>
+        <span class="arrow-icon">
+          <i class="codicon codicon-chevron-right" aria-label="Convert to" />
+        </span>
+        <select id="toFormat">
+          <option value="binary">Binary</option>
+          <option value="hex">Hex</option>
+          <option value="base64">Base64</option>
+          <option value="utf8">UTF-8</option>
+        </select>
+      </div>
+      <button
+        id="convertButton"
+        class="convert-button"
+        type="button"
+        title="Convert"
+      >
+        Convert
       </button>
     </div>
   );
@@ -238,9 +289,13 @@ function OutputSection() {
     <div class="output-section">
       <label for="output">Output</label>
       <div class="output-container">
-        <textarea id="output" placeholder="Converted output will appear here" readonly="readonly" />
+        <textarea
+          id="output"
+          placeholder="Converted output will appear here"
+          readonly="readonly"
+        />
         <button id="copyButton" class="copy-button" type="button" title="Copy">
-          <span class="codicon">$(copy)</span>
+          <i class="codicon codicon-copy" aria-label="Copy" />
         </button>
       </div>
     </div>
@@ -264,7 +319,10 @@ function ConversionPanel({ initialValue }: { initialValue: string }) {
 /**
  * Helper to generate typed-html for the data conversion UI.
  */
-function getConversionWebviewContent(initialInput?: string, detectedFormat?: DataFormat): string {
+function getConversionWebviewContent(
+  initialInput?: string,
+  detectedFormat?: DataFormat,
+): string {
   const safeInput = initialInput ?? '';
 
   return (
@@ -272,6 +330,7 @@ function getConversionWebviewContent(initialInput?: string, detectedFormat?: Dat
       <head>
         <meta charset="UTF-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <link href="vscode-codicons://codicon/codicon.css" rel="stylesheet" />
         <style>{styles}</style>
       </head>
       <body>
@@ -283,4 +342,3 @@ function getConversionWebviewContent(initialInput?: string, detectedFormat?: Dat
     </html>
   );
 }
-

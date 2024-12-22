@@ -21,6 +21,6 @@
       "@test/*": ["src/test/*"]
     }
   },
-  "include": ["src", "test"],
+  "include": ["src", "test", "src/types"],
   "exclude": ["node_modules", "dist"]
 }

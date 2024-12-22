@@ -1,7 +1,7 @@
 import { describe, expect, mock, test } from 'bun:test';
 import { PrivateKey } from '@bsv/sdk';
-import vscode from '../../vsShim';
 import type { OutputManager } from '../../output';
+import vscode from '../../vsShim';
 import { publicKeyFromWIF } from './index';
 
 // Create a minimal mock that only implements what we need
@@ -14,7 +14,10 @@ const originalShowErrorMessage = vscode.window.showErrorMessage;
 const originalShowInputBox = vscode.window.showInputBox;
 
 vscode.window.showErrorMessage = mock(
-  async (message: string, ...args: (string | { modal?: boolean })[]): Promise<string | undefined> => args[0] as string || 'Error',
+  async (
+    message: string,
+    ...args: (string | { modal?: boolean })[]
+  ): Promise<string | undefined> => (args[0] as string) || 'Error',
 );
 
 describe('publicKeyFromWIF', () => {

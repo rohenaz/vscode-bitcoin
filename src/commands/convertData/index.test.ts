@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test, mock } from 'bun:test';
+import { afterEach, describe, expect, mock, test } from 'bun:test';
 import type {
   Uri,
   ViewColumn,
@@ -6,8 +6,8 @@ import type {
   WebviewPanel,
   WebviewPanelOptions,
 } from 'vscode';
-import vsApi from '../../vsShim';
 import { openConversionTool } from '.';
+import vsApi from '../../vsShim';
 
 interface Message {
   type: 'convert' | 'copy' | 'result';
@@ -78,7 +78,8 @@ describe('Conversion Tool UI', () => {
           },
           '',
           postMessage,
-        )),
+        ),
+      ),
     };
 
     await openConversionTool();
@@ -91,7 +92,10 @@ describe('Conversion Tool UI', () => {
       });
     }
 
-    expect(postMessage).toHaveBeenCalledWith({ type: 'result', value: '48656c6c6f' });
+    expect(postMessage).toHaveBeenCalledWith({
+      type: 'result',
+      value: '48656c6c6f',
+    });
   });
 
   test('handles copy message', async () => {
@@ -109,7 +113,8 @@ describe('Conversion Tool UI', () => {
           },
           '',
           postMessage,
-        )),
+        ),
+      ),
       showInformationMessage: mock(async (message: string) => {
         infoMessage = message;
         return undefined;
@@ -139,7 +144,8 @@ describe('Conversion Tool UI', () => {
           },
           '',
           postMessage,
-        )),
+        ),
+      ),
       showErrorMessage: mock(async (message: string) => {
         errorMessage = message;
         return undefined;

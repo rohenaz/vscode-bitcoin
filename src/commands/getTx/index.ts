@@ -1,9 +1,9 @@
+import { Transaction, Utils } from '@bsv/sdk';
+import { BobTx, TransformTx } from 'bmapjs';
+import { parse } from 'bpu-ts';
 import { JUNGLEBUS_API_HOST } from '../../constants';
 import type { OutputManager } from '../../output';
 import vsApi from '../../vsShim';
-import { BobTx, TransformTx } from 'bmapjs';
-import { parse } from 'bpu-ts';
-import { Transaction, Utils } from '@bsv/sdk';
 const { toHex, toArray } = Utils;
 
 export async function handleGetTxCommand(
@@ -11,9 +11,10 @@ export async function handleGetTxCommand(
 ): Promise<{ data: string; type: string; name?: string } | undefined> {
   // Get selected text if any
   const editor = vsApi.window.activeTextEditor;
-  const selectedText = editor?.selection && !editor.selection.isEmpty
-    ? editor.document.getText(editor.selection)
-    : undefined;
+  const selectedText =
+    editor?.selection && !editor.selection.isEmpty
+      ? editor.document.getText(editor.selection)
+      : undefined;
 
   // Debug logging
   console.log('Selected text:', selectedText);
@@ -25,15 +26,17 @@ export async function handleGetTxCommand(
   console.log('Is valid txid:', !!isValidTxid);
 
   // If no valid selection, prompt for input
-  const txid = isValidTxid ? selectedText : await vsApi.window.showInputBox({
-    value: selectedText || '',
-    placeHolder: 'Ex: 4d03ff9062ac2e6...',
-    validateInput: (text) => {
-      return text.match(/^[a-fA-F0-9]{64}$/)
-        ? null
-        : 'Invalid transaction ID format. Expected: 64 character hex string';
-    },
-  });
+  const txid = isValidTxid
+    ? selectedText
+    : await vsApi.window.showInputBox({
+        value: selectedText || '',
+        placeHolder: 'Ex: 4d03ff9062ac2e6...',
+        validateInput: (text) => {
+          return text.match(/^[a-fA-F0-9]{64}$/)
+            ? null
+            : 'Invalid transaction ID format. Expected: 64 character hex string';
+        },
+      });
 
   if (!txid) {
     return undefined;
@@ -77,11 +80,11 @@ export async function handleGetTxCommand(
   // https://junglebus.gorillapool.io/v1/transaction/get/a8bc344411926cd7fca25da319a0a79c10431a11c96228417bb8970b12439f49
   // fetch the raw transaction
   const url = `${JUNGLEBUS_API_HOST}/transaction/get/${txid}`;
-  console.log({ url })
+  console.log({ url });
   const tx = await fetch(url);
   const txData = await tx.json();
-  console.log({ txData })
-  const rawTx = toHex(toArray(txData.transaction, 'base64'))
+  console.log({ txData });
+  const rawTx = toHex(toArray(txData.transaction, 'base64'));
 
   try {
     // First validate it's a valid transaction
@@ -89,7 +92,7 @@ export async function handleGetTxCommand(
     if (!tx) {
       throw new Error('Invalid transaction format');
     }
-    console.log({ rawTx })
+    console.log({ rawTx });
     const bob = await parse({
       tx: { r: rawTx },
       split: [{ token: { op: 106 }, include: 'l' }, { token: { s: '|' } }],
@@ -104,7 +107,7 @@ export async function handleGetTxCommand(
     }
 
     const bmapTx = await TransformTx(bob as BobTx);
-    console.log({ bmapTx })
+    console.log({ bmapTx });
     return {
       data: JSON.stringify(bmapTx, null, 2),
       type: 'transactions',
@@ -113,12 +116,11 @@ export async function handleGetTxCommand(
   } catch (error) {
     console.error('BOB parsing error:', error);
     throw new Error(
-      `Failed to parse transaction: ${error instanceof Error ? error.message : String(error)
+      `Failed to parse transaction: ${
+        error instanceof Error ? error.message : String(error)
       }. Please ensure the transaction hex is valid.`,
     );
   }
-
-
 
   // // Get BOB format
   // const bob = await parse({

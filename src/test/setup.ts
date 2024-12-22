@@ -155,7 +155,7 @@ interface VSCodeMock {
     registerWebviewViewProvider: (
       viewType: string,
       provider: WebviewViewProvider,
-      options?: { webviewOptions?: WebviewOptions }
+      options?: { webviewOptions?: WebviewOptions },
     ) => Disposable;
     showInformationMessage: <T extends string>(
       message: string,
