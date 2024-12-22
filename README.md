@@ -31,6 +31,13 @@ This extension provides convenient tools for working with Bitcoin (BSV) addresse
 - Convert script to ASM format
 - Parse and decode scripts
 - Work with P2PKH scripts
+- Syntax highlighting for:
+  - Bitcoin opcodes (with hover descriptions)
+  - P2PKH scripts (with address derivation)
+  - Bitcoin addresses (with WhatsOnChain links)
+  - Transaction IDs (with WhatsOnChain links)
+
+![](./images/p2pkh_tooltip.png)
 
 ### Transaction Operations
 - Fetch transaction by ID (supports multiple formats):
