@@ -37,6 +37,7 @@ import {
 import { WelcomePanel } from './welcomePanel';
 import { WorkspaceManager } from './workspace';
 import { API_HOST } from './constants';
+import { ConversionViewProvider } from './commands/convertData';
 
 const { fromBase58Check, toBase64, toArray } = Utils;
 
@@ -267,25 +268,32 @@ export async function activate(context: ExtensionContext) {
   const encryptionService = new EncryptionService(keyVault);
   const outputManager = new OutputManager();
 
+  // Register conversion view provider
+  const conversionViewProvider = new ConversionViewProvider(context.extensionUri);
+  context.subscriptions.push(
+    vsApi.window.registerWebviewViewProvider(
+      ConversionViewProvider.viewType,
+      conversionViewProvider,
+    ),
+  );
+
   // Register openConversionTool command - just opens the tool with selected text
   context.subscriptions.push(
     vsApi.commands.registerCommand('bitcoin.openConversionTool', async () => {
-      try {
-        // Get selected text if any
-        const editor = vsApi.window.activeTextEditor;
-        const selectedText =
-          editor?.selection && !editor.selection.isEmpty
-            ? editor.document.getText(editor.selection)
-            : undefined;
+      // Get selected text if any
+      const editor = vsApi.window.activeTextEditor;
+      const selectedText =
+        editor?.selection && !editor.selection.isEmpty
+          ? editor.document.getText(editor.selection)
+          : undefined;
 
-        // Open the conversion tool with selected text
-        await openConversionTool(selectedText);
+      try {
+        // First try to use the sidebar view
+        await vsApi.commands.executeCommand('bitcoin.conversionView.focus');
+        conversionViewProvider.initializeWithInput(selectedText);
       } catch (error) {
-        vsApi.window.showErrorMessage(
-          `Failed to open conversion tool: ${
-            error instanceof Error ? error.message : 'Unknown error'
-          }`,
-        );
+        // Fallback to panel if sidebar fails
+        await openConversionTool(selectedText);
       }
     }),
   );
@@ -293,26 +301,24 @@ export async function activate(context: ExtensionContext) {
   // Register the convert data command - prompts for input and format before opening tool
   context.subscriptions.push(
     vsApi.commands.registerCommand('bitcoin.convertData', async () => {
+      // Prompt for input
+      const userInput = await vsApi.window.showInputBox({
+        prompt: 'Enter data to convert',
+        placeHolder: 'Enter hex, base64, binary array, or text',
+      });
+
+      // If they cancelled, do nothing
+      if (userInput === undefined) {
+        return;
+      }
+
       try {
-        // Prompt for input
-        const userInput = await vsApi.window.showInputBox({
-          prompt: 'Enter data to convert',
-          placeHolder: 'Enter hex, base64, binary array, or text',
-        });
-
-        // If they cancelled, do nothing
-        if (userInput === undefined) {
-          return;
-        }
-
-        // Open the conversion tool with the input
-        await openConversionTool(userInput);
+        // First try to use the sidebar view
+        await vsApi.commands.executeCommand('bitcoin.conversionView.focus');
+        conversionViewProvider.initializeWithInput(userInput);
       } catch (error) {
-        vsApi.window.showErrorMessage(
-          `Failed to convert data: ${
-            error instanceof Error ? error.message : 'Unknown error'
-          }`,
-        );
+        // Fallback to panel if sidebar fails
+        await openConversionTool(userInput);
       }
     }),
   );

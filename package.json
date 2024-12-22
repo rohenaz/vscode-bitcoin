@@ -243,6 +243,24 @@
           "description": "URL of the BAP identity indexer API"
         }
       }
+    },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "bitcoin-tools",
+          "title": "Bitcoin Tools",
+          "icon": "media/bitcoin.svg"
+        }
+      ]
+    },
+    "views": {
+      "bitcoin-tools": [
+        {
+          "type": "webview",
+          "id": "bitcoin.conversionView",
+          "name": "Data Conversion"
+        }
+      ]
     }
   },
   "scripts": {
