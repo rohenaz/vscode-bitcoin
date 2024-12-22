@@ -1,5 +1,6 @@
 import { HD, P2PKH, Utils } from '@bsv/sdk';
 import vsApi from './vsShim';
+import { BitcoinHoverProvider } from './hoverProvider';
 
 import fetch from 'node-fetch';
 import { handleAddressFromHDPrivateKeyCommand } from './commands/addressFromHDPrivateKey';
@@ -39,6 +40,7 @@ import {
 import { WelcomePanel } from './welcomePanel';
 import { WorkspaceManager } from './workspace';
 import { encrypt, decrypt } from './commands/encryption';
+import { BitcoinSemanticTokensProvider } from './semanticTokens';
 
 const { fromBase58Check, toBase64, toArray } = Utils;
 
@@ -852,6 +854,64 @@ export async function activate(context: ExtensionContext) {
       await vsApi.env.openExternal(vsApi.Uri.parse(url));
     }),
   );
+
+  // Register hover provider
+  context.subscriptions.push(
+    vsApi.languages.registerHoverProvider(
+      [
+        { scheme: 'file', language: 'typescript' },
+        { scheme: 'file', language: 'typescriptreact' },
+        { scheme: 'file', language: 'javascript' },
+        { scheme: 'file', language: 'javascriptreact' },
+        { scheme: 'file', language: 'python' },
+        { scheme: 'file', language: 'go' },
+        { scheme: 'file', language: 'rust' },
+        { scheme: 'file', language: 'java' },
+        { scheme: 'file', language: 'csharp' },
+        { scheme: 'file', language: 'cpp' },
+        { scheme: 'file', language: 'c' },
+        { scheme: 'file', language: 'ruby' },
+        { scheme: 'file', language: 'php' },
+        { scheme: 'file', language: 'swift' },
+        { scheme: 'file', language: 'plaintext' },
+        { scheme: 'file', language: 'markdown' },
+        { scheme: 'file', language: 'json' },
+        { scheme: 'file', language: 'yaml' },
+        { scheme: 'file', language: 'toml' }
+      ],
+      new BitcoinHoverProvider()
+    )
+  );
+
+  // Register semantic tokens provider for multiple languages
+  console.log('Creating semantic tokens provider...');
+  const semanticTokensProvider = new BitcoinSemanticTokensProvider();
+  const selector = [
+    { scheme: 'file', language: 'typescript' },
+    { scheme: 'file', language: 'typescriptreact' },
+    { scheme: 'file', language: 'javascript' },
+    { scheme: 'file', language: 'javascriptreact' },
+    { scheme: 'file', language: 'plaintext' },
+    { scheme: 'file', language: 'json' },
+    { scheme: 'file', language: 'markdown' }
+  ];
+  
+  console.log('Registering semantic tokens provider for languages:', selector);
+  console.log('Token types:', semanticTokensProvider.legend.tokenTypes);
+  console.log('Token modifiers:', semanticTokensProvider.legend.tokenModifiers);
+  
+  try {
+    const registration = vsApi.languages.registerDocumentSemanticTokensProvider(
+      selector,
+      semanticTokensProvider,
+      semanticTokensProvider.legend
+    );
+    console.log('Semantic tokens provider registration:', registration);
+    context.subscriptions.push(registration);
+    console.log('Semantic tokens provider registered successfully');
+  } catch (error) {
+    console.error('Failed to register semantic tokens provider:', error);
+  }
 
   console.log('Bitcoin extension activated successfully!');
 }

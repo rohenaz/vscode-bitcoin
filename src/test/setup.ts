@@ -17,6 +17,11 @@ import type {
   WebviewPanelOptions,
   WebviewView,
   WebviewViewProvider,
+  DocumentSelector,
+  DocumentSemanticTokensProvider,
+  SemanticTokensLegend as VSSemanticTokensLegend,
+  HoverProvider,
+  SemanticTokens,
 } from 'vscode';
 
 // Re-export types that our code needs
@@ -39,6 +44,9 @@ export type {
   ProgressLocation,
   Progress,
   CancellationToken,
+  SemanticTokensBuilder,
+  SemanticTokensLegend,
+  SemanticTokens,
 };
 
 // Track executed commands
@@ -127,6 +135,17 @@ class SecretStorage {
   }
 }
 
+// Add semantic token types
+class SemanticTokensBuilder {
+  push(line: number, char: number, length: number, tokenType: number): void {}
+  build(): { data: Uint32Array } {
+    return { data: new Uint32Array() };
+  }
+}
+
+class SemanticTokensLegend {}
+
+// Update mockVSCode interface
 interface VSCodeMock {
   EventEmitter: typeof EventEmitter;
   SecretStorage: typeof SecretStorage;
@@ -244,6 +263,19 @@ interface VSCodeMock {
     SourceControl: 2;
     Window: 3;
   };
+  SemanticTokensBuilder: typeof SemanticTokensBuilder;
+  SemanticTokensLegend: typeof SemanticTokensLegend;
+  languages: {
+    registerDocumentSemanticTokensProvider: (
+      selector: DocumentSelector,
+      provider: DocumentSemanticTokensProvider,
+      legend: VSSemanticTokensLegend
+    ) => Disposable;
+    registerHoverProvider: (
+      selector: DocumentSelector,
+      provider: HoverProvider
+    ) => Disposable;
+  }
 }
 
 // Create mock VS Code instance
@@ -394,6 +426,19 @@ const mockVSCode: VSCodeMock = {
     SourceControl: 2,
     Window: 3,
   },
+  SemanticTokensBuilder,
+  SemanticTokensLegend,
+  languages: {
+    registerDocumentSemanticTokensProvider: (
+      _selector: DocumentSelector,
+      _provider: DocumentSemanticTokensProvider,
+      _legend: VSSemanticTokensLegend
+    ) => ({ dispose: () => {} }),
+    registerHoverProvider: (
+      _selector: DocumentSelector,
+      _provider: HoverProvider
+    ) => ({ dispose: () => {} })
+  }
 };
 
 // Patch globalThis.require if Bun is using `require` under the hood

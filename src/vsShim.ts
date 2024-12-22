@@ -16,6 +16,16 @@ import type {
   WebviewPanel,
   WebviewView,
   WebviewViewProvider,
+  Position,
+  Range,
+  MarkdownString,
+  Hover,
+  HoverProvider,
+  ProviderResult,
+  DocumentSemanticTokensProvider,
+  SemanticTokens,
+  SemanticTokensBuilder,
+  SemanticTokensLegend,
 } from 'vscode';
 
 let vsApi: typeof import('vscode');
@@ -46,6 +56,16 @@ export type {
   ProgressLocation,
   Progress,
   CancellationToken,
+  Position,
+  Range,
+  MarkdownString,
+  Hover,
+  HoverProvider,
+  ProviderResult,
+  DocumentSemanticTokensProvider,
+  SemanticTokens,
+  SemanticTokensBuilder,
+  SemanticTokensLegend,
 };
 
 export function isUri(obj: unknown): obj is Uri {
@@ -57,5 +77,5 @@ export function isUri(obj: unknown): obj is Uri {
     'path' in obj
   );
 }
-
 export default vsApi;
+

@@ -1,0 +1,24 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "Bitcoin Injection",
+  "scopeName": "bitcoin.injection",
+  "injectionSelector": "L:source.js, L:source.jsx, L:source.ts, L:source.tsx, L:source.mts, L:source.cts, L:source.python, L:source.go, L:source.rust, L:source.java, L:source.c, L:source.cpp, L:source.csharp, L:source.ruby, L:source.php, L:source.swift, L:text.html.markdown, L:text.plain, L:source.json, L:source.yaml, L:source.toml",
+  "patterns": [
+    {
+      "match": "\\b(OP_[A-Z0-9_]+)\\b",
+      "name": "keyword.other.opcode.bitcoin",
+      "captures": {
+        "1": { "name": "keyword.other.opcode.bitcoin" }
+      }
+    },
+    {
+      "match": "\\b[13][a-km-zA-HJ-NP-Z1-9]{25,34}\\b",
+      "name": "constant.other.address.bitcoin"
+    },
+    {
+      "match": "\\b[0-9a-fA-F]{64}\\b",
+      "name": "constant.other.txid.bitcoin"
+    }
+  ],
+  "repository": {}
+} 

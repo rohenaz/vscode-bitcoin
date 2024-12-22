@@ -13,6 +13,15 @@
   "categories": [
     "Other"
   ],
+  "activationEvents": [
+    "onLanguage:typescript",
+    "onLanguage:typescriptreact",
+    "onLanguage:javascript",
+    "onLanguage:javascriptreact",
+    "onLanguage:plaintext",
+    "onLanguage:markdown",
+    "onLanguage:json"
+  ],
   "repository": {
     "type": "git",
     "url": "https://github.com/rohenaz/vscode-bitcoin.git"
@@ -343,7 +352,50 @@
           "name": "Data Conversion"
         }
       ]
-    }
+    },
+    "grammars": [
+      {
+        "scopeName": "bitcoin.injection",
+        "path": "./syntaxes/bitcoin-injection.tmLanguage.json",
+        "injectTo": [
+          "source.js",
+          "source.jsx",
+          "source.ts",
+          "source.tsx",
+          "source.mts",
+          "source.cts",
+          "source.python",
+          "source.go",
+          "source.rust",
+          "source.java",
+          "source.c",
+          "source.cpp",
+          "source.csharp",
+          "source.ruby",
+          "source.php",
+          "source.swift",
+          "text.html.markdown",
+          "text.plain",
+          "source.json",
+          "source.yaml",
+          "source.toml"
+        ]
+      }
+    ],
+    "semanticTokenTypes": [
+      {
+        "id": "opcode",
+        "superType": "keyword",
+        "description": "Bitcoin opcodes"
+      }
+    ],
+    "semanticTokenScopes": [
+      {
+        "scopes": {
+          "opcode": ["keyword.other.opcode.bitcoin"]
+        }
+      }
+    ]
   },
   "scripts": {
     "vscode:prepublish": "bun run build",
