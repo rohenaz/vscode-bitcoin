@@ -10,10 +10,11 @@ import vsApi from '../../vsShim';
 import { openConversionTool } from '.';
 
 interface Message {
-  type?: 'copy';
+  type: 'convert' | 'copy' | 'result';
   input?: string;
   fromFormat?: string;
   toFormat?: string;
+  value?: string;
 }
 
 // Create a mock WebviewPanel that satisfies the type requirements
@@ -83,6 +84,7 @@ describe('Conversion Tool UI', () => {
     await openConversionTool();
     if (messageHandler) {
       await messageHandler({
+        type: 'convert',
         input: 'Hello',
         fromFormat: 'utf8',
         toFormat: 'hex',
@@ -147,6 +149,7 @@ describe('Conversion Tool UI', () => {
     await openConversionTool();
     if (messageHandler) {
       await messageHandler({
+        type: 'convert',
         input: 'invalid',
         fromFormat: 'hex',
         toFormat: 'base64',

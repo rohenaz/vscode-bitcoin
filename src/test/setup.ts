@@ -78,6 +78,7 @@ const mockCommands = [
   'bitcoin.showKeyVault',
   'bitcoin.test',
   'bitcoin.detectAndConvert',
+  'bitcoin.decodeFile',
   'bitcoin.handleOutput',
   'bitcoin.encrypt',
   'bitcoin.decrypt',
@@ -151,6 +152,11 @@ interface VSCodeMock {
       column: ViewColumn,
       options: WebviewPanelOptions & WebviewOptions,
     ) => WebviewPanel;
+    registerWebviewViewProvider: (
+      viewType: string,
+      provider: WebviewViewProvider,
+      options?: { webviewOptions?: WebviewOptions }
+    ) => Disposable;
     showInformationMessage: <T extends string>(
       message: string,
       ...items: T[]
@@ -285,6 +291,7 @@ const mockVSCode: VSCodeMock = {
         _listener: (e: WebviewPanelOnDidChangeViewStateEvent) => unknown,
       ) => ({ dispose: () => {} }),
     }),
+    registerWebviewViewProvider: () => ({ dispose: () => {} }),
     showInformationMessage: async () => undefined,
     showWarningMessage: async () => undefined,
     showErrorMessage: async <T extends string>(

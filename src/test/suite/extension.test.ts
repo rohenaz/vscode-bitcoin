@@ -328,6 +328,7 @@ describe('Bitcoin Extension Tests', () => {
       'bitcoin.fetchOrdinalsInscription',
       'bitcoin.decodeFile',
       'bitcoin.resetWelcomeScreen',
+      'bitcoin.debugSelection',
     ];
 
     for (const cmd of expectedCommands) {
