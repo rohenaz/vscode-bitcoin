@@ -1,6 +1,8 @@
+import { toArray } from '@bsv/sdk/dist/types/src/primitives/utils';
 import vsApi from './vsShim';
 import type { TextDocument, Position, HoverProvider, ProviderResult, Hover } from './vsShim';
 import { Script } from '@bsv/sdk';
+import { Utils } from '@bsv/sdk';
 
 // Opcode categories
 type OpcodeCategory = 
@@ -122,6 +124,9 @@ const OPCODE_INFO: Record<string, { description: string, category: OpcodeCategor
   OP_NOP10: { description: 'Does nothing.', category: 'Reserved words' }
 } as const;
 
+// Regex to detect a P2PKH pattern: OP_DUP OP_HASH160 <20-byte-hex> OP_EQUALVERIFY OP_CHECKSIG
+const P2PKH_REGEX = /\bOP_DUP\s+OP_HASH160\s+([0-9A-Fa-f]{40})\s+OP_EQUALVERIFY\s+OP_CHECKSIG\b/;
+
 export class BitcoinHoverProvider implements HoverProvider {
   provideHover(document: TextDocument, position: Position): ProviderResult<Hover> {
     console.log('=== BitcoinHoverProvider.provideHover called ===');
@@ -135,7 +140,6 @@ export class BitcoinHoverProvider implements HoverProvider {
       character: position.character
     });
 
-    // Get the word at the current position
     const range = document.getWordRangeAtPosition(position);
     console.log('Word range:', range ? {
       start: { line: range.start.line, character: range.start.character },
@@ -150,12 +154,33 @@ export class BitcoinHoverProvider implements HoverProvider {
     const word = document.getText(range);
     console.log('Word found:', word);
 
-    // Get the full line for context
     const line = document.lineAt(position.line).text;
     console.log('Full line:', line);
     console.log('Line index:', position.line + 1);
 
-    // Check for opcode
+    // 1) Check if the user hovered on a recognized P2PKH pattern in this line
+    // If so, produce a special hover describing P2PKH
+    const p2pkhMatch = P2PKH_REGEX.exec(line);
+    if (p2pkhMatch) {
+      const pubKeyHash = p2pkhMatch[1];
+      // Convert hex string to byte array using Utils functions
+      const pubKeyHashBytes = Utils.toArray(pubKeyHash, 'hex');
+      const address = Utils.toBase58Check(pubKeyHashBytes);
+      console.log('Detected P2PKH script pattern, pubKeyHash:', pubKeyHash, 'address:', address);
+
+      const p2pkhMarkdown = new vsApi.MarkdownString();
+      p2pkhMarkdown.appendMarkdown('**Standard P2PKH Script**\n\n');
+      p2pkhMarkdown.appendMarkdown(`PubKey Hash: \`${pubKeyHash}\`\n\n`);
+      p2pkhMarkdown.appendMarkdown(`Address: \`${address}\`\n\n`);
+      p2pkhMarkdown.appendMarkdown('This script locks funds to a specific public key hash. To spend, a valid signature matching the hashed public key is required.\n\n');
+      p2pkhMarkdown.appendMarkdown('**Template**: `OP_DUP OP_HASH160 <pubKeyHash> OP_EQUALVERIFY OP_CHECKSIG`');
+
+      // Return a hover for the entire matched line
+      const entireLineRange = document.lineAt(position.line).range;
+      return new vsApi.Hover(p2pkhMarkdown, entireLineRange);
+    }
+
+    // 2) Check for opcode
     if (word.startsWith('OP_')) {
       console.log('Opcode detected:', word);
       const info = OPCODE_INFO[word as keyof typeof OPCODE_INFO];
