@@ -2,126 +2,96 @@
 
 ## [Unreleased]
 
+## [v0.1.0-beta] - 2025-01-15
+
 ### Added
-- Workspace management features:
-  - Dedicated `.bitcoin` workspace for organizing files
-  - Automatic content type detection
-  - Folder organization by file type
-  - Smart file naming using identifiers
-- New command for content detection and conversion:
-  - Support for base64-encoded data
-  - Automatic detection of common formats (JPEG, PNG, JSON, XML)
-  - Interactive content type selection when detection fails
-  - Improved handling of data URLs with MIME types
-  - Better support for hex and binary array inputs
-- Configurable output preferences:
+- Key Vault functionality:
+  - Secure key storage with encryption
+  - Color-coded key organization
+  - Search and filter capabilities
+  - One-click operations
+- Welcome screen with quick access to features
+- Rich syntax highlighting:
+  - Bitcoin opcodes with hover descriptions
+  - P2PKH script detection and address derivation
+  - Bitcoin addresses with WhatsOnChain links
+  - Transaction IDs with explorer links
+- Workspace management:
+  - Dedicated `.bitcoin` workspace directory
+  - Automatic file categorization by type
+  - Smart file naming with timestamps
+  - Content type detection for binary data
+  - Configurable workspace path
+  - Automatic `.gitignore` management
+- Advanced data conversion:
+  - Format auto-detection (hex, base64, binary, UTF-8)
+  - Support for common formats (JPEG, PNG, JSON, XML)
+  - Interactive content type selection
+  - Improved data URL handling
+  - Bidirectional conversion between formats
+  - Edge case handling for ambiguous formats
+- Core Bitcoin operations:
+  - Transaction decoding and format conversion
+  - Address generation and validation
+  - Script operations and ASM conversion
+  - UTXO fetching and management
+  - BAP profile lookup
+  - Ordinals inscription fetching
+- Output configuration:
   - Clipboard output (default)
   - File dialog save
-  - Workspace save with organization
-- Transaction decoding and format conversion
-- Address generation and validation
-- Script operations and ASM conversion
-- UTXO fetching and management
-- BAP profile lookup
-- Data conversion utilities
-- Ordinals inscription fetching
-- File workspace management
-- Command organization structure
-- Comprehensive test suite
+  - Workspace auto-save with organization
+- Development tools:
+  - Comprehensive test suite with Bun
+  - BMAP protocol parsing support
+  - Biome for code formatting
+  - Source maps support
+  - VS Code API mocks
+  - Development guide
+  - API documentation
 
 ### Changed
-- Simplified output configuration with single preference setting
-- Improved file naming strategy to avoid sensitive information
-- Enhanced content type detection with user prompts
-- Improved decodeFile command:
-  - More efficient handling of base64, hex, and binary array inputs
-  - Better MIME type handling from data URLs
+- Complete build system overhaul:
+  - Migrated from webpack to Vite
+  - Added Biome for linting and formatting
+  - Improved TypeScript configurations
+  - Added source maps support
+  - Optimized bundle size
+- Major dependency upgrades:
+  - Switched from `bsv` to `@bsv/sdk` for modern TypeScript support
+  - Replaced Shapeshifter with `bpu-ts` for transaction parsing
+  - Added `bmapjs` for protocol parsing
+  - Updated all dependencies to latest versions
+- Enhanced development workflow:
+  - Improved watch mode with faster rebuilds
+  - Better VS Code launch configurations
+  - Streamlined test setup with mocked VS Code API
+- Improved file operations:
+  - Better file naming strategy for sensitive data
+  - Enhanced content type detection
   - Smarter format detection and conversion
-  - Cleaner code using spread operator for optional parameters
-- Simplified code by using existing utility functions
-- Enhanced error messages for better user feedback
-- Standardized command structure and testing patterns
+  - Simplified output configuration
+- Code quality improvements:
+  - Enhanced error messages
+  - Standardized command structure
+  - Better type safety
+  - Cleaner API design
 
 ### Fixed
 - Command registration and visibility issues
 - File naming sanitization
 - Content type detection reliability
-- Fixed decodeFile command:
-  - Correct handling of MIME types from data URLs
-  - Proper optional parameter handling in API calls
-  - Improved error handling in data format detection
-  - Fixed test assertions for optional parameters
-- Fixed optional parameter handling in API calls
-- Improved error handling in data format detection
+- Data handling improvements:
+  - MIME type handling from data URLs
+  - Optional parameter handling
+  - Format detection edge cases
+  - Test assertions
 
 ### Security
 - Added input validation for all commands
 - Improved type safety across the codebase
 - Added checks for empty or invalid inputs
 - Standardized error handling patterns
-
-## [0.1.0] - 2024-01-26
-
-### Changed
-- Major upgrade to build system and dependencies:
-  - Migrated from webpack to Vite for improved build performance
-  - Switched from `bsv` to `@bsv/sdk` for better TypeScript support and modern APIs
-  - Replaced Shapeshifter with bpu-ts for transaction parsing
-  - Updated all dependencies to latest versions
-- Set VS Code engine version to 1.93.0 for improved compatibility
-- Optimized bundle size through better dependency management
-- Enhanced output management system
-- Improved file naming for better organization
-- Better handling of private data in filenames
-
-### Added
-- New workspace file management system:
-  - Organized `.bitcoin` workspace folder
-  - Automatic file categorization
-  - Smart file naming with timestamps
-  - Content type detection for binary data
-- Configurable output settings for all commands:
-  - Option to copy output to clipboard (default)
-  - Option to open output in new text file
-  - Option to save files to workspace
-- Content type detection and conversion:
-  - Auto-detect image formats
-  - Convert base64 to binary files
-  - Support for JPEG, PNG, GIF
-  - Custom MIME type support
-- Workspace configuration options:
-  - Configurable workspace path
-  - Content type detection toggle
-  - Folder organization toggle
-- New "Convert" command for smart data format conversion:
-  - Automatically detects input format (hex, base64, binary array)
-  - Converts between hex, base64, and binary array formats
-  - Supports bidirectional conversion between all formats
-  - Handles edge cases where input could be valid in multiple formats
-- New utility functions from @bsv/sdk:
-  - `toHex`: Convert data to hexadecimal format
-  - `toArray`: Convert data to binary array format
-  - `toBase64`: Convert data to base64 format
-  - `fromHex`: Convert from hexadecimal format
-  - `fromBase64`: Convert from base64 format
-  - `fromBinary`: Convert from binary array format
-- Comprehensive test suite using Bun's test runner
-- BMAP support for protocol parsing
-- Biome for code formatting and linting
-- Better test setup with mocked VS Code API
-- Source maps support in build process
-- Comprehensive development guide
-- Testing documentation
-- Improved API documentation
-
-### Improved
-- Format detection logic for data conversions
-- Error handling for invalid input formats
-- Error handling and type safety
-- TypeScript configurations
-- Development workflow with watch mode
-- VS Code launch and task configurations
-- Installation and build instructions
 
 ### Removed
 - TXO format conversion functionality (replaced by improved transaction decoding)
