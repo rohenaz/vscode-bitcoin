@@ -1,6 +1,8 @@
 import { HD, P2PKH, Utils } from '@bsv/sdk';
 import vsApi from './vsShim';
 import { BitcoinHoverProvider } from './hoverProvider';
+import { TemplateManager } from './scriptTemplates';
+import * as path from 'node:path';
 
 import fetch from 'node-fetch';
 import { handleAddressFromHDPrivateKeyCommand } from './commands/addressFromHDPrivateKey';
@@ -241,6 +243,43 @@ const fetchInscriptionContent = async (
 
 export async function activate(context: ExtensionContext) {
   console.log('Bitcoin extension activating...');
+
+  // Initialize template manager
+  const workspaceRoot = vsApi.workspace.workspaceFolders?.[0]?.uri.fsPath;
+  if (workspaceRoot) {
+    const templatesDir = path.join(workspaceRoot, '.bitcoin', 'templates');
+    const templateManager = new TemplateManager(templatesDir);
+    await templateManager.initializeDefaultTemplates();
+    templateManager.loadTemplates();
+    
+    // Register hover provider with template manager
+    context.subscriptions.push(
+      vsApi.languages.registerHoverProvider(
+        [
+          { scheme: 'file', language: 'typescript' },
+          { scheme: 'file', language: 'javascript' },
+          { scheme: 'file', language: 'typescriptreact' },
+          { scheme: 'file', language: 'javascriptreact' },
+          { scheme: 'file', language: 'python' },
+          { scheme: 'file', language: 'go' },
+          { scheme: 'file', language: 'rust' },
+          { scheme: 'file', language: 'java' },
+          { scheme: 'file', language: 'csharp' },
+          { scheme: 'file', language: 'cpp' },
+          { scheme: 'file', language: 'c' },
+          { scheme: 'file', language: 'ruby' },
+          { scheme: 'file', language: 'php' },
+          { scheme: 'file', language: 'swift' },
+          { scheme: 'file', language: 'plaintext' },
+          { scheme: 'file', language: 'markdown' },
+          { scheme: 'file', language: 'json' },
+          { scheme: 'file', language: 'yaml' },
+          { scheme: 'file', language: 'toml' }
+        ],
+        new BitcoinHoverProvider(templateManager)
+      )
+    );
+  }
 
   // Add diagnostic command for selection
   context.subscriptions.push(
@@ -853,34 +892,6 @@ export async function activate(context: ExtensionContext) {
       const url = `https://whatsonchain.com/address/${address}`;
       await vsApi.env.openExternal(vsApi.Uri.parse(url));
     }),
-  );
-
-  // Register hover provider
-  context.subscriptions.push(
-    vsApi.languages.registerHoverProvider(
-      [
-        { scheme: 'file', language: 'typescript' },
-        { scheme: 'file', language: 'typescriptreact' },
-        { scheme: 'file', language: 'javascript' },
-        { scheme: 'file', language: 'javascriptreact' },
-        { scheme: 'file', language: 'python' },
-        { scheme: 'file', language: 'go' },
-        { scheme: 'file', language: 'rust' },
-        { scheme: 'file', language: 'java' },
-        { scheme: 'file', language: 'csharp' },
-        { scheme: 'file', language: 'cpp' },
-        { scheme: 'file', language: 'c' },
-        { scheme: 'file', language: 'ruby' },
-        { scheme: 'file', language: 'php' },
-        { scheme: 'file', language: 'swift' },
-        { scheme: 'file', language: 'plaintext' },
-        { scheme: 'file', language: 'markdown' },
-        { scheme: 'file', language: 'json' },
-        { scheme: 'file', language: 'yaml' },
-        { scheme: 'file', language: 'toml' }
-      ],
-      new BitcoinHoverProvider()
-    )
   );
 
   // Register semantic tokens provider for multiple languages

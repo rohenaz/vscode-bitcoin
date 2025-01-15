@@ -332,6 +332,12 @@ describe('Bitcoin Extension Tests', () => {
       'bitcoin.decodeFile',
       'bitcoin.resetWelcomeScreen',
       'bitcoin.debugSelection',
+      'bitcoin.convertToHex',
+      'bitcoin.convertToBase64',
+      'bitcoin.convertToBinary',
+      'bitcoin.decodeHex',
+      'bitcoin.decodeBase64',
+      'bitcoin.exploreAddress'
     ];
 
     for (const cmd of expectedCommands) {
