@@ -5,8 +5,7 @@ src/**
 vsc-extension-quickstart.md
 **/tsconfig.json
 **/*.map
-**/*.ts
-node_modules
+src/**/*.ts
 dist/**/*.map
 biome.json
 vite.config.ts
@@ -20,6 +19,10 @@ images/icon.png
 !images/icon.png
 images/*.gif
 
+# Make sure dist folder is included
+!dist/**/*.js
+dist/**/*.map
+
 # Development files
 .github/**
 .git/**
@@ -27,3 +30,14 @@ images/*.gif
 *.vsix
 *.log
 *.tgz
+
+# Include only required node_modules
+node_modules/**
+!node_modules/@bsv/sdk/**
+!node_modules/is-base64/**
+!node_modules/is-hex/**
+!node_modules/js-1sat-ord/**
+!node_modules/node-fetch/**
+!node_modules/typed-html/**
+!node_modules/bmapjs/**
+!node_modules/bpu-ts/**

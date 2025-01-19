@@ -4,6 +4,7 @@ import { convertData } from '../../utils';
 import vsApi from '../../vsShim';
 import { webviewScript } from './script';
 import { styles } from './styles';
+import { join } from 'path';
 
 type DataFormat = 'binary' | 'hex' | 'base64' | 'utf8';
 
@@ -114,12 +115,18 @@ export class ConversionViewProvider implements vscode.WebviewViewProvider {
     webviewView.webview.options = {
       enableScripts: true,
       localResourceRoots: [this._extensionUri],
+      enableCommandUris: false,
     };
 
-    // Use any pending input when creating the initial HTML
+    // Set CSP
+    const cspSource = webviewView.webview.cspSource;
+    const nonce = getNonce();
+
     webviewView.webview.html = getConversionWebviewContent(
       this._pendingInput,
-      this._pendingFormat
+      this._pendingFormat,
+      nonce,
+      cspSource
     );
 
     // Handle messages from the webview
@@ -166,12 +173,18 @@ export async function openConversionTool(
     'conversionTool',
     'Data Conversion Tool',
     vsApi.ViewColumn.One,
-    { enableScripts: true },
+    { 
+      enableScripts: true,
+      enableCommandUris: false,
+      localResourceRoots: [vsApi.Uri.file(join(__dirname, 'webview'))]
+    },
   );
 
   const detected =
     fromFormat || (initialInput ? detectFormat(initialInput) : undefined);
-  panel.webview.html = getConversionWebviewContent(initialInput, detected);
+  const nonce = getNonce();
+  const cspSource = panel.webview.cspSource;
+  panel.webview.html = getConversionWebviewContent(initialInput, detected, nonce, cspSource);
 
   // The same message handling as the side panel
   panel.webview.onDidReceiveMessage(async (message: ConversionMessage) => {
@@ -249,7 +262,7 @@ function InputSection({ initialValue }: { initialValue: string }) {
 /**
  * Format selector component with from/to dropdowns and convert button
  */
-function FormatSelector() {
+function FormatSelectors() {
   return (
     <div class="format-selectors">
       <div class="format-group">
@@ -309,7 +322,7 @@ function ConversionPanel({ initialValue }: { initialValue: string }) {
   return (
     <div class="panel">
       <InputSection initialValue={initialValue} />
-      <FormatSelector />
+      <FormatSelectors />
       <OutputSection />
       <StatusMessage />
     </div>
@@ -322,23 +335,44 @@ function ConversionPanel({ initialValue }: { initialValue: string }) {
 function getConversionWebviewContent(
   initialInput?: string,
   detectedFormat?: DataFormat,
+  nonce?: string,
+  cspSource?: string,
 ): string {
   const safeInput = initialInput ?? '';
+  
+  return `<!DOCTYPE html>
+  <html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}';">
+    <title>Data Conversion</title>
+    <style>
+      ${styles}
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <div class="panel">
+        ${InputSection({ initialValue: safeInput })}
+        ${FormatSelectors()}
+        ${OutputSection()}
+        ${StatusMessage()}
+      </div>
+    </div>
+    <script nonce="${nonce}">
+      ${webviewScript}
+    </script>
+  </body>
+  </html>`;
+}
 
-  return (
-    <html lang="en">
-      <head>
-        <meta charset="UTF-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <link href="vscode-codicons://codicon/codicon.css" rel="stylesheet" />
-        <style>{styles}</style>
-      </head>
-      <body>
-        <div class="container">
-          <ConversionPanel initialValue={safeInput} />
-        </div>
-        <script>{webviewScript}</script>
-      </body>
-    </html>
-  );
+// Add nonce generator function
+function getNonce() {
+  let text = '';
+  const possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+  for (let i = 0; i < 32; i++) {
+    text += possible.charAt(Math.floor(Math.random() * possible.length));
+  }
+  return text;
 }

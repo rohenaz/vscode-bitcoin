@@ -55,6 +55,7 @@ import type { BobTx } from 'bmapjs';
 import { parse } from 'bpu-ts';
 import { activate } from '../../extension';
 import vsApi from '../../vsShim';
+import { KeyVault, KeyType } from '../../keyVault';
 
 const TEST_WORKSPACE_DIR = '.test-bitcoin-workspace';
 
@@ -101,6 +102,7 @@ function cleanupTestWorkspace() {
 const mockContext: Partial<ExtensionContext> = {
   subscriptions: [],
   extensionPath: '',
+  secrets: new mockVSCode.SecretStorage(),
   globalState: {
     get: (_key: string): unknown => undefined,
     update: (_key: string, _value: unknown): Thenable<void> =>
@@ -378,6 +380,115 @@ describe('Bitcoin Extension Tests', () => {
     // SDK returns an invalid mnemonic object
     expect(mnemonic.isValid()).toBe(false);
     expect(() => mnemonic.toSeed()).toThrow('Mnemonic does not pass the check');
+  });
+
+  // Key Vault tests
+  describe('Key Vault', () => {
+    let vault: KeyVault;
+
+    beforeEach(() => {
+      vault = new KeyVault(mockContext as ExtensionContext);
+    });
+
+    afterEach(async () => {
+      await vault.clearAllKeys();
+    });
+
+    test('stores and retrieves a key', async () => {
+      const keyEntry = {
+        type: 'private' as KeyType,
+        label: 'Test Key',
+        value: 'test-value'
+      };
+
+      const id = await vault.storeKey(keyEntry);
+      expect(typeof id).toBe('string');
+      expect(id.length).toBeGreaterThan(0);
+
+      const retrieved = await vault.getKey(id);
+      expect(retrieved).toBeDefined();
+      expect(retrieved?.type).toBe(keyEntry.type);
+      expect(retrieved?.label).toBe(keyEntry.label);
+      expect(retrieved?.value).toBe(keyEntry.value);
+    });
+
+    test('lists all stored keys', async () => {
+      const keys = [
+        { type: 'private' as KeyType, label: 'Key 1', value: 'value1' },
+        { type: 'public' as KeyType, label: 'Key 2', value: 'value2' }
+      ];
+
+      // Store keys sequentially to avoid race condition
+      const id1 = await vault.storeKey(keys[0]);
+      const id2 = await vault.storeKey(keys[1]);
+      const ids = [id1, id2];
+
+      console.log('Stored key IDs:', ids);
+
+      const allKeys = await vault.getAllKeys();
+      console.log('Retrieved keys:', allKeys);
+
+      expect(allKeys).toHaveLength(2);
+      expect(allKeys.map(k => k.id).sort()).toEqual(ids.sort());
+    });
+
+    test('deletes a key', async () => {
+      const id = await vault.storeKey({
+        type: 'private' as KeyType,
+        label: 'To Delete',
+        value: 'delete-me'
+      });
+
+      await vault.deleteKey(id);
+      const retrieved = await vault.getKey(id);
+      expect(retrieved).toBeUndefined();
+    });
+
+    test('updates key label', async () => {
+      const id = await vault.storeKey({
+        type: 'private' as KeyType,
+        label: 'Old Label',
+        value: 'test-value'
+      });
+
+      await vault.updateKeyLabel(id, 'New Label');
+      const updated = await vault.getKey(id);
+      expect(updated?.label).toBe('New Label');
+    });
+
+    test('manages encryption key', async () => {
+      const id = await vault.storeKey({
+        type: 'encryption' as KeyType,
+        label: 'Encryption Key',
+        value: 'secret'
+      });
+
+      await vault.setEncryptionKey(id);
+      const encKey = await vault.getEncryptionKey();
+      expect(encKey?.id).toBe(id);
+      expect(encKey?.isEncryptionKey).toBe(true);
+
+      await vault.clearEncryptionKey();
+      const cleared = await vault.getEncryptionKey();
+      expect(cleared).toBeUndefined();
+    });
+
+    test('searches keys', async () => {
+      await vault.storeKey({
+        type: 'private' as KeyType,
+        label: 'Test Key',
+        value: 'value1'
+      });
+      await vault.storeKey({
+        type: 'public' as KeyType,
+        label: 'Another Key',
+        value: 'value2'
+      });
+
+      const results = await vault.searchKeys('test');
+      expect(results).toHaveLength(1);
+      expect(results[0].label).toBe('Test Key');
+    });
   });
 
   // Transaction format conversion tests

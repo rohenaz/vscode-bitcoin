@@ -1,5 +1,5 @@
 import { HD, P2PKH, Utils } from '@bsv/sdk';
-import vsApi from './vsShim';
+import vsApi from 'vscode';
 import { BitcoinHoverProvider } from './hoverProvider';
 import { TemplateManager } from './scriptTemplates';
 import * as path from 'node:path';
@@ -38,7 +38,7 @@ import {
   WebviewPanel,
   WebviewView,
   WebviewViewProvider,
-} from './vsShim';
+} from 'vscode';
 import { WelcomePanel } from './welcomePanel';
 import { WorkspaceManager } from './workspace';
 import { encrypt, decrypt } from './commands/encryption';
@@ -342,29 +342,27 @@ export async function activate(context: ExtensionContext) {
   );
 
   // Register the convert data command - prompts for input and format before opening tool
-  context.subscriptions.push(
-    vsApi.commands.registerCommand('bitcoin.convertData', async () => {
-      // Prompt for input
-      const userInput = await vsApi.window.showInputBox({
-        prompt: 'Enter data to convert',
-        placeHolder: 'Enter hex, base64, binary array, or text',
-      });
+  registerCommand(context, outputManager, 'bitcoin.convertData', async () => {
+    // Prompt for input
+    const userInput = await vsApi.window.showInputBox({
+      prompt: 'Enter data to convert',
+      placeHolder: 'Enter hex, base64, binary array, or text',
+    });
 
-      // If they cancelled, do nothing
-      if (userInput === undefined) {
-        return;
-      }
+    // If they cancelled, do nothing
+    if (userInput === undefined) {
+      return undefined;
+    }
 
-      try {
-        // First try to use the sidebar view
-        await vsApi.commands.executeCommand('bitcoin.conversionView.focus');
-        conversionViewProvider.initializeWithInput(userInput);
-      } catch (error) {
-        // Fallback to panel if sidebar fails
-        await openConversionTool(userInput);
-      }
-    }),
-  );
+    try {
+      // First try to use the sidebar view
+      await vsApi.commands.executeCommand('bitcoin.conversionView.focus');
+      conversionViewProvider.initializeWithInput(userInput);
+    } catch (error) {
+      // Fallback to panel if sidebar fails
+      await openConversionTool(userInput);
+    }
+  });
 
   // Register show key vault command
   const showKeyVaultCommand = vsApi.commands.registerCommand(

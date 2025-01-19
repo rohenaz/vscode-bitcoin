@@ -58,13 +58,15 @@ export class KeyVault {
       timestamp: Date.now(),
     };
 
-    // Store the key entry
+    // Store the key entry first
     await this.storage.store(id, JSON.stringify(fullEntry));
 
-    // Update key list
+    // Update key list atomically
     const list = await this.getKeyList();
-    list.push(id);
-    await this.saveKeyList(list);
+    if (!list.includes(id)) {  // Ensure we don't add duplicates
+      list.push(id);
+      await this.saveKeyList(list);
+    }
 
     return id;
   }
@@ -78,8 +80,13 @@ export class KeyVault {
     const list = await this.getKeyList();
     const entries = await Promise.all(
       list.map(async (id) => {
-        const entry = await this.getKey(id);
-        return entry;
+        try {
+          const entry = await this.getKey(id);
+          return entry;
+        } catch (error) {
+          console.error(`Error retrieving key ${id}:`, error);
+          return undefined;
+        }
       }),
     );
     return entries.filter((entry): entry is KeyEntry => entry !== undefined);

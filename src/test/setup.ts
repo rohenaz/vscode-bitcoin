@@ -119,19 +119,45 @@ class EventEmitter<T> {
 }
 
 // Mock SecretStorage
+interface SecretStorageChangeEvent {
+  readonly key: string;
+}
+
 class SecretStorage {
   private storage = new Map<string, string>();
+  private onDidChangeEmitter = new EventEmitter<SecretStorageChangeEvent>();
+
+  constructor() {
+    // Initialize with any persisted data if needed
+    this.storage = new Map<string, string>();
+  }
 
   async get(key: string): Promise<string | undefined> {
-    return this.storage.get(key);
+    const value = this.storage.get(key);
+    console.log('SecretStorage.get', { key, value });
+    return value;
   }
 
   async store(key: string, value: string): Promise<void> {
+    console.log('SecretStorage.store', { key, value });
     this.storage.set(key, value);
+    this.onDidChangeEmitter.fire({ key });
   }
 
   async delete(key: string): Promise<void> {
+    console.log('SecretStorage.delete', { key });
     this.storage.delete(key);
+    this.onDidChangeEmitter.fire({ key });
+  }
+
+  get onDidChange(): Event<SecretStorageChangeEvent> {
+    return this.onDidChangeEmitter.event;
+  }
+
+  // Helper method for tests to clear storage
+  clear(): void {
+    console.log('SecretStorage.clear');
+    this.storage.clear();
   }
 }
 
@@ -325,7 +351,10 @@ const mockVSCode: VSCodeMock = {
     }),
     registerWebviewViewProvider: () => ({ dispose: () => {} }),
     showInformationMessage: async () => undefined,
-    showWarningMessage: async () => undefined,
+    showWarningMessage: async <T extends string>(
+      _message: string,
+      ..._items: Array<T | { modal?: boolean }>
+    ) => 'Delete' as T,
     showErrorMessage: async <T extends string>(
       _message: string,
       ..._items: T[]

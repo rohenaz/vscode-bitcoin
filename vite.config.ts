@@ -1,4 +1,6 @@
 import { defineConfig } from 'vite';
+import { builtinModules } from 'module';
+import path from 'path';
 
 export default defineConfig({
   build: {
@@ -10,23 +12,19 @@ export default defineConfig({
     rollupOptions: {
       external: [
         'vscode',
-        '@bsv/sdk',
-        'node-fetch',
-        'bpu-ts',
-        'bmapjs',
-        'core-js',
-        'typed-html',
-        'bun-types',
-        'bun:test',
-        /node:.*/, // Externalize all Node.js built-in modules
+        ...builtinModules,
+        ...builtinModules.map(m => `node:${m}`),
       ],
       output: {
         format: 'cjs',
-        manualChunks: undefined,
-        inlineDynamicImports: true,
+        manualChunks: {
+          // Keep webview-related code in separate chunks
+          webview: ['./src/commands/convertData/script.ts', './src/commands/convertData/styles.ts'],
+        },
+        inlineDynamicImports: false,
         entryFileNames: '[name].js',
-        chunkFileNames: '[name].js',
-        assetFileNames: '[name].[ext]',
+        chunkFileNames: 'webview/[name].js',
+        assetFileNames: 'assets/[name].[ext]',
       },
     },
     sourcemap: true,
@@ -34,8 +32,41 @@ export default defineConfig({
     minify: true,
     target: 'node16',
     reportCompressedSize: true,
+    commonjsOptions: {
+      include: [
+        /node_modules/,
+        /typed-html/,
+        /@bsv\/sdk/,
+        /is-base64/,
+        /is-hex/,
+        /js-1sat-ord/,
+        /node-fetch/,
+        /bmapjs/,
+        /bpu-ts/,
+      ],
+      transformMixedEsModules: true,
+    },
   },
   resolve: {
-    extensions: ['.tsx', '.ts', '.js'],
+    extensions: ['.tsx', '.ts', '.js', '.jsx', '.mjs', '.cjs'],
+    alias: {
+      'typed-html': path.resolve(__dirname, 'node_modules/typed-html/dist/src/elements.js'),
+    },
+    mainFields: ['module', 'main'],
+  },
+  optimizeDeps: {
+    include: [
+      'typed-html',
+      '@bsv/sdk',
+      'is-base64',
+      'is-hex',
+      'js-1sat-ord',
+      'node-fetch',
+      'bmapjs',
+      'bpu-ts',
+    ],
+    esbuildOptions: {
+      target: 'node16',
+    },
   },
 });

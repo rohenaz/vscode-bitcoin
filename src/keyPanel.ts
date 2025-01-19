@@ -177,9 +177,7 @@ export class KeyPanel {
             }
 
             function deleteKey(id) {
-                if (confirm('Are you sure you want to delete this key?')) {
-                    vscode.postMessage({ command: 'deleteKey', id });
-                }
+                vscode.postMessage({ command: 'deleteKey', id });
             }
 
             function editLabel(id, currentLabel) {
