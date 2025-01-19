@@ -34,7 +34,7 @@ import { KeyVault } from './keyVault';
 import { OutputManager } from './output';
 import { DataFormat, convertData, detectFormat } from './utils';
 import {
-  ExtensionContext,
+  type ExtensionContext,
   WebviewPanel,
   WebviewView,
   WebviewViewProvider,
@@ -98,18 +98,18 @@ const fetchPayUtxos = async (
       .json()
       .catch(() => ({ message: payRes.statusText }));
     // If it's a checksum mismatch, it might be a BAP ID
-    if (error.message === 'Checksum mismatch') {
+    if (error instanceof Error && error.message === 'Checksum mismatch') {
       throw new Error(
         'Invalid address format. If this is a BAP ID, please use the BAP lookup command instead.',
       );
     }
     throw new Error(
       `Error fetching pay utxos: ${payRes.status} ${
-        error.message || payRes.statusText
+        error instanceof Error ? error.message : payRes.statusText
       }`,
     );
   }
-  let payUtxos = await payRes.json();
+  let payUtxos = await payRes.json() as Utxo[];
   // exclude all 1 satoshi utxos and locked utxos
   payUtxos = payUtxos.filter(
     (u: Utxo & { lock?: { address: string; until: number } }) =>
@@ -119,7 +119,7 @@ const fetchPayUtxos = async (
   // Get pubkey hash from address
   const pubKeyHash = fromBase58Check(address);
   const p2pkhScript = new P2PKH().lock(pubKeyHash.data);
-  payUtxos = payUtxos.map((utxo: Partial<Utxo>) => ({
+  payUtxos = payUtxos.map((utxo) => ({
     txid: utxo.txid,
     vout: utxo.vout,
     satoshis: utxo.satoshis,
@@ -215,7 +215,7 @@ const fetchInscriptionData = async (outpoint: string): Promise<Inscription> => {
       `Error fetching inscription: ${response.status} ${response.statusText}`,
     );
   }
-  return response.json();
+  return response.json() as Promise<Inscription>;
 };
 
 const fetchInscriptionContent = async (

@@ -1,10 +1,10 @@
 import { createElement as h } from 'typed-html';
-import * as vscode from 'vscode';
-import { convertData } from '../../utils';
+import type * as vscode from 'vscode';
+import { convertData, detectFormat } from '../../utils';
 import vsApi from '../../vsShim';
 import { webviewScript } from './script';
 import { styles } from './styles';
-import { join } from 'path';
+import { join } from 'node:path';
 
 type DataFormat = 'binary' | 'hex' | 'base64' | 'utf8';
 
@@ -20,43 +20,6 @@ export type ConversionMessage =
     toFormat?: DataFormat;
     value?: string;
   };
-
-  
-// Helper function to detect format
-function detectFormat(input: string): DataFormat | undefined {
-  if (!input) return undefined;
-
-  // Try binary array first (most specific)
-  if (/^\[(\d+,)*\d+\]$/.test(input)) {
-    return 'binary';
-  }
-
-  // Try clear text (must be obviously text)
-  if (
-    /[a-zA-Z]/.test(input) &&
-    /[a-zA-Z][,!?.\s]|[,!?.\s][a-zA-Z]/.test(input) &&
-    !/^[0-9A-Fa-f]+$/.test(input) &&
-    !/^[A-Za-z0-9+/=]+$/.test(input) &&
-    !/^[0-9-]+$/.test(input) &&
-    !/^[a-zA-Z]+[0-9]+$/.test(input) &&
-    !/^[0-9]+[a-zA-Z]+$/.test(input) &&
-    !input.includes('[') &&
-    !input.includes(']')
-  ) {
-    return 'utf8';
-  }
-
-  // For hex and base64, just validate the format
-  if (input.length % 2 === 0 && /^[0-9A-Fa-f]+$/.test(input)) {
-    return 'hex';
-  }
-
-  if (/^[A-Za-z0-9+/]*={0,2}$/.test(input)) {
-    return 'base64';
-  }
-
-  return undefined;
-}
 
 /**
  * Provides the "Data Conversion" view in the sidebar (activity bar).

@@ -1,6 +1,6 @@
 import { defineConfig } from 'vite';
-import { builtinModules } from 'module';
-import path from 'path';
+import { builtinModules } from 'node:module';
+import path from 'node:path';
 
 export default defineConfig({
   build: {
@@ -18,16 +18,26 @@ export default defineConfig({
       output: {
         format: 'cjs',
         manualChunks: {
+          // Split vendor chunks
+          'vendor-bsv': ['@bsv/sdk'],
+          'vendor-fetch': ['node-fetch'],
+          'vendor-html': ['typed-html'],
+          'vendor-bmap': ['bmapjs', 'bpu-ts'],
           // Keep webview-related code in separate chunks
           webview: ['./src/commands/convertData/script.ts', './src/commands/convertData/styles.ts'],
         },
         inlineDynamicImports: false,
         entryFileNames: '[name].js',
-        chunkFileNames: 'webview/[name].js',
+        chunkFileNames: chunks => {
+          if (chunks.name.includes('vendor')) {
+            return `vendor/${chunks.name}.js`;
+          }
+          return 'webview/[name].js';
+        },
         assetFileNames: 'assets/[name].[ext]',
       },
     },
-    sourcemap: true,
+    sourcemap: false,
     outDir: 'dist',
     minify: true,
     target: 'node16',
@@ -37,20 +47,21 @@ export default defineConfig({
         /node_modules/,
         /typed-html/,
         /@bsv\/sdk/,
-        /is-base64/,
-        /is-hex/,
-        /js-1sat-ord/,
         /node-fetch/,
         /bmapjs/,
         /bpu-ts/,
       ],
       transformMixedEsModules: true,
+      // Optimize CommonJS dependencies
+      defaultIsModuleExports: true,
+      ignoreDynamicRequires: true,
     },
   },
   resolve: {
     extensions: ['.tsx', '.ts', '.js', '.jsx', '.mjs', '.cjs'],
     alias: {
       'typed-html': path.resolve(__dirname, 'node_modules/typed-html/dist/src/elements.js'),
+      '@bsv/sdk': path.resolve(__dirname, 'node_modules/@bsv/sdk/dist/cjs/mod.js'),
     },
     mainFields: ['module', 'main'],
   },
@@ -58,15 +69,22 @@ export default defineConfig({
     include: [
       'typed-html',
       '@bsv/sdk',
-      'is-base64',
-      'is-hex',
-      'js-1sat-ord',
       'node-fetch',
       'bmapjs',
       'bpu-ts',
     ],
+    exclude: [
+      // Exclude unused @bsv/sdk modules
+      '@bsv/sdk/auth',
+      '@bsv/sdk/overlay-tools',
+      '@bsv/sdk/totp',
+    ],
+    // Optimize dependency pre-bundling
     esbuildOptions: {
       target: 'node16',
+      treeShaking: true,
+      minify: true,
+      keepNames: true,
     },
   },
 });

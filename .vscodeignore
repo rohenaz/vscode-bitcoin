@@ -1,3 +1,8 @@
+# Keep only necessary images
+images/**
+!images/icon.png
+!images/b_icon.svg
+
 .vscode/**
 .vscode-test/**
 src/**
@@ -14,11 +19,6 @@ bun.lockb
 bunfig.toml
 assistant_snippet_*.txt
 
-# Keep only the necessary images
-images/icon.png
-!images/icon.png
-images/*.gif
-
 # Make sure dist folder is included
 !dist/**/*.js
 dist/**/*.map
@@ -31,13 +31,29 @@ dist/**/*.map
 *.log
 *.tgz
 
-# Include only required node_modules
+# Include only required node_modules files
 node_modules/**
-!node_modules/@bsv/sdk/**
-!node_modules/is-base64/**
-!node_modules/is-hex/**
-!node_modules/js-1sat-ord/**
-!node_modules/node-fetch/**
-!node_modules/typed-html/**
-!node_modules/bmapjs/**
-!node_modules/bpu-ts/**
+
+# @bsv/sdk - only include dist and necessary files
+!node_modules/@bsv/sdk/dist/**
+!node_modules/@bsv/sdk/package.json
+!node_modules/@bsv/sdk/LICENSE.txt
+
+# node-fetch - only lib and necessary files
+!node_modules/node-fetch/lib/**
+!node_modules/node-fetch/package.json
+!node_modules/node-fetch/LICENSE.md
+
+# typed-html - only dist and necessary files
+!node_modules/typed-html/dist/**
+!node_modules/typed-html/package.json
+
+# bmapjs - only dist and necessary files
+!node_modules/bmapjs/dist/**
+!node_modules/bmapjs/package.json
+!node_modules/bmapjs/LICENSE
+
+# bpu-ts - only dist and necessary files
+!node_modules/bpu-ts/dist/**
+!node_modules/bpu-ts/package.json
+!node_modules/bpu-ts/LICENSE

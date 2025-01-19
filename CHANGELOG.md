@@ -2,9 +2,10 @@
 
 ## [Unreleased]
 
-## [v0.1.0-beta] - 2025-01-15
+## [v0.1.0] - 2025-01-15
 
 ### Added
+- Pre-release version with all beta features
 - Key Vault functionality:
   - Secure key storage with encryption
   - Color-coded key organization
@@ -51,6 +52,7 @@
   - API documentation
 
 ### Changed
+- Version numbering to follow VS Code pre-release convention
 - Complete build system overhaul:
   - Migrated from webpack to Vite
   - Added Biome for linting and formatting

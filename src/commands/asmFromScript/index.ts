@@ -18,6 +18,7 @@ export async function asmFromScript(output: OutputManager) {
   const script = Script.fromHex(scriptHex);
   const asmString = script.toASM();
 
+  console.log('asmString', asmString);
   return {
     data: asmString,
     type: 'scripts' as const,

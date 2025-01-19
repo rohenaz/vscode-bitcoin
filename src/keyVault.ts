@@ -1,9 +1,9 @@
 import * as crypto from 'node:crypto';
 import vsApi, {
-  SecretStorage,
-  ExtensionContext,
-  EventEmitter,
-  Event,
+  type SecretStorage,
+  type ExtensionContext,
+  type EventEmitter,
+  type Event,
 } from './vsShim';
 
 export type KeyType =

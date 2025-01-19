@@ -1,5 +1,6 @@
 import type { KeyEntry, KeyVault } from './keyVault';
-import vsApi, { WebviewPanel, Disposable } from './vsShim';
+import type { WebviewPanel, Disposable } from './vsShim';
+import vsApi from './vsShim';
 
 export class KeyPanel {
   public static currentPanel: KeyPanel | undefined;
@@ -56,7 +57,10 @@ export class KeyPanel {
   private getWebviewContent(keys: KeyEntry[]): string {
     const escapedKeys = keys.map((key) => ({
       ...key,
-      label: (key.label || 'Untitled').replace(/`/g, '\\`'),
+      label: (key.label || 'Untitled')
+        .replace(/`/g, '\\`')
+        .replace(/'/g, "\\'")
+        .replace(/"/g, '\\"'),
     }));
 
     return `<!DOCTYPE html>
@@ -76,7 +80,7 @@ export class KeyPanel {
             }
             #searchInput {
                 width: 100%;
-                padding: 8px;
+                padding: 0 8px;
                 background: var(--vscode-input-background);
                 color: var(--vscode-input-foreground);
                 border: 1px solid var(--vscode-input-border);

@@ -1,89 +1,130 @@
 # Bitcoin VS Code Extension
 
-A powerful Bitcoin development toolkit for VS Code, built on the modern `@bsv/sdk` library.
+A comprehensive Bitcoin development toolkit for VS Code, powered by the modern `@bsv/sdk` library.
 
-![](./images/decode_raw_tx.gif)
+![](https://raw.githubusercontent.com/rohenaz/vscode-bitcoin/refs/heads/master/images/decode_raw_tx.gif)
 
-![](./images/address_from_private_key.gif)
+![](https://raw.githubusercontent.com/rohenaz/vscode-bitcoin/refs/heads/master/images/address_from_private_key.gif)
 
-![](./images/bmap_from_txid.gif)
+![](https://raw.githubusercontent.com/rohenaz/vscode-bitcoin/refs/heads/master/images/bmap_from_txid.gif)
 
 ## Features
 
 ### Key Management
 - Generate and manage private/public keys
-- Support for WIF format keys
-- HD key generation and derivation (xpub/xpriv)
+- WIF key support
+- HD key creation and derivation (xpub/xpriv)
 - Mnemonic phrase generation
-- Secure key vault with encrypted storage
+- Secure vault with encrypted storage
 - Color-coded key organization
 - One-click key operations
 
-![Key Vault](./images/key_vault.png)
+![Key Vault](https://raw.githubusercontent.com/rohenaz/vscode-bitcoin/refs/heads/master/images/key_vault.png)
 
 ### Address Operations
-- Generate addresses from various key formats
-- HD address derivation
-- UTXO management
-- WhatsOnChain explorer integration
-- BAP profile lookup
+- Generate addresses from any key format  
+- HD address derivation  
+- UTXO management  
+- Built-in WhatsOnChain explorer  
+- BAP profile lookup  
 
 ### Script Operations
-- Script to ASM conversion
-- P2PKH script support
-- Rich syntax highlighting:
-  - Bitcoin opcodes with hover descriptions
-  - P2PKH scripts with address derivation
-  - Bitcoin addresses with explorer links
-  - Transaction IDs with explorer links
+- Script to ASM conversion  
+- P2PKH script support  
+- Rich syntax highlighting:  
+  - Opcodes with hover tips  
+  - P2PKH scripts with address derivation  
+  - Address and TXID links to explorers  
 
-![](./images/p2pkh_tooltip.png)
+![](https://raw.githubusercontent.com/rohenaz/vscode-bitcoin/refs/heads/master/images/p2pkh_tooltip.png)
 
 ### Transaction Operations
-- Transaction fetching and decoding
-- Multiple output formats:
-  - Raw format
-  - BOB format
-  - BMAP format
-  - JSON format
+- Fetch and decode transactions  
+- Multiple output formats: raw, BOB, BMAP, JSON  
 
 ### Data Conversion
-- Advanced conversion tool with:
-  - Format auto-detection
-  - Live preview
-  - Copy to clipboard
-  - Input validation
-  - VS Code theme integration
-- Support for:
-  - Hex format
-  - Base64
-  - Binary data
-  - UTF-8 text
+- Advanced converter with:  
+  - Format auto-detection  
+  - Live preview  
+  - Clipboard copying  
+  - Input validation  
+  - Themed interface  
+- Supports hex, Base64, binary, UTF-8  
 
 ### Ordinals & Inscriptions
-- Fetch and view inscriptions
-- Parse inscription metadata
-- Support for various content types
+- Fetch and display inscriptions  
+- Parse inscription metadata  
+- Support for various content types  
 
 ### Security
-- Encrypted key storage
-- Secure clipboard operations
-- Protected workspace
-- Automatic `.gitignore` management
+- Encrypted key storage  
+- Secure clipboard operations  
+- Protected workspace  
+- Auto-managed `.gitignore`  
 
 ### Workspace Management
-The extension creates a `.bitcoin` directory to organize:
-```
+Extension creates a `.bitcoin` directory:
+
 .bitcoin/
 ├─ addresses/      # Generated addresses
 ├─ conversions/    # Format conversion results
-├─ keys/          # Generated keys (no private data)
-├─ media/         # Converted images and binary content
-├─ scripts/       # Script operations output
-├─ transactions/  # Transaction data
-├─ encrypted/     # Encrypted files
-└─ utxos/         # UTXO lists
-```
+├─ keys/           # Generated keys (no private data)
+├─ media/          # Converted images/binary data
+├─ scripts/        # Script operations output
+├─ transactions/   # Transaction data
+├─ encrypted/      # Encrypted files
+└─ utxos/          # UTXO lists
+
+## Usage
+
+### Command Palette
+Open the Command Palette (`Cmd+Shift+P` / `Ctrl+Shift+P`) and type "Bitcoin" to see all extension commands.
+
+### Key Operations
+- `bitcoin.generatePrivateKey`  
+- `bitcoin.generatePublicKey`  
+- `bitcoin.generateWIF`  
+- `bitcoin.generateMnemonic`  
+- `bitcoin.generateHDPrivateKey`  
+- `bitcoin.generateHDPublicKey`  
+- `bitcoin.showKeyVault`  
+
+### Address Commands
+- `bitcoin.addressFromPrivateKey`  
+- `bitcoin.addressFromPublicKey`  
+- `bitcoin.addressFromWIF`  
+- `bitcoin.addressFromHDPrivateKey`  
+- `bitcoin.addressFromHDPublicKey`  
+- `bitcoin.getUtxosForAddress`  
+- `bitcoin.exploreAddress`  
+
+### Script Commands
+- `bitcoin.asmFromScript`  
+- `bitcoin.debugSelection`  
+- `bitcoin.decodeFile`  
+
+### Transaction Commands
+- `bitcoin.decodeRawTx`  
+- `bitcoin.rawTxToBob`  
+- `bitcoin.getTx`  
+
+### Data Conversion
+- `bitcoin.convertData`  
+- `bitcoin.convertToHex`  
+- `bitcoin.convertToBase64`  
+- `bitcoin.convertToBinary`  
+- `bitcoin.decodeHex`  
+- `bitcoin.decodeBase64`  
+
+### Encryption
+Important: Generate at least one key first. The first generated key becomes the default encryption key. You can change it in the key vault.
+
+- `bitcoin.encrypt`  
+- `bitcoin.decrypt`  
+
+### Metadata & Inscriptions
+- `bitcoin.lookupBapProfile`  
+- `bitcoin.fetchOrdinalsInscription`  
 
 ## Configuration
 
@@ -94,25 +135,28 @@ The extension creates a `.bitcoin` directory to organize:
   "bitcoin.workspace.detectContentType": true,
   "bitcoin.workspace.organizeFolders": true,
   "bitcoin.outputPreference": "clipboard",
-  "bitcoin.bapIndexerUrl": "https://bap.network/api/v1"
+  "bitcoin.bapIndexerUrl": "https://api.sigmaidentity.com/api/v1"
 }
 ```
 
 ### Output Options
-- **Clipboard**: Copy to clipboard (default)
-- **File**: Save via file dialog
-- **Workspace**: Auto-save to `.bitcoin` workspace
+- Clipboard: Copy to clipboard (default)
+- File: Save via file dialog
+- Workspace: Automatically store in .bitcoin
 
 ## Development
 
 ### Build Commands
-- `bun run build` - Build the extension
-- `bun run dev` - Build in watch mode
-- `bun run test` - Run test suite
-- `bun run package` - Package for distribution
-- `bun run clean` - Clean build artifacts
-- `bun run lint` - Run linter
-- `bun run format` - Format code
+
+```bash
+bun run build     # Build the extension
+bun run dev       # Build in watch mode
+bun run test      # Run tests
+bun run package   # Package for distribution
+bun run clean     # Clean build artifacts
+bun run lint      # Run linter
+bun run format    # Format code
+```
 
 ### Testing
 Tests use Bun's test runner with BDD style:
@@ -126,31 +170,31 @@ bun test
 - [@bsv/sdk](https://github.com/bitcoin-sv/bsv-sdk) - Modern Bitcoin SV development kit
 - [bpu-ts](https://github.com/rohenaz/bpu-ts) - Bitcoin Protocol Parser in TypeScript
 - [bmapjs](https://github.com/rohenaz/bmapjs) - Bitcoin Metadata Application Protocol
+- [bsv-bap](https://github.com/bitcoinschema/bap) - Bitcoin Attestation Profile (Identities)
 
-### Network Services
-- [WhatsOnChain](https://whatsonchain.com) - API for UTXOs and transaction data
-- [BAP Network](https://bap.network) - BAP profile indexer
+### External Services
+- [WhatsOnChain](https://whatsonchain.com) - Bitcoin blockchain explorer
+- [BAP Identities](https://bap.sigmaidentity.com) - Bitcoin Attestation Profile (Identities)
+
 
 ## Contributing
-
-1. Fork the repository
-2. Create your feature branch
-3. Write tests for your changes
-4. Commit your changes
-5. Push to the branch
-6. Create a Pull Request
+1. Fork
+2. Create a feature branch
+3. Add tests
+4. Commit changes
+5. Push
+6. Open a Pull Request
 
 ## License
 
-[MIT License](LICENSE)
+MIT License
 
 ## Resources
-
-- [BSV Academy](https://bitcoinsv.academy/)
-- [Bitcoin SV](https://bitcoinsv.com/)
-- [WhatsOnChain](https://whatsonchain.com)
-- [BMAP](http://bmapjs.com)
-- [BAP Network](https://bap.network)
+- BSV Academy
+- Bitcoin SV
+- WhatsOnChain
+- BMAP
+- BAP Identities
 
 **Enjoy!**
 
