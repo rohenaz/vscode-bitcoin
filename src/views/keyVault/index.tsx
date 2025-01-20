@@ -1,12 +1,16 @@
 // src/views/keyVault/index.tsx
 
-import '@kitajs/html/register';
 import vsApi, { type WebviewPanel, type Disposable } from '../../vsShim';
 import type { KeyVault, KeyEntry, KeyType } from '../../keyVault';
 import { PrivateKey, PublicKey, HD, Mnemonic } from '@bsv/sdk';
-import { escapeHtml } from '@kitajs/html';
 import { keyPanelStyles } from './styles';
+import { escapeHtml } from '@kitajs/html';
+import { getPanelScript } from './script'; // We'll place all event-handling logic in script.ts
 
+/**
+ * KeyPanel controls the "Bitcoin Key Vault" webview panel.
+ * We store (and optionally display) private keys, child derivations, etc.
+ */
 export class KeyPanel {
   public static currentPanel: KeyPanel | undefined;
   private readonly _panel: WebviewPanel;
@@ -17,17 +21,17 @@ export class KeyPanel {
     this._panel = panel;
     this._vault = vault;
 
-    // Populate initial HTML
+    // Render initial content
     this.updateContent();
 
-    // Handle disposal
+    // Clean up when panel is disposed
     this._panel.onDidDispose(() => this.dispose(), null, this._disposables);
 
-    // Handle messages from the webview
+    // Handle messages from the webview (the script in script.ts will postMessage to us)
     this._panel.webview.onDidReceiveMessage(
       (message) => this.handleMessage(message),
       null,
-      this._disposables,
+      this._disposables
     );
 
     // Re-render if key vault changes
@@ -35,7 +39,7 @@ export class KeyPanel {
   }
 
   /**
-   * Show the key panel. Reuse if already open.
+   * Show the key panel. Reuse if already open
    */
   public static show(vault: KeyVault) {
     if (KeyPanel.currentPanel) {
@@ -48,60 +52,56 @@ export class KeyPanel {
         {
           enableScripts: true,
           retainContextWhenHidden: true,
-        },
+        }
       );
       KeyPanel.currentPanel = new KeyPanel(panel, vault);
     }
   }
 
   /**
-   * Re-render the HTML content for the panel
+   * Render the entire panel’s HTML
    */
   private async updateContent() {
     const allKeys = await this._vault.getAllKeys();
 
-    // If no encryption key is set, pick the first single private key (if any)
+    // Attempt to set a default encryption key if not set
     const encryptionKey = await this._vault.getEncryptionKey();
     if (!encryptionKey) {
-      // Find any single private key
       const singlePrivate = allKeys.find(
         (k) =>
           (k.type === 'private' || k.type === 'wif' || k.type === 'encryption') &&
-          !k.isEncryptionKey,
+          !k.isEncryptionKey
       );
       if (singlePrivate) {
         await this._vault.setEncryptionKey(singlePrivate.id);
       }
     }
 
-    // Grab final set
     const refreshedKeys = await this._vault.getAllKeys();
-    // Build parent->child relationships
     const hierarchy = buildKeyHierarchy(refreshedKeys);
 
     const nonce = getNonce();
     const cspSource = this._panel.webview.cspSource;
 
-    // Build server-rendered HTML for the key list
-    const keyRowsHtml = hierarchy.map((node) => renderKeyRecursive(node, 0)).join('');
+    // Build typed-HTML content for the key list
+    const keyElements = hierarchy.map((node) => renderKeyRecursive(node, 0));
 
-    // Inline script for client-side behaviors
-    const script = getWebviewScript(JSON.stringify(refreshedKeys));
+    // Generate our front-end script from script.ts
+    const allKeysJson = JSON.stringify(refreshedKeys);
+    const script = getPanelScript(allKeysJson);
 
-    // Now build the final HTML with typed-html
-    const panelHtml = getPanelHtml({
+    // Build final HTML
+    this._panel.webview.html = getPanelHtml({
       nonce,
       cspSource,
-      keyRowsHtml,
+      keyElements,
       script,
-      styles: keyPanelStyles, // <-- from styles.ts
+      styles: keyPanelStyles,
     });
-
-    this._panel.webview.html = panelHtml;
   }
 
   /**
-   * Handle messages from the webview
+   * Handle incoming messages posted from script.ts
    */
   private async handleMessage(message: {
     command: string;
@@ -114,7 +114,7 @@ export class KeyPanel {
       case 'generateRandomKey':
         if (message.type) {
           this.generateRandomKey(message.type).catch((err) =>
-            vsApi.window.showErrorMessage(String(err)),
+            vsApi.window.showErrorMessage(String(err))
           );
         }
         break;
@@ -122,7 +122,7 @@ export class KeyPanel {
       case 'submitAddKey':
         if (message.type && message.value) {
           this.addKey(message.type, message.value, message.label ?? 'Imported Key').catch((err) =>
-            vsApi.window.showErrorMessage(`Failed to add key: ${String(err)}`),
+            vsApi.window.showErrorMessage(`Failed to add key: ${String(err)}`)
           );
         }
         break;
@@ -135,9 +135,9 @@ export class KeyPanel {
 
       case 'updateLabel':
         if (message.id && message.label !== undefined) {
-          this._vault
-            .updateKeyLabel(message.id, message.label)
-            .catch((err) => vsApi.window.showErrorMessage(String(err)));
+          this._vault.updateKeyLabel(message.id, message.label).catch((err) =>
+            vsApi.window.showErrorMessage(String(err))
+          );
         }
         break;
 
@@ -183,26 +183,22 @@ export class KeyPanel {
     }
   }
 
-  /**
-   * Generate a random key in various formats
-   */
+  // --- The actual logic for generating, adding, copying, deriving, etc. ---
+
   private async generateRandomKey(type: KeyType) {
     try {
       let generatedValue = '';
-      let actualType: KeyType = type;
+      let finalType: KeyType = type;
 
       switch (type) {
         case 'private':
         case 'public': {
-          // We generate a random private key
-          // If user asked for "public," we label the final KeyEntry as public
-          // but the .value is still the private data
           const priv = PrivateKey.fromRandom();
           generatedValue = priv.toString(); // hex
           if (type === 'public') {
-            actualType = 'public';
+            finalType = 'public';
           } else {
-            actualType = 'private';
+            finalType = 'private';
           }
           break;
         }
@@ -213,13 +209,12 @@ export class KeyPanel {
         }
         case 'hdprivate':
         case 'hdpublic': {
-          // if 'hdpublic', we store a random HD private internally but label type "hdpublic"
           const hdPriv = HD.fromRandom();
           generatedValue = hdPriv.toString();
           if (type === 'hdpublic') {
-            actualType = 'hdpublic';
+            finalType = 'hdpublic';
           } else {
-            actualType = 'hdprivate';
+            finalType = 'hdprivate';
           }
           break;
         }
@@ -233,49 +228,40 @@ export class KeyPanel {
       this._panel.webview.postMessage({
         command: 'populateGeneratedKey',
         value: generatedValue,
-        finalType: actualType,
+        finalType,
       });
     } catch (err) {
       throw new Error(`Failed to generate random key: ${String(err)}`);
     }
   }
 
-  /**
-   * Add a new key from the modal
-   */
   private async addKey(type: KeyType, value: string, label: string) {
     let storeValue = '';
-    let storeType: KeyType;
+    let storeType: KeyType = type;
 
     switch (type) {
       case 'private':
       case 'public': {
-        // If "public" was chosen, store the private data, but mark as "public".
         if (!/^[0-9A-Fa-f]{64}$/.test(value)) {
-          throw new Error('Invalid private key hex (must be 64 hex characters)');
+          throw new Error('Invalid private key hex (64 hex characters).');
         }
-        PrivateKey.fromString(value); // confirm valid
+        PrivateKey.fromString(value);
         storeValue = value;
-        storeType = type; // 'public' or 'private'
         break;
       }
       case 'wif':
       case 'encryption': {
-        // parse WIF
         const priv = PrivateKey.fromWif(value);
         storeValue = priv.toWif();
-        storeType = type;
         break;
       }
       case 'hdprivate':
       case 'hdpublic': {
-        // parse xprv. If it's 'hdpublic', we treat it as a private string but label as hdpublic
         if (!value.startsWith('xprv')) {
-          throw new Error('Must start with "xprv"');
+          throw new Error('Invalid xprv (must start with "xprv").');
         }
         HD.fromString(value);
         storeValue = value;
-        storeType = type;
         break;
       }
       case 'mnemonic': {
@@ -283,7 +269,7 @@ export class KeyPanel {
         if (!mn.isValid()) {
           throw new Error('Invalid mnemonic phrase');
         }
-        // store the xprv
+        // We store the xprv
         const hdPriv = HD.fromSeed(mn.toSeed());
         storeValue = hdPriv.toString();
         storeType = 'hdprivate';
@@ -302,133 +288,138 @@ export class KeyPanel {
   }
 
   private async deleteKey(id: string) {
-    const key = await this._vault.getKey(id);
-    if (!key) {
-      vsApi.window.showWarningMessage('Key not found or already removed.');
-      return;
-    }
-
-    // If it's the only key & also encryption key => can't delete
-    if (key.isEncryptionKey) {
-      const allKeys = await this._vault.getAllKeys();
-      if (allKeys.length === 1) {
-        vsApi.window.showWarningMessage(
-          'Cannot delete the last key if it is the default encryption key.',
-        );
+    try {
+      const key = await this._vault.getKey(id);
+      if (!key) {
+        vsApi.window.showWarningMessage('Key not found or already removed.');
         return;
       }
+
+      // Make sure not to delete the last encryption key if it’s the only key
+      if (key.isEncryptionKey) {
+        const allKeys = await this._vault.getAllKeys();
+        if (allKeys.length === 1) {
+          vsApi.window.showWarningMessage(
+            'Cannot delete the last key if it is the default encryption key.'
+          );
+          return;
+        }
+      }
+
+      const confirm = await vsApi.window.showWarningMessage(
+        'Are you sure you want to delete this key?',
+        { modal: true },
+        'Delete',
+        'Cancel'
+      );
+      if (confirm !== 'Delete') return;
+
+      await this._vault.deleteKey(id);
+      vsApi.window.showInformationMessage('Key deleted');
+      this.updateContent();
+    } catch (err) {
+      vsApi.window.showErrorMessage(`Failed to delete key: ${String(err)}`);
     }
-
-    const confirm = await vsApi.window.showWarningMessage(
-      'Are you sure you want to delete this key?',
-      { modal: true },
-      'Delete',
-      'Cancel',
-    );
-    if (confirm !== 'Delete') return;
-
-    await this._vault.deleteKey(id);
-    vsApi.window.showInformationMessage('Key deleted');
-    this.updateContent();
   }
 
   private async copyPrivate(id: string) {
-    const key = await this._vault.getKey(id);
-    if (!key) {
-      vsApi.window.showErrorMessage('Key not found');
-      return;
+    try {
+      const key = await this._vault.getKey(id);
+      if (!key) throw new Error('Key not found');
+      await vsApi.env.clipboard.writeText(key.value);
+      vsApi.window.showInformationMessage('Private key copied to clipboard.');
+    } catch (err) {
+      vsApi.window.showErrorMessage(`Failed to copy private key: ${String(err)}`);
     }
-    // user explicitly wants the private data
-    await vsApi.env.clipboard.writeText(key.value);
-    vsApi.window.showInformationMessage('Private key copied to clipboard.');
   }
 
   private async copyPublic(id: string) {
-    const key = await this._vault.getKey(id);
-    if (!key) {
-      vsApi.window.showErrorMessage('Key not found');
-      return;
+    try {
+      const key = await this._vault.getKey(id);
+      if (!key) throw new Error('Key not found');
+      const pubKey = derivePublicKeyString(key);
+      await vsApi.env.clipboard.writeText(pubKey);
+      vsApi.window.showInformationMessage('Public key copied to clipboard.');
+    } catch (err) {
+      vsApi.window.showErrorMessage(`Failed to copy public key: ${String(err)}`);
     }
-    const pubKey = derivePublicKeyString(key);
-    await vsApi.env.clipboard.writeText(pubKey);
-    vsApi.window.showInformationMessage('Public key copied to clipboard.');
   }
 
   private async copyAddress(id: string) {
-    const key = await this._vault.getKey(id);
-    if (!key) {
-      vsApi.window.showErrorMessage('Key not found');
-      return;
+    try {
+      const key = await this._vault.getKey(id);
+      if (!key) throw new Error('Key not found');
+      const addr = deriveAddress(key);
+      await vsApi.env.clipboard.writeText(addr);
+      vsApi.window.showInformationMessage('Address copied to clipboard.');
+    } catch (err) {
+      vsApi.window.showErrorMessage(`Failed to copy address: ${String(err)}`);
     }
-    const addr = deriveAddress(key);
-    await vsApi.env.clipboard.writeText(addr);
-    vsApi.window.showInformationMessage('Address copied to clipboard.');
   }
 
   private async deriveAddress(id: string) {
-    const key = await this._vault.getKey(id);
-    if (!key) {
-      vsApi.window.showErrorMessage('Key not found');
-      return;
-    }
+    try {
+      const key = await this._vault.getKey(id);
+      if (!key) throw new Error('Key not found');
 
-    if (key.type === 'hdprivate' || key.type === 'hdpublic') {
-      // prompt for path
-      const path = await vsApi.window.showInputBox({
-        placeHolder: 'e.g. m/0/0',
-        value: 'm/0/0',
-      });
-      if (!path) return;
+      if (key.type === 'hdprivate' || key.type === 'hdpublic') {
+        const path = await vsApi.window.showInputBox({
+          placeHolder: 'e.g. m/0/0',
+          value: 'm/0/0',
+        });
+        if (!path) return;
 
-      const address = deriveHdAddress(key, path);
-      vsApi.window.showInformationMessage(`Derived address: ${address}`);
-    } else {
-      const address = deriveAddress(key);
-      vsApi.window.showInformationMessage(`Address: ${address}`);
+        const address = deriveHdAddress(key, path);
+        vsApi.window.showInformationMessage(`Derived address: ${address}`);
+      } else {
+        const address = deriveAddress(key);
+        vsApi.window.showInformationMessage(`Address: ${address}`);
+      }
+    } catch (err) {
+      vsApi.window.showErrorMessage(`Failed to derive address: ${String(err)}`);
     }
   }
 
   private async type42Child(id: string) {
-    const key = await this._vault.getKey(id);
-    if (!key) {
-      vsApi.window.showErrorMessage('Key not found');
-      return;
+    try {
+      const key = await this._vault.getKey(id);
+      if (!key) throw new Error('Key not found');
+
+      const otherPubStr = await vsApi.window.showInputBox({
+        prompt: "Enter other party's compressed public key (66 hex)",
+        validateInput: (txt) => {
+          if (!txt.startsWith('02') && !txt.startsWith('03')) {
+            return 'Must be 66-char compressed pubkey, starting with 02 or 03.';
+          }
+          if (txt.length !== 66) {
+            return 'Must be 66 characters total.';
+          }
+          return null;
+        },
+      });
+      if (!otherPubStr) return;
+
+      const invoiceNum = await vsApi.window.showInputBox({
+        prompt: 'Invoice number (any string)',
+      });
+      if (!invoiceNum) return;
+
+      const priv = toPrivateKey(key);
+      if (!priv) {
+        throw new Error(`Cannot do Type42 derivation for ${key.type} key`);
+      }
+
+      const otherPub = PublicKey.fromString(otherPubStr);
+      const child = priv.deriveChild(otherPub, invoiceNum);
+      const wif = child.toWif();
+      const label = `Derived (Type42) from ${key.label || key.type}`;
+
+      await this._vault.storeKey({ type: 'wif', value: wif, label });
+      vsApi.window.showInformationMessage('Type42 child key derived and stored.');
+      this.updateContent();
+    } catch (err) {
+      vsApi.window.showErrorMessage(`Failed to derive Type42 child: ${String(err)}`);
     }
-    const otherPubStr = await vsApi.window.showInputBox({
-      prompt: "Enter other party's compressed public key (66 hex)",
-      validateInput: (txt) => {
-        if (!(txt.startsWith('02') || txt.startsWith('03')) || txt.length !== 66) {
-          return 'Must be a 66-char compressed public key (start with 02 or 03)';
-        }
-        return null;
-      },
-    });
-    if (!otherPubStr) return;
-
-    const invoiceNum = await vsApi.window.showInputBox({
-      prompt: 'Invoice number (any string)',
-    });
-    if (!invoiceNum) return;
-
-    // get private from key
-    const priv = toPrivateKey(key);
-    if (!priv) {
-      vsApi.window.showErrorMessage(`Cannot do Type42 derivation for ${key.type} key`);
-      return;
-    }
-    const otherPub = PublicKey.fromString(otherPubStr);
-
-    const child = priv.deriveChild(otherPub, invoiceNum);
-    const wif = child.toWif();
-    const label = `Derived (Type42) from ${key.label || key.type}`;
-
-    await this._vault.storeKey({
-      type: 'wif',
-      value: wif,
-      label,
-    });
-    vsApi.window.showInformationMessage('Type42 child key derived and stored.');
-    this.updateContent();
   }
 
   public dispose() {
@@ -441,22 +432,19 @@ export class KeyPanel {
   }
 }
 
-/**
- * Build a parent->children hierarchy from the array of KeyEntry.
- */
-function buildKeyHierarchy(all: KeyEntry[]): Array<KeyEntry & { children?: KeyEntry[] }> {
+/** Build a parent->child hierarchy from the array of KeyEntry. */
+function buildKeyHierarchy(all: KeyEntry[]): Array<KeyEntry & { children: KeyEntry[] }> {
   const map: Record<string, KeyEntry & { children: KeyEntry[] }> = {};
   for (const k of all) {
     map[k.id] = { ...k, children: [] };
   }
 
-  const roots: Array<KeyEntry & { children?: KeyEntry[] }> = [];
+  const roots: Array<KeyEntry & { children: KeyEntry[] }> = [];
   for (const k of all) {
-    const parentId = k.metadata?.parentId; // if any
+    const parentId = k.metadata?.parentId;
     if (parentId && map[parentId]) {
       map[parentId].children.push(map[k.id]);
     } else {
-      // top-level
       roots.push(map[k.id]);
     }
   }
@@ -464,103 +452,142 @@ function buildKeyHierarchy(all: KeyEntry[]): Array<KeyEntry & { children?: KeyEn
 }
 
 /**
- * Recursively render a key (and its children) as typed HTML
+ * Recursively render a single KeyEntry as typed HTML (JSX),
+ * but use data-attributes (no inline onclick).
  */
-function renderKeyRecursive(k: KeyEntry & { children?: KeyEntry[] }, indent: number): string {
-  const childrenHtml = (k.children || []).map((c) => renderKeyRecursive(c, indent + 1)).join('');
-  return `
-    <div class="key-card indent-${indent}">
+function renderKeyRecursive(k: KeyEntry & { children?: KeyEntry[] }, indent: number): JSX.Element {
+  return (
+    <div class={`key-card indent-${indent}`}>
       <div class="key-top">
-        <div class="key-type type-${k.type}">${k.type}</div>
-        <div class="key-label" onclick="editLabel('${k.id}', '${escapeHtml(k.label || '')}')">
-          ${escapeHtml(k.label || 'Untitled')}
+        <div class={`key-type type-${k.type}`}>{k.type}</div>
+
+        {/* Instead of inline `onclick="..."`, we just store data attributes
+            that the script can pick up. For label editing: */}
+        <div
+          class="key-label"
+          data-cmd="editLabel"
+          data-id={k.id}
+          data-currentlabel={k.label || ''}
+          safe
+        >
+          {k.label || 'Untitled'}
         </div>
-        <div class="key-actions">
-          ${renderActions(k)}
-        </div>
+
+        {/* The action buttons: each uses data-cmd + data-id. */}
+        <div class="key-actions">{renderActions(k)}</div>
       </div>
+
       <div class="key-metadata">
-        <div>${new Date(k.timestamp).toLocaleString()}</div>
-        ${k.isEncryptionKey ? '<span class="encryption-key-badge">Default Encryption Key</span>' : ''}
+        <div safe>{new Date(k.timestamp).toLocaleString()}</div>
+        {k.isEncryptionKey && (
+          <span class="encryption-key-badge">Default Encryption Key</span>
+        )}
       </div>
-      <div class="key-value">
-        ${escapeHtml(displayedKeyValue(k))}
-      </div>
+
+      <div class="key-value">{escapeHtml(displayedKeyValue(k))}</div>
+      {(k.children || []).map((child) => renderKeyRecursive(child, indent + 1))}
     </div>
-    ${childrenHtml}
-  `;
+  );
 }
 
-/**
- * Determine the displayed "key value" in the UI:
- * - If type is public or hdpublic => derivePublicKeyString
- * - else if type is private/wif/etc => mask the actual private data
- */
+/** Show "public" or masked private data. */
 function displayedKeyValue(k: KeyEntry): string {
   if (k.type === 'public' || k.type === 'hdpublic') {
-    // show the derived public key
     return derivePublicKeyString(k);
   }
-  // private keys => mask
   const v = k.value;
   if (v.length <= 8) return v;
   return `${v.substring(0, 4)}...${v.substring(v.length - 4)}`;
 }
 
-/**
- * Render the action buttons for a given key
- */
-function renderActions(k: KeyEntry): string {
+/** Action buttons -> data attributes for the script. */
+function renderActions(k: KeyEntry): JSX.Element[] {
   const isSinglePrivate = k.type === 'private' || k.type === 'wif' || k.type === 'encryption';
   const isPublicType = k.type === 'public' || k.type === 'hdpublic';
-  // Copy Private only if it's not a public type
-  const copyPrivateBtn = isPublicType
-    ? ''
-    : `<button class="key-button" onclick="copyPrivate('${k.id}')">Copy Private</button>`;
 
-  // Copy Public => always possible if we have the stored private behind the scenes
-  const copyPublicBtn = `<button class="key-button" onclick="copyPublic('${k.id}')">Copy Public</button>`;
+  const actions: JSX.Element[] = [];
 
-  // Copy Address => always
-  const copyAddrBtn = `<button class="key-button" onclick="copyAddress('${k.id}')">Copy Address</button>`;
-  // Derive Address => always
-  const deriveAddrBtn = `<button class="key-button" onclick="deriveAddress('${k.id}')">Derive Address</button>`;
-  // Derive Child => always
-  const type42Btn = `<button class="key-button" onclick="type42Child('${k.id}')">Derive Child (Type42)</button>`;
+  if (!isPublicType) {
+    actions.push(
+      <button
+        type="button"
+        class="key-button"
+        data-cmd="copyPrivate"
+        data-id={k.id}
+      >
+        Copy Private
+      </button>
+    );
+  }
 
-  // Encryption => only if single private
-  const encBtn = (!k.isEncryptionKey && isSinglePrivate)
-    ? `<button class="key-button" onclick="setEncryptionKey('${k.id}')">Set Default</button>`
-    : '';
+  actions.push(
+    <button
+      type="button"
+      class="key-button"
+      data-cmd="copyPublic"
+      data-id={k.id}
+    >
+      Copy Public
+    </button>,
+    <button
+      type="button"
+      class="key-button"
+      data-cmd="copyAddress"
+      data-id={k.id}
+    >
+      Copy Address
+    </button>,
+    <button
+      type="button"
+      class="key-button"
+      data-cmd="deriveAddress"
+      data-id={k.id}
+    >
+      Derive Address
+    </button>,
+    <button
+      type="button"
+      class="key-button"
+      data-cmd="type42Child"
+      data-id={k.id}
+    >
+      Derive Child (Type42)
+    </button>
+  );
 
-  // Delete => always
-  const deleteBtn = `<button class="key-button" onclick="deleteKey('${k.id}')">Delete</button>`;
+  if (isSinglePrivate && !k.isEncryptionKey) {
+    actions.push(
+      <button
+        type="button"
+        class="key-button"
+        data-cmd="setEncryptionKey"
+        data-id={k.id}
+      >
+        Set Default
+      </button>
+    );
+  }
 
-  return [
-    copyPrivateBtn,
-    copyPublicBtn,
-    copyAddrBtn,
-    deriveAddrBtn,
-    type42Btn,
-    encBtn,
-    deleteBtn,
-  ]
-    .filter((s) => s !== '')
-    .join('\n');
+  actions.push(
+    <button
+      type="button"
+      class="key-button"
+      data-cmd="deleteKey"
+      data-id={k.id}
+    >
+      Delete
+    </button>
+  );
+
+  return actions;
 }
 
-/**
- * Derive the public key string from a KeyEntry
- */
 function derivePublicKeyString(k: KeyEntry): string {
-  // we have stored the private in k.value
   if (k.type === 'hdpublic') {
-    // treat k.value as xprv but user sees it as "HD Public"
     const hdPriv = HD.fromString(k.value);
     return hdPriv.toPublic().toString();
   }
   if (k.type === 'public') {
-    // treat k.value as raw private key
     const priv = PrivateKey.fromString(k.value);
     return priv.toPublicKey().toString();
   }
@@ -579,12 +606,9 @@ function derivePublicKeyString(k: KeyEntry): string {
   return '(unknown)';
 }
 
-/**
- * Derive single-address for non-hd, or the root address for hdprivate, or a path-based address
- */
 function deriveAddress(k: KeyEntry): string {
   if (k.type === 'hdpublic') {
-    const hdPriv = HD.fromString(k.value); // it's actually xprv stored
+    const hdPriv = HD.fromString(k.value);
     const pub = hdPriv.toPublic();
     return pub.pubKey.toAddress().toString();
   }
@@ -608,38 +632,25 @@ function deriveAddress(k: KeyEntry): string {
   return '(unknown)';
 }
 
-/**
- * Derive an address from HD path
- */
 function deriveHdAddress(k: KeyEntry, path: string): string {
   const hdPriv = HD.fromString(k.value);
-  // const isPub = k.type === 'hdpublic';
   const derived = hdPriv.derive(path);
   const finalPriv = PrivateKey.fromHex(derived.privKey.toString());
-  return finalPriv.toAddress();
+  return finalPriv.toAddress().toString();
 }
 
-/**
- * Convert a KeyEntry to PrivateKey if possible
- */
+/** Convert KeyEntry to PrivateKey if possible. */
 function toPrivateKey(k: KeyEntry): PrivateKey | null {
-  if (k.type === 'private') {
-    return PrivateKey.fromString(k.value);
-  }
-  if (k.type === 'public') {
-    return PrivateKey.fromString(k.value);
-  }
-  if (k.type === 'wif' || k.type === 'encryption') {
-    return PrivateKey.fromWif(k.value);
-  }
+  if (k.type === 'private') return PrivateKey.fromString(k.value);
+  if (k.type === 'public') return PrivateKey.fromString(k.value);
+  if (k.type === 'wif' || k.type === 'encryption') return PrivateKey.fromWif(k.value);
   if (k.type === 'hdprivate' || k.type === 'hdpublic') {
     const hdPriv = HD.fromString(k.value);
-    return hdPriv.privKey; // might exist
+    return hdPriv.privKey;
   }
   return null;
 }
 
-/** Return a random nonce for CSP. */
 function getNonce(): string {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
   let result = '';
@@ -650,19 +661,18 @@ function getNonce(): string {
 }
 
 /**
- * Return the typed-html for the entire panel. We do <html> ... </html> with
- * embedded styles, the key list, and the modal, plus an inline <script>.
+ * Build the overall <html> ... returning a string with typed-html & the script included.
  */
 function getPanelHtml(opts: {
   nonce: string;
   cspSource: string;
-  keyRowsHtml: string;
+  keyElements: JSX.Element[];
   script: string;
   styles: string;
 }): string {
-  const { nonce, cspSource, keyRowsHtml, script, styles } = opts;
+  const { nonce, cspSource, keyElements, script, styles } = opts;
 
-  const app = (
+  const page = (
     <html lang="en">
       <head>
         <meta charset="UTF-8" />
@@ -675,21 +685,21 @@ function getPanelHtml(opts: {
         <style safe>{styles}</style>
       </head>
       <body>
-        {HeaderBar()}
-        {/* Key List container with server-rendered markup */}
-        <div id="keyList">{escapeHtml(keyRowsHtml)}</div>
-
-        {Modal()}
-
-        <script>{script}</script>
+        <HeaderBar />
+        <div id="keyList">
+          {keyElements}
+        </div>
+        <Modal />
+        {/* Instead of inline script, we embed <script nonce=...>{script}</script> */}
+        <script nonce={nonce}>{script}</script>
       </body>
     </html>
   );
 
-  return `<!DOCTYPE html>\n${String(app)}`;
+  return `<!DOCTYPE html>\n${String(page)}`;
 }
 
-/** Top header bar subcomponent. */
+/** Top header bar subcomponent. No inline oninput; we use data-cmd in script.ts */
 function HeaderBar() {
   return (
     <div class="header">
@@ -697,23 +707,33 @@ function HeaderBar() {
         id="searchInput"
         type="text"
         placeholder="Search keys..."
-        oninput="searchKeys(this.value)"
+        data-cmd="searchKeys"
       />
-      <button class="add-key-button" onclick="openModal()" type="button">
+      <button
+        class="add-key-button"
+        data-cmd="openModal"
+        type="button"
+      >
         Add Key
       </button>
     </div>
   );
 }
 
-/** The add-key modal subcomponent. */
+/** The add-key modal subcomponent. Again, no inline onclick. Just data-cmd. */
 function Modal() {
   return (
     <div class="modal-overlay" id="modalOverlay">
       <div class="modal-content">
         <div class="modal-header">
           <h2>Add New Key</h2>
-          <button class="close-modal" onclick="closeModal()" type="button">×</button>
+          <button
+            class="close-modal"
+            data-cmd="closeModal"
+            type="button"
+          >
+            ×
+          </button>
         </div>
         <div class="form-group">
           <label for="keyType">Key Type</label>
@@ -736,124 +756,31 @@ function Modal() {
           <input type="password" id="keyValue" />
         </div>
         <div class="modal-actions">
-          <button class="secondary" onclick="generateRandom()" type="button">Generate</button>
+          <button
+            class="secondary"
+            data-cmd="generateRandom"
+            type="button"
+          >
+            Generate
+          </button>
           <div>
-            <button class="secondary" onclick="closeModal()" type="button">Cancel</button>
-            <button class="primary" onclick="submitAddKey()" type="button">Add Key</button>
+            <button
+              class="secondary"
+              data-cmd="closeModal"
+              type="button"
+            >
+              Cancel
+            </button>
+            <button
+              class="primary"
+              data-cmd="submitAddKey"
+              type="button"
+            >
+              Add Key
+            </button>
           </div>
         </div>
       </div>
     </div>
   );
-}
-
-/**
- * Return the inline <script> code for client side, including search, openModal, etc.
- */
-function getWebviewScript(allKeysJson: string): string {
-  return `
-    const vscode = acquireVsCodeApi();
-    let allKeys = ${allKeysJson};
-
-    function searchKeys(query) {
-      const lower = query.toLowerCase();
-      const items = document.querySelectorAll('#keyList .key-card');
-      items.forEach(item => {
-        const labelEl = item.querySelector('.key-label');
-        const typeEl = item.querySelector('.key-type');
-        const lbl = labelEl ? labelEl.textContent.toLowerCase() : '';
-        const t = typeEl ? typeEl.textContent.toLowerCase() : '';
-        if (lbl.includes(lower) || t.includes(lower)) {
-          item.style.display = '';
-        } else {
-          item.style.display = 'none';
-        }
-      });
-    }
-
-    function openModal() {
-      const modal = document.getElementById('modalOverlay');
-      modal.classList.add('show');
-      document.getElementById('keyType').focus();
-    }
-    function closeModal() {
-      const modal = document.getElementById('modalOverlay');
-      modal.classList.remove('show');
-      clearModalFields();
-    }
-    function clearModalFields() {
-      document.getElementById('keyType').value = 'private';
-      document.getElementById('keyLabel').value = '';
-      document.getElementById('keyValue').value = '';
-    }
-
-    function generateRandom() {
-      const type = document.getElementById('keyType').value;
-      vscode.postMessage({ command: 'generateRandomKey', type });
-    }
-
-    window.addEventListener('message', event => {
-      const msg = event.data;
-      if (msg.command === 'populateGeneratedKey') {
-        const keyValueInput = document.getElementById('keyValue');
-        keyValueInput.value = msg.value;
-        if (msg.finalType) {
-          document.getElementById('keyType').value = msg.finalType;
-        }
-      }
-      if (msg.command === 'refreshKeys') {
-        // If we want a complete re-render, we can do location.reload() or something else
-      }
-    });
-
-    function submitAddKey() {
-      const type = document.getElementById('keyType').value;
-      const label = document.getElementById('keyLabel').value.trim() || null;
-      const value = document.getElementById('keyValue').value.trim();
-      if (!value) {
-        alert('Key Value is required!');
-        return;
-      }
-      vscode.postMessage({
-        command: 'submitAddKey',
-        type,
-        value,
-        label: label || 'Imported ' + type + ' Key'
-      });
-      closeModal();
-    }
-
-    function editLabel(id, currentLabel) {
-      const newLabel = prompt('Enter new label:', currentLabel);
-      if (newLabel !== null && newLabel !== currentLabel) {
-        vscode.postMessage({
-          command: 'updateLabel',
-          id,
-          label: newLabel
-        });
-      }
-    }
-
-    function copyPrivate(id) {
-      vscode.postMessage({ command: 'copyPrivate', id });
-    }
-    function copyPublic(id) {
-      vscode.postMessage({ command: 'copyPublic', id });
-    }
-    function copyAddress(id) {
-      vscode.postMessage({ command: 'copyAddress', id });
-    }
-    function deriveAddress(id) {
-      vscode.postMessage({ command: 'deriveAddress', id });
-    }
-    function type42Child(id) {
-      vscode.postMessage({ command: 'type42Child', id });
-    }
-    function deleteKey(id) {
-      vscode.postMessage({ command: 'deleteKey', id });
-    }
-    function setEncryptionKey(id) {
-      vscode.postMessage({ command: 'setEncryptionKey', id });
-    }
-  `;
 }

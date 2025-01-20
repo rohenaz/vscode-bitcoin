@@ -1,4 +1,3 @@
-import '@kitajs/html/register';
 import type * as vscode from 'vscode';
 import { convertData, detectFormat } from '../../utils';
 import vsApi from '../../vsShim';

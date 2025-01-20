@@ -1,9 +1,27 @@
-/**
- * keyVault panel styles extracted from the old inline function getCssStyles.
- * Export as a string so we can embed it in typed-html.
- */
+// src/views/keyVault/styles.ts
 
 export const keyPanelStyles = `
+:root {
+  /* Map your short variables to real VS Code theme variables: */
+  --bg: var(--vscode-editor-background);
+  --fg: var(--vscode-editor-foreground);
+  --border: var(--vscode-panel-border);
+  --focus-border: var(--vscode-focusBorder);
+
+  --primary-btn: var(--vscode-button-background);
+  --primary-btn-text: var(--vscode-button-foreground);
+  --primary-btn-hover: var(--vscode-button-hoverBackground);
+
+  --secondary-btn: var(--vscode-button-secondaryBackground);
+  --secondary-btn-text: var(--vscode-button-secondaryForeground);
+  --secondary-btn-hover: var(--vscode-button-secondaryHoverBackground);
+
+  --input-bg: var(--vscode-input-background);
+  --input-fg: var(--vscode-input-foreground);
+
+  --panel-bg: var(--vscode-panel-background);
+  --description-fg: var(--vscode-descriptionForeground);
+}
 body {
   margin: 0;
   padding: 16px;

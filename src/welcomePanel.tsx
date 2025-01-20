@@ -1,4 +1,3 @@
-import '@kitajs/html/register';
 import vsApi, { type Uri, type WebviewPanel, type Disposable } from './vsShim';
 
 interface WebviewMessage {
