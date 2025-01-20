@@ -29,7 +29,7 @@ import { handleRawTxToBobCommand } from './commands/rawTxToBob';
 import { handleXPubFromXPrivCommand } from './commands/xPubFromxPriv';
 import { API_HOST } from './constants';
 import { EncryptionService } from './encryption';
-import { KeyPanel } from './keyPanel';
+import { KeyPanel } from './views/keyVault/index';
 import { KeyVault } from './keyVault';
 import { OutputManager } from './output';
 import { DataFormat, convertData, detectFormat } from './utils';
