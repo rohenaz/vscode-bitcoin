@@ -135,7 +135,8 @@ Important: Generate at least one key first. The first generated key becomes the 
   "bitcoin.workspace.detectContentType": true,
   "bitcoin.workspace.organizeFolders": true,
   "bitcoin.outputPreference": "clipboard",
-  "bitcoin.bapIndexerUrl": "https://api.sigmaidentity.com/api/v1"
+  "bitcoin.bapIndexerUrl": "https://api.sigmaidentity.com/api/v1",
+  "bitcoin.keyVault.autoStore": true
 }
 ```
 
@@ -143,6 +144,9 @@ Important: Generate at least one key first. The first generated key becomes the 
 - Clipboard: Copy to clipboard (default)
 - File: Save via file dialog
 - Workspace: Automatically store in .bitcoin
+
+### Key Vault Options
+- `bitcoin.keyVault.autoStore`: When enabled (default), automatically stores generated keys in the vault. When disabled, keys are only displayed but not stored.
 
 ## Development
 

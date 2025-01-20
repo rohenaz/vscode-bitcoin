@@ -6,17 +6,30 @@ import type { OutputManager } from '../../output';
 export async function generateWIF(output: OutputManager, keyVault: KeyVault) {
   try {
     const privKey = PrivateKey.fromRandom();
-    const value = privKey.toWif();
+    const wif = privKey.toWif();
+    const pubKey = privKey.toPublicKey();
 
-    // Store in vault
-    await keyVault.storeKey({
-      type: 'wif',
-      value,
-      label: 'Generated WIF',
-    });
+    // Only store in vault if auto-store is enabled
+    if (keyVault.isAutoStoreEnabled()) {
+      // Store WIF first
+      const parentId = await keyVault.storeKey({
+        type: 'wif',
+        value: wif,
+        label: 'Generated WIF',
+        metadata: {},
+      });
+
+      // Store public key with parentId reference
+      await keyVault.storeKey({
+        type: 'public',
+        value: pubKey.toString(),
+        label: 'Generated Public Key',
+        metadata: { parentId },
+      });
+    }
 
     return {
-      data: value,
+      data: wif,
       type: 'keys' as const,
       name: 'wif',
     };

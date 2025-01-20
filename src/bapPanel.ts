@@ -1,5 +1,5 @@
 import type { BapProfile } from './bapService';
-import vsApi, { WebviewPanel, Disposable } from './vsShim';
+import vsApi, { type WebviewPanel, type Disposable } from './vsShim';
 
 export class BapPanel {
   public static currentPanel: BapPanel | undefined;
@@ -42,6 +42,16 @@ export class BapPanel {
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>BAP Profile</title>
         <style>
+            /* CSS Reset */
+            *, *::before, *::after {
+              box-sizing: border-box;
+            }
+            html, body {
+              margin: 0;
+              padding: 0;
+              box-sizing: border-box;
+            }
+
             body {
                 padding: 20px;
                 color: var(--vscode-foreground);

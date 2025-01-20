@@ -1,4 +1,4 @@
-import vsApi, { Uri, WebviewPanel, Disposable } from './vsShim';
+import vsApi, { type Uri, type WebviewPanel, type Disposable } from './vsShim';
 
 interface WebviewMessage {
   command: 'tryFeature' | 'openKeybindings' | 'openSettings';
@@ -137,6 +137,16 @@ export class WelcomePanel {
           }
         </script>
         <style>
+          /* CSS Reset */
+          *, *::before, *::after {
+            box-sizing: border-box;
+          }
+          html, body {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+          }
+
           :root {
             --container-padding: 20px;
             --input-padding-vertical: 6px;

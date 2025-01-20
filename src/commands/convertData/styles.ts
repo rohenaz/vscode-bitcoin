@@ -1,6 +1,16 @@
 import { css } from '../../utils/css';
 
 export const styles = css`
+  /* CSS Reset */
+  *, *::before, *::after {
+    box-sizing: border-box;
+  }
+  html, body {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+  }
+
   body {
     margin: 0;
     padding: 12px;

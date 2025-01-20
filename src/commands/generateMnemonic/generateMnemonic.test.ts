@@ -1,4 +1,4 @@
-import { describe, expect, mock, test } from 'bun:test';
+import { describe, expect, mock, test, beforeEach } from 'bun:test';
 import { Mnemonic } from '@bsv/sdk';
 import vscode from '@test/setup';
 import type { KeyVault } from '../../keyVault';
@@ -10,17 +10,25 @@ const mockOutput = {
   handleOutput: mock(() => Promise.resolve()),
 } as unknown as OutputManager;
 
+const storeKeyMock = mock(() => Promise.resolve('test-id'));
+const isAutoStoreEnabledMock = mock(() => true);
+
 const mockKeyVault = {
-  storeKey: mock(() => Promise.resolve('test-id')),
+  storeKey: storeKeyMock,
+  isAutoStoreEnabled: isAutoStoreEnabledMock,
 } as unknown as KeyVault;
 
 // Mock window.showErrorMessage
 const originalShowErrorMessage = vscode.window.showErrorMessage;
-vscode.window.showErrorMessage = mock(
-  async (message: string, ...items: string[]) => items[0] || 'Error',
-);
+vscode.window.showErrorMessage = mock((_message: string, ..._items: string[]) => Promise.resolve(undefined));
 
 describe('generateMnemonic', () => {
+  beforeEach(() => {
+    storeKeyMock.mockClear();
+    isAutoStoreEnabledMock.mockClear();
+    isAutoStoreEnabledMock.mockReturnValue(true);
+  });
+
   test('generates valid mnemonic', async () => {
     const result = await generateMnemonic(mockOutput, mockKeyVault);
 
@@ -33,7 +41,7 @@ describe('generateMnemonic', () => {
     });
 
     // Verify key was stored in vault
-    expect(mockKeyVault.storeKey).toHaveBeenCalledWith({
+    expect(storeKeyMock).toHaveBeenCalledWith({
       type: 'mnemonic',
       value: expect.any(String),
       label: 'Generated Mnemonic',

@@ -43,6 +43,8 @@ import { WelcomePanel } from './welcomePanel';
 import { WorkspaceManager } from './workspace';
 import { encrypt, decrypt } from './commands/encryption';
 import { BitcoinSemanticTokensProvider } from './semanticTokens';
+import { generateHDPublicKey } from './commands/generateHDPublicKey';
+import { generateHDPrivateKey } from './commands/generateHDPrivateKey';
 
 const { fromBase58Check, toBase64, toArray } = Utils;
 
@@ -385,52 +387,29 @@ export async function activate(context: ExtensionContext) {
     handleDecodeFileCommand(outputManager),
   );
 
-  // Register key generation commands
-  registerCommand(
-    context,
-    outputManager,
-    'bitcoin.generateHDPublicKey',
-    async () => {
-      const hdPrivKey = HD.fromRandom();
-      const hdPubKey = hdPrivKey.toPublic();
-      const value = hdPubKey.toString();
-
-      // Store in vault
-      await keyVault.storeKey({
-        type: 'hdpublic',
-        value,
-        label: 'Generated HD Public Key',
-      });
-
-      return {
-        data: value,
-        type: 'keys',
-        name: 'hdpubkey',
-      };
-    },
+  // Register key generation commands with keyVault for parent-child relationships
+  registerCommand(context, outputManager, 'bitcoin.generatePublicKey', () => 
+    generatePublicKey(outputManager, keyVault)
   );
 
-  registerCommand(
-    context,
-    outputManager,
-    'bitcoin.generateHDPrivateKey',
-    async () => {
-      const hdPrivKey = HD.fromRandom();
-      const value = hdPrivKey.toString();
+  registerCommand(context, outputManager, 'bitcoin.generateHDPublicKey', () => 
+    generateHDPublicKey(outputManager, keyVault)
+  );
 
-      // Store in vault
-      await keyVault.storeKey({
-        type: 'hdprivate',
-        value,
-        label: 'Generated HD Private Key',
-      });
+  registerCommand(context, outputManager, 'bitcoin.generateHDPrivateKey', () => 
+    generateHDPrivateKey(outputManager, keyVault)
+  );
 
-      return {
-        data: value,
-        type: 'keys',
-        name: 'hdprivkey',
-      };
-    },
+  registerCommand(context, outputManager, 'bitcoin.generatePrivateKey', () => 
+    generatePrivateKey(outputManager, keyVault)
+  );
+
+  registerCommand(context, outputManager, 'bitcoin.generateWIF', () => 
+    generateWIF(outputManager, keyVault)
+  );
+
+  registerCommand(context, outputManager, 'bitcoin.generateMnemonic', () => 
+    generateMnemonic(outputManager, keyVault)
   );
 
   registerCommand(context, outputManager, 'bitcoin.xPubFromxPriv', async () => {
@@ -510,38 +489,6 @@ export async function activate(context: ExtensionContext) {
   registerCommand(context, outputManager, 'bitcoin.asmFromScript', async () => {
     return asmFromScript(outputManager);
   });
-
-  // Register key generation commands
-  registerCommand(
-    context,
-    outputManager,
-    'bitcoin.generatePrivateKey',
-    async () => {
-      return generatePrivateKey(outputManager, keyVault);
-    },
-  );
-
-  registerCommand(
-    context,
-    outputManager,
-    'bitcoin.generatePublicKey',
-    async () => {
-      return generatePublicKey(outputManager);
-    },
-  );
-
-  registerCommand(context, outputManager, 'bitcoin.generateWIF', async () => {
-    return generateWIF(outputManager, keyVault);
-  });
-
-  registerCommand(
-    context,
-    outputManager,
-    'bitcoin.generateMnemonic',
-    async () => {
-      return generateMnemonic(outputManager, keyVault);
-    },
-  );
 
   registerCommand(
     context,

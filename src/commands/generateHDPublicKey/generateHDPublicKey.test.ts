@@ -1,7 +1,7 @@
-import { describe, expect, mock, test } from 'bun:test';
+import { describe, expect, mock, test, beforeEach } from 'bun:test';
 import { HD } from '@bsv/sdk';
 import vscode from '@test/setup';
-import type { KeyVault } from '../../keyVault';
+import type { KeyVault, KeyEntry } from '../../keyVault';
 import type { OutputManager } from '../../output';
 import { generateHDPublicKey } from './index';
 
@@ -10,18 +10,26 @@ const mockOutput = {
   handleOutput: mock(() => Promise.resolve()),
 } as unknown as OutputManager;
 
+type KeyEntryInput = Omit<KeyEntry, 'id' | 'timestamp'>;
+const storeKeyMock = mock<(entry: KeyEntryInput) => Promise<string>>(() => Promise.resolve('test-id'));
+const isAutoStoreEnabledMock = mock<() => boolean>(() => true);
+
 const mockKeyVault = {
-  storeKey: mock(() => Promise.resolve('test-id')),
+  storeKey: storeKeyMock,
+  isAutoStoreEnabled: isAutoStoreEnabledMock,
 } as unknown as KeyVault;
 
 // Mock window.showErrorMessage
 const originalShowErrorMessage = vscode.window.showErrorMessage;
-vscode.window.showErrorMessage = mock(
-  async (message: string, ...items: string[]) => items[0] || 'Error',
-);
+vscode.window.showErrorMessage = mock((_message: string, ..._items: string[]) => Promise.resolve(undefined));
 
 describe('generateHDPublicKey', () => {
-  test('generates valid HD public key', async () => {
+  beforeEach(() => {
+    storeKeyMock.mockClear();
+    isAutoStoreEnabledMock.mockImplementation(() => true);
+  });
+
+  test('generates valid HD public key with autoStore enabled', async () => {
     const result = await generateHDPublicKey(mockOutput, mockKeyVault);
 
     // Check return value format
@@ -31,12 +39,40 @@ describe('generateHDPublicKey', () => {
       name: 'hdpubkey',
     });
 
-    // Verify key was stored in vault
-    expect(mockKeyVault.storeKey).toHaveBeenCalledWith({
-      type: 'hdpublic',
-      value: expect.stringMatching(/^xpub[1-9A-HJ-NP-Za-km-z]{107}/),
-      label: 'Generated HD Public Key',
+    // Verify both private and public keys were stored with correct relationship
+    expect(storeKeyMock).toHaveBeenCalledTimes(2);
+    
+    const calls = storeKeyMock.mock.calls;
+    // First call should store HD private key
+    expect(calls[0][0]).toEqual({
+      type: 'hdprivate',
+      label: 'Parent HD Private Key for HDPublicKey',
+      metadata: {},
+      value: expect.stringMatching(/^xprv[1-9A-HJ-NP-Za-km-z]{107}/),
     });
+
+    // Second call should store HD public key with parentId
+    expect(calls[1][0]).toEqual({
+      type: 'hdpublic',
+      label: 'Generated HD Public Key',
+      metadata: { parentId: 'test-id' },
+      value: expect.stringMatching(/^xpub[1-9A-HJ-NP-Za-km-z]{107}/),
+    });
+  });
+
+  test('generates only HD public key with autoStore disabled', async () => {
+    isAutoStoreEnabledMock.mockImplementation(() => false);
+    const result = await generateHDPublicKey(mockOutput, mockKeyVault);
+
+    // Check return value format
+    expect(result).toEqual({
+      data: expect.stringMatching(/^xpub[1-9A-HJ-NP-Za-km-z]{107}/),
+      type: 'keys',
+      name: 'hdpubkey',
+    });
+
+    // Verify no keys were stored
+    expect(storeKeyMock).not.toHaveBeenCalled();
   });
 
   test('handles errors', async () => {

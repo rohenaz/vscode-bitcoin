@@ -21,6 +21,9 @@ export interface KeyEntry {
   label?: string;
   value: string;
   timestamp: number;
+  /**
+   * You can store arbitrary metadata here, e.g. parentId for child keys
+   */
   metadata?: Record<string, string>;
   isEncryptionKey?: boolean;
 }
@@ -34,6 +37,16 @@ export class KeyVault {
   constructor(context: ExtensionContext) {
     this.storage = context.secrets;
     this.onKeyListChanged = new vsApi.EventEmitter<void>();
+  }
+
+  isAutoStoreEnabled(): boolean {
+    try {
+      const config = vsApi.workspace.getConfiguration('bitcoin');
+      return config.get('keyVault.autoStore') ?? true;
+    } catch (error) {
+      console.warn('Failed to get key vault configuration, using default:', error);
+      return true;
+    }
   }
 
   get onDidChangeKeys(): Event<void> {
@@ -63,7 +76,7 @@ export class KeyVault {
 
     // Update key list atomically
     const list = await this.getKeyList();
-    if (!list.includes(id)) {  // Ensure we don't add duplicates
+    if (!list.includes(id)) {
       list.push(id);
       await this.saveKeyList(list);
     }
@@ -79,12 +92,12 @@ export class KeyVault {
   async getAllKeys(): Promise<KeyEntry[]> {
     const list = await this.getKeyList();
     const entries = await Promise.all(
-      list.map(async (id) => {
+      list.map(async (keyId) => {
         try {
-          const entry = await this.getKey(id);
+          const entry = await this.getKey(keyId);
           return entry;
         } catch (error) {
-          console.error(`Error retrieving key ${id}:`, error);
+          console.error(`Error retrieving key ${keyId}:`, error);
           return undefined;
         }
       }),

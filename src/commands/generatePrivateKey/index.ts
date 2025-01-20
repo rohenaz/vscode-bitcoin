@@ -11,6 +11,7 @@ export async function generatePrivateKey(
     const privateKey = PrivateKey.fromRandom();
     const hex = privateKey.toString();
     const wif = privateKey.toWif();
+    const pubKey = privateKey.toPublicKey();
 
     // Output both formats
     await output.handleOutput(
@@ -20,12 +21,24 @@ export async function generatePrivateKey(
       'privkey',
     );
 
-    // Store in vault
-    await keyVault.storeKey({
-      type: 'private',
-      value: hex,
-      label: 'Generated Private Key',
-    });
+    // Only store in vault if auto-store is enabled
+    if (keyVault.isAutoStoreEnabled()) {
+      // Store private key first
+      const parentId = await keyVault.storeKey({
+        type: 'private',
+        value: hex,
+        label: 'Generated Private Key',
+        metadata: {},
+      });
+
+      // Store public key with parentId reference
+      await keyVault.storeKey({
+        type: 'public',
+        value: pubKey.toString(),
+        label: 'Generated Public Key',
+        metadata: { parentId },
+      });
+    }
 
     return {
       data: hex,

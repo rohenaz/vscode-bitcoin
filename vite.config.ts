@@ -21,7 +21,7 @@ export default defineConfig({
           // Split vendor chunks
           'vendor-bsv': ['@bsv/sdk'],
           'vendor-fetch': ['node-fetch'],
-          'vendor-html': ['typed-html'],
+          'vendor-html': ['@kitajs/html'],
           'vendor-bmap': ['bmapjs', 'bpu-ts'],
           // Keep webview-related code in separate chunks
           webview: ['./src/commands/convertData/script.ts', './src/commands/convertData/styles.ts'],
@@ -45,7 +45,7 @@ export default defineConfig({
     commonjsOptions: {
       include: [
         /node_modules/,
-        /typed-html/,
+        /@kitajs\/html/,
         /@bsv\/sdk/,
         /node-fetch/,
         /bmapjs/,
@@ -60,14 +60,14 @@ export default defineConfig({
   resolve: {
     extensions: ['.tsx', '.ts', '.js', '.jsx', '.mjs', '.cjs'],
     alias: {
-      'typed-html': path.resolve(__dirname, 'node_modules/typed-html/dist/src/elements.js'),
+      '@kitajs/html': path.resolve(__dirname, 'node_modules/@kitajs/html/dist/src/elements.js'),
       '@bsv/sdk': path.resolve(__dirname, 'node_modules/@bsv/sdk/dist/cjs/mod.js'),
     },
     mainFields: ['module', 'main'],
   },
   optimizeDeps: {
     include: [
-      'typed-html',
+      '@kitajs/html',
       '@bsv/sdk',
       'node-fetch',
       'bmapjs',

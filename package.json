@@ -355,6 +355,11 @@
           "type": "string",
           "default": "https://api.sigmaidentity.com",
           "description": "URL of the BAP identity indexer API"
+        },
+        "bitcoin.keyVault.autoStore": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically store generated keys in the vault"
         }
       }
     },
@@ -428,7 +433,7 @@
     "lint:fix": "biome check --apply .",
     "format": "biome format . --write",
     "check": "biome check --apply .",
-    "test": "bun test",
+    "test": "xss-scan && bun test",
     "package": "vsce package",
     "package:pre": "vsce package --pre-release",
     "publish": "vsce publish",
@@ -454,8 +459,9 @@
   "extensionKind": ["workspace"],
   "dependencies": {
     "@bsv/sdk": "^1.3.5",
-    "node-fetch": "^3.3.2",
-    "typed-html": "^3.0.1"
+    "@kitajs/html": "^4.2.7",
+    "@kitajs/ts-html-plugin": "^4.1.1",
+    "node-fetch": "^3.3.2"
   },
   "optionalDependencies": {
     "bmapjs": "^0.4.0-beta.63",

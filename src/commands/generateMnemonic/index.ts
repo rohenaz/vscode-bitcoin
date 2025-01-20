@@ -11,12 +11,14 @@ export async function generateMnemonic(
     const mnemonic = Mnemonic.fromRandom();
     const value = mnemonic.toString();
 
-    // Store in vault
-    await keyVault.storeKey({
-      type: 'mnemonic',
-      value,
-      label: 'Generated Mnemonic',
-    });
+    // Only store in vault if auto-store is enabled
+    if (keyVault.isAutoStoreEnabled()) {
+      await keyVault.storeKey({
+        type: 'mnemonic',
+        value,
+        label: 'Generated Mnemonic',
+      });
+    }
 
     return {
       data: value,
