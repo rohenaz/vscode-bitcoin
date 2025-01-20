@@ -3,6 +3,7 @@ import '@kitajs/html/register';
 import vsApi, { type WebviewPanel, type Disposable } from './vsShim';
 import type { KeyVault, KeyEntry, KeyType } from './keyVault';
 import { PrivateKey, PublicKey, HD, Mnemonic } from '@bsv/sdk';
+import { safe } from '@kitajs/html';
 
 /**
  * This KeyPanel is rendered in a webview using @kitajs/html + JSX.
@@ -683,7 +684,7 @@ function getNonce(): string {
 }
 
 /**
- * Return the typed-html for the entire panel. We do <html> ... </html> with
+ * Return the @kitajs/html for the entire panel. We do <html> ... </html> with
  * embedded styles, the key list, and the modal, plus an inline <script>.
  */
 function getPanelHtml(opts: {
@@ -705,12 +706,12 @@ function getPanelHtml(opts: {
           content={`default-src 'none'; style-src ${cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}';`}
         />
         <title>Bitcoin Key Vault</title>
-        <style>{styles}</style>
+        <style safe>{safe(styles)}</style>
       </head>
       <body>
         {HeaderBar()}
         {/* Key List container with server-rendered markup */}
-        <div id="keyList">{keyRowsHtml}</div>
+        <div id="keyList" safe>{safe(keyRowsHtml)}</div>
 
         {Modal()}
 
@@ -719,7 +720,7 @@ function getPanelHtml(opts: {
     </html>
   );
 
-  // typed-html => string
+  // @kitajs/html => string
   return `<!DOCTYPE html>\n${String(app)}`;
 }
 

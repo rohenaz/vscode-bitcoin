@@ -1,4 +1,4 @@
-import { createElement as h } from 'typed-html';
+import '@kitajs/html/register';
 import type * as vscode from 'vscode';
 import { convertData, detectFormat } from '../../utils';
 import vsApi from '../../vsShim';
@@ -268,7 +268,7 @@ function OutputSection() {
         <textarea
           id="output"
           placeholder="Converted output will appear here"
-          readonly="readonly"
+          readonly={true}
         />
         <button id="copyButton" class="copy-button" type="button" title="Copy">
           <i class="codicon codicon-copy" aria-label="Copy" />
@@ -293,7 +293,7 @@ function ConversionPanel({ initialValue }: { initialValue: string }) {
 }
 
 /**
- * Helper to generate typed-html for the data conversion UI.
+ * Helper to generate @kitajs/html for the data conversion UI.
  */
 function getConversionWebviewContent(
   initialInput?: string,

@@ -60,7 +60,7 @@ export default defineConfig({
   resolve: {
     extensions: ['.tsx', '.ts', '.js', '.jsx', '.mjs', '.cjs'],
     alias: {
-      '@kitajs/html': path.resolve(__dirname, 'node_modules/@kitajs/html/dist/src/elements.js'),
+      '@kitajs/html': path.resolve(__dirname, 'node_modules/@kitajs/html'),
       '@bsv/sdk': path.resolve(__dirname, 'node_modules/@bsv/sdk/dist/cjs/mod.js'),
     },
     mainFields: ['module', 'main'],

@@ -44,10 +44,6 @@ node_modules/**
 !node_modules/node-fetch/package.json
 !node_modules/node-fetch/LICENSE.md
 
-# typed-html - only dist and necessary files
-!node_modules/typed-html/dist/**
-!node_modules/typed-html/package.json
-
 # bmapjs - only dist and necessary files
 !node_modules/bmapjs/dist/**
 !node_modules/bmapjs/package.json
@@ -57,3 +53,8 @@ node_modules/**
 !node_modules/bpu-ts/dist/**
 !node_modules/bpu-ts/package.json
 !node_modules/bpu-ts/LICENSE
+
+# @kitajs/html - only include dist and necessary files
+!node_modules/@kitajs/html/dist/**
+!node_modules/@kitajs/html/package.json
+!node_modules/@kitajs/html/LICENSE
