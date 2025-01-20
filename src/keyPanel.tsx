@@ -3,8 +3,7 @@ import '@kitajs/html/register';
 import vsApi, { type WebviewPanel, type Disposable } from './vsShim';
 import type { KeyVault, KeyEntry, KeyType } from './keyVault';
 import { PrivateKey, PublicKey, HD, Mnemonic } from '@bsv/sdk';
-import { safe } from '@kitajs/html';
-
+import { escapeHtml } from '@kitajs/html';
 /**
  * This KeyPanel is rendered in a webview using @kitajs/html + JSX.
  * We store only "private" keys from the "Add Key" modal, but user can choose "public"/"hdpublic"
@@ -664,15 +663,6 @@ function toPrivateKey(k: KeyEntry): PrivateKey | null {
   return null;
 }
 
-/** Escape HTML for safety in text content. */
-function escapeHtml(str: string): string {
-  return str
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
-}
-
 /** Return a random nonce for CSP. */
 function getNonce(): string {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
@@ -706,12 +696,12 @@ function getPanelHtml(opts: {
           content={`default-src 'none'; style-src ${cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}';`}
         />
         <title>Bitcoin Key Vault</title>
-        <style safe>{safe(styles)}</style>
+        <style safe>{styles}</style>
       </head>
       <body>
         {HeaderBar()}
         {/* Key List container with server-rendered markup */}
-        <div id="keyList" safe>{safe(keyRowsHtml)}</div>
+        <div id="keyList">{escapeHtml(keyRowsHtml)}</div>
 
         {Modal()}
 
