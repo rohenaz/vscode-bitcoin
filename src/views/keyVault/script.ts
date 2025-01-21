@@ -1,5 +1,9 @@
 // src/views/keyVault/script.ts
-// - We add "copyWords" to the commands, so the UI calls { command: 'copyWords', id }
+/**
+ * Updated: We no longer call `prompt()` for "editLabel".
+ * Instead, we post a message { command: 'requestEditLabel', ... } to the extension,
+ * which then handles the user prompt using VS Code's showInputBox.
+ */
 
 export function getPanelScript(allKeysJson: string): string {
   return `
@@ -27,9 +31,9 @@ export function getPanelScript(allKeysJson: string): string {
 
     const cmd = btn.getAttribute('data-cmd');
     const id = btn.getAttribute('data-id');
-    const label = btn.getAttribute('data-currentlabel') || '';
+    const currentLabel = btn.getAttribute('data-currentlabel') || '';
 
-    handleCommand(cmd, id, label);
+    handleCommand(cmd, id, currentLabel);
   });
 
   document.addEventListener('input', evt => {
@@ -38,7 +42,8 @@ export function getPanelScript(allKeysJson: string): string {
 
     const query = inp.value.toLowerCase();
     const items = document.querySelectorAll('#keyList .key-card');
-    items.forEach(item => {
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
       const lblEl = item.querySelector('.key-label');
       const tEl = item.querySelector('.key-type');
       const valEl = item.querySelector('.key-value');
@@ -47,7 +52,7 @@ export function getPanelScript(allKeysJson: string): string {
       const val = valEl ? valEl.textContent.toLowerCase() : '';
       const matches = lbl.includes(query) || t.includes(query) || val.includes(query);
       item.style.display = matches ? '' : 'none';
-    });
+    }
   });
 
   function handleCommand(cmd, id, currentLabel) {
@@ -58,23 +63,23 @@ export function getPanelScript(allKeysJson: string): string {
       case 'closeModal':
         closeModal();
         break;
-      case 'generateRandom':
+      case 'generateRandom': {
         const sel = document.getElementById('keyType');
         if (sel) {
           vscode.postMessage({ command: 'generateRandomKey', type: sel.value });
         }
         break;
+      }
       case 'submitAddKey':
         submitAddKey();
         break;
+
       case 'editLabel':
-        const newLabel = prompt('Enter new label:', currentLabel);
-        if (newLabel !== null && newLabel !== currentLabel) {
-          vscode.postMessage({ command: 'updateLabel', id, label: newLabel });
-        }
+        // Instead of a prompt(), request extension side to showInputBox
+        vscode.postMessage({ command: 'requestEditLabel', id, currentLabel });
         break;
 
-      // Pass these commands to extension
+      // Forward these directly to extension:
       case 'deleteKey':
       case 'setEncryptionKey':
       case 'copyPrivate':

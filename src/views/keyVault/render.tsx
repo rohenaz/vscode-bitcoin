@@ -1,3 +1,5 @@
+// src/views/keyVault/render.tsx
+
 import { escapeHtml } from '@kitajs/html';
 import type { KeyEntry } from '../../keyVault';
 import { HD, PrivateKey } from '@bsv/sdk';
@@ -67,7 +69,7 @@ export function renderKeyRecursive(
         </div>
       </div>
 
-      {k.children?.map((c) => renderKeyRecursive(c, indent + 1))}
+      {k.children?.map((child) => renderKeyRecursive(child, indent + 1))}
     </div>
   );
 }
@@ -150,6 +152,16 @@ function renderFormatBadges(k: KeyEntry): JSX.Element[] {
         WIF
       </button>,
     );
+
+    // For WIF or Public: ADDR button
+    // (the user specifically wants it for wif or public, not others)
+    if (k.type === 'wif' || k.type === 'public') {
+      badges.push(
+        <button class="format-badge" data-cmd="copyAddress" data-id={k.id} type="button">
+          ADDR
+        </button>,
+      );
+    }
   }
 
   // HD private => [XPRIV, XPUB]
@@ -270,6 +282,18 @@ export function deriveAddress(k: KeyEntry): string {
   return '(unknown)';
 }
 
+/** Derive address from bip32 path. */
+export function deriveHdAddress(k: KeyEntry, path: string): string {
+  const hd = HD.fromString(k.value);
+  const derived = hd.derive(path);
+  if (!derived.privKey) {
+    return '(no privkey at path)';
+  }
+  const priv = PrivateKey.fromHex(derived.privKey.toString());
+  return priv.toAddress().toString();
+}
+
+/** Convert KeyEntry => PrivateKey if possible. */
 export function toPrivateKey(k: KeyEntry): PrivateKey | null {
   if (k.type === 'private') {
     return PrivateKey.fromString(k.value);
@@ -285,14 +309,4 @@ export function toPrivateKey(k: KeyEntry): PrivateKey | null {
     return hd.privKey || null;
   }
   return null;
-}
-
-export function deriveHdAddress(k: KeyEntry, path: string): string {
-  const hd = HD.fromString(k.value);
-  const derived = hd.derive(path);
-  if (!derived.privKey) {
-    return '(no privkey at path)';
-  }
-  const priv = PrivateKey.fromHex(derived.privKey.toString());
-  return priv.toAddress().toString();
 }
