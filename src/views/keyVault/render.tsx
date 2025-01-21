@@ -1,10 +1,9 @@
-// src/views/keyVault/render.tsx
-
+/* eslint-disable no-constant-condition */
+/* eslint-disable no-shadow */
 import { escapeHtml } from '@kitajs/html';
 import type { KeyEntry } from '../../keyVault';
 import { HD, PrivateKey } from '@bsv/sdk';
 
-/** Build parent->child hierarchy from KeyEntry array without using forEach. */
 export function buildKeyHierarchy(
   all: KeyEntry[],
 ): Array<KeyEntry & { children: KeyEntry[] }> {
@@ -26,13 +25,12 @@ export function buildKeyHierarchy(
   return roots;
 }
 
-/** Recursively render a KeyEntry card */
 export function renderKeyRecursive(
   k: KeyEntry & { children?: KeyEntry[] },
   indent: number,
 ): JSX.Element {
   return (
-    <div class={`key-card indent-${indent}`}>
+    <div class={`key-card indent-${indent}`} data-keyid={k.id}>
       <div class="key-top">
         <div class={`key-type type-${k.type}`}>{k.type}</div>
         <div
@@ -74,7 +72,6 @@ export function renderKeyRecursive(
   );
 }
 
-/** Possibly show bip32 path or type42 invoice/pub. */
 function renderChildMetadata(k: KeyEntry): JSX.Element {
   const m = k.metadata || {};
   if (m.bip32Path) {
@@ -95,10 +92,8 @@ function renderChildMetadata(k: KeyEntry): JSX.Element {
   return <></>;
 }
 
-/** Show the mnemonic phrase if type=mnemonic, else truncated value or derived pub. */
 export function displayedKeyValue(k: KeyEntry): JSX.Element {
   if (k.type === 'mnemonic') {
-    // Show the user’s full BIP39 phrase
     return k.value;
   }
   if (k.type === 'hdpublic') {
@@ -117,11 +112,8 @@ function truncate(val: string): string {
   return `${val.slice(0, 4)}...${val.slice(-4)}`;
 }
 
-/** The small copy-badge row. */
 function renderFormatBadges(k: KeyEntry): JSX.Element[] {
   const badges: JSX.Element[] = [];
-
-  // mnemonic => [WORDS, XPRIV, XPUB]
   if (k.type === 'mnemonic') {
     badges.push(
       <button class="format-badge" data-cmd="copyWords" data-id={k.id} type="button">
@@ -136,8 +128,6 @@ function renderFormatBadges(k: KeyEntry): JSX.Element[] {
     );
     return badges;
   }
-
-  // Single private or 'public' => [HEX, WIF]
   if (
     k.type === 'private' ||
     k.type === 'wif' ||
@@ -152,9 +142,6 @@ function renderFormatBadges(k: KeyEntry): JSX.Element[] {
         WIF
       </button>,
     );
-
-    // For WIF or Public: ADDR button
-    // (the user specifically wants it for wif or public, not others)
     if (k.type === 'wif' || k.type === 'public') {
       badges.push(
         <button class="format-badge" data-cmd="copyAddress" data-id={k.id} type="button">
@@ -163,8 +150,6 @@ function renderFormatBadges(k: KeyEntry): JSX.Element[] {
       );
     }
   }
-
-  // HD private => [XPRIV, XPUB]
   if (k.type === 'hdprivate') {
     badges.push(
       <button class="format-badge" data-cmd="copyXprv" data-id={k.id} type="button">
@@ -175,8 +160,6 @@ function renderFormatBadges(k: KeyEntry): JSX.Element[] {
       </button>,
     );
   }
-
-  // HD public => [XPUB]
   if (k.type === 'hdpublic') {
     badges.push(
       <button class="format-badge" data-cmd="copyXpub" data-id={k.id} type="button">
@@ -184,15 +167,15 @@ function renderFormatBadges(k: KeyEntry): JSX.Element[] {
       </button>,
     );
   }
-
   return badges;
 }
 
-/** The big action row at top-right. */
 export function renderActions(k: KeyEntry): JSX.Element[] {
   const arr: JSX.Element[] = [];
   const singlePriv =
-    k.type === 'private' || k.type === 'wif' || k.type === 'encryption';
+    k.type === 'private' ||
+    k.type === 'wif' ||
+    k.type === 'encryption';
 
   const hdType =
     k.type === 'hdprivate' ||
@@ -231,15 +214,14 @@ export function renderActions(k: KeyEntry): JSX.Element[] {
   return arr;
 }
 
-/** Return xpub or single compressed pub. */
 export function derivePublicKeyString(k: KeyEntry): string {
   if (k.type === 'hdpublic') {
     const hdPub = HD.fromString(k.value);
-    return hdPub.toPublic().toString(); // xpub
+    return hdPub.toPublic().toString();
   }
   if (k.type === 'hdprivate') {
     const hdPriv = HD.fromString(k.value);
-    return hdPriv.toPublic().toString(); // xpub
+    return hdPriv.toPublic().toString();
   }
   if (k.type === 'public') {
     const priv = PrivateKey.fromString(k.value);
@@ -282,7 +264,6 @@ export function deriveAddress(k: KeyEntry): string {
   return '(unknown)';
 }
 
-/** Derive address from bip32 path. */
 export function deriveHdAddress(k: KeyEntry, path: string): string {
   const hd = HD.fromString(k.value);
   const derived = hd.derive(path);
@@ -293,7 +274,6 @@ export function deriveHdAddress(k: KeyEntry, path: string): string {
   return priv.toAddress().toString();
 }
 
-/** Convert KeyEntry => PrivateKey if possible. */
 export function toPrivateKey(k: KeyEntry): PrivateKey | null {
   if (k.type === 'private') {
     return PrivateKey.fromString(k.value);

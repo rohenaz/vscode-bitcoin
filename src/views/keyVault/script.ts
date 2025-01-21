@@ -1,11 +1,7 @@
 // src/views/keyVault/script.ts
-/**
- * Updated: We no longer call `prompt()` for "editLabel".
- * Instead, we post a message { command: 'requestEditLabel', ... } to the extension,
- * which then handles the user prompt using VS Code's showInputBox.
- */
 
-export function getPanelScript(allKeysJson: string): string {
+export function getPanelScript(payloadJson: string): string {
+  // We'll parse { keys, searchIndex } inside the script.
   return `
 (function() {
   let _vscode;
@@ -17,12 +13,12 @@ export function getPanelScript(allKeysJson: string): string {
   }
   const vscode = getVSCodeAPI();
 
-  let allKeys = [];
+  let payload;
   try {
-    allKeys = JSON.parse(${JSON.stringify(allKeysJson)});
-    console.log('[KeyVault script] allKeys:', allKeys);
-  } catch (err) {
-    console.warn('[KeyVault script] parse error:', err);
+    payload = JSON.parse(${JSON.stringify(payloadJson)});
+  } catch(e) {
+    console.warn('[KeyVault script] Failed to parse payload JSON', e);
+    payload = { keys: [], searchIndex: {} };
   }
 
   document.addEventListener('click', evt => {
@@ -40,17 +36,15 @@ export function getPanelScript(allKeysJson: string): string {
     const inp = evt.target && evt.target.closest('[data-cmd="searchKeys"]');
     if (!inp) return;
 
+    // Local searching based on ephemeral "searchIndex" from the extension:
     const query = inp.value.toLowerCase();
     const items = document.querySelectorAll('#keyList .key-card');
     for (let i = 0; i < items.length; i++) {
       const item = items[i];
-      const lblEl = item.querySelector('.key-label');
-      const tEl = item.querySelector('.key-type');
-      const valEl = item.querySelector('.key-value');
-      const lbl = lblEl ? lblEl.textContent.toLowerCase() : '';
-      const t = tEl ? tEl.textContent.toLowerCase() : '';
-      const val = valEl ? valEl.textContent.toLowerCase() : '';
-      const matches = lbl.includes(query) || t.includes(query) || val.includes(query);
+      const keyId = item.getAttribute('data-keyid');
+      if (!keyId) continue;
+      const tokens = payload.searchIndex[keyId] || [];
+      const matches = tokens.some(t => t.includes(query));
       item.style.display = matches ? '' : 'none';
     }
   });
@@ -60,9 +54,11 @@ export function getPanelScript(allKeysJson: string): string {
       case 'openModal':
         openModal();
         break;
+
       case 'closeModal':
         closeModal();
         break;
+
       case 'generateRandom': {
         const sel = document.getElementById('keyType');
         if (sel) {
@@ -70,16 +66,20 @@ export function getPanelScript(allKeysJson: string): string {
         }
         break;
       }
+
       case 'submitAddKey':
         submitAddKey();
         break;
 
+      // No-op so we don't see "Unknown command: searchKeys":
+      case 'searchKeys':
+        break;
+
       case 'editLabel':
-        // Instead of a prompt(), request extension side to showInputBox
         vscode.postMessage({ command: 'requestEditLabel', id, currentLabel });
         break;
 
-      // Forward these directly to extension:
+      // Forward these directly to the extension side:
       case 'deleteKey':
       case 'setEncryptionKey':
       case 'copyPrivate':
@@ -150,6 +150,7 @@ export function getPanelScript(allKeysJson: string): string {
     closeModal();
   }
 
+  // Listen for extension messages
   window.addEventListener('message', event => {
     const msg = event.data;
     if (msg.command === 'populateGeneratedKey') {

@@ -1,6 +1,6 @@
-// src/views/keyVault/index.tsx
-// - Added "requestEditLabel" case to fix the prompt usage, relying on VS Code's showInputBox.
-
+/* eslint-disable no-constant-binary-expression */
+/* eslint-disable no-constant-condition */
+/* eslint-disable no-shadow */
 import vsApi, { type WebviewPanel, type Disposable } from '../../vsShim';
 import type { KeyVault, KeyEntry, KeyType } from '../../keyVault';
 import { PrivateKey, PublicKey, HD, Mnemonic } from '@bsv/sdk';
@@ -15,12 +15,102 @@ import {
 } from './render';
 import { getPanelHtml } from './layout';
 import { getPanelScript } from './script';
+import crypto from 'node:crypto';
+
+function parsePrivateKey(key: KeyEntry): PrivateKey | null {
+  try {
+    if (key.type === 'private') return PrivateKey.fromString(key.value);
+    if (key.type === 'public') return PrivateKey.fromString(key.value);
+    if (key.type === 'wif' || key.type === 'encryption') {
+      return PrivateKey.fromWif(key.value);
+    }
+  } catch {
+    // ignore
+  }
+  return null;
+}
+
+/**
+ * Build an expanded set of "search tokens" for ephemeral indexing.
+ */
+function buildSearchTokens(key: KeyEntry): string[] {
+  // Always include label, type, raw value in lowercase
+  const tokens = [
+    (key.label || '').toLowerCase(),
+    key.type.toLowerCase(),
+    key.value.toLowerCase(),
+  ];
+
+  try {
+    if (
+      key.type === 'wif' ||
+      key.type === 'private' ||
+      key.type === 'encryption'
+    ) {
+      const priv = parsePrivateKey(key);
+      if (priv) {
+        tokens.push(priv.toWif().toLowerCase());
+        tokens.push(priv.toAddress().toString().toLowerCase());
+        tokens.push(priv.toPublicKey().toString().toLowerCase());
+      }
+    } else if (key.type === 'hdprivate') {
+      const hd = HD.fromString(key.value);
+      if (hd.privKey) {
+        const hex = hd.privKey.toString();
+        const p = PrivateKey.fromHex(hex);
+        tokens.push(p.toWif().toLowerCase());
+        tokens.push(p.toAddress().toString().toLowerCase());
+      }
+      // xpub
+      const xpub = hd.toPublic().toString();
+      tokens.push(xpub.toLowerCase());
+    } else if (key.type === 'mnemonic') {
+      // The user’s BIP39 phrase is stored in key.value if we store it that way
+      tokens.push(key.value.toLowerCase());
+      // Possibly xprv is not stored, or is in metadata
+      // But you can parse it if you want to
+      // (We do an optional parse below)
+      try {
+        // Convert mnemonic => HD => add xpub, address
+        const mn = Mnemonic.fromString(key.value);
+        const hd = HD.fromSeed(mn.toSeed());
+        const hex = hd.privKey ? hd.privKey.toString() : '';
+        if (hex) {
+          const p = PrivateKey.fromHex(hex);
+          tokens.push(p.toWif().toLowerCase());
+          tokens.push(p.toAddress().toString().toLowerCase());
+        }
+        tokens.push(hd.toPublic().toString().toLowerCase());
+      } catch {
+        // ignore parse errors
+      }
+    } else if (key.type === 'hdpublic') {
+      const hdPub = HD.fromString(key.value);
+      tokens.push(hdPub.toPublic().toString().toLowerCase());
+    }
+  } catch {
+    // ignore derivation errors
+  }
+
+  // Remove duplicates
+  const unique = new Set<string>();
+  for (let i = 0; i < tokens.length; i++) {
+    const t = tokens[i];
+    if (t && t.trim().length > 0) {
+      unique.add(t.trim());
+    }
+  }
+  return Array.from(unique);
+}
 
 export class KeyPanel {
   public static currentPanel: KeyPanel | undefined;
   private readonly _panel: WebviewPanel;
   private readonly _vault: KeyVault;
   private _disposables: Disposable[] = [];
+
+  private lastKeyHash?: string;
+  private ephemeralIndex: Record<string, string[]> = {};
 
   private constructor(panel: WebviewPanel, vault: KeyVault) {
     this._panel = panel;
@@ -71,16 +161,41 @@ export class KeyPanel {
       }
     }
 
-    // Build typed-HTML
+    // Build ephemeral index if needed
+    const newKeyListJson = JSON.stringify(await this._vault.getAllKeys());
+    const newHash = crypto
+      .createHash('md5')
+      .update(newKeyListJson)
+      .digest('hex');
+
+    if (this.lastKeyHash !== newHash) {
+      this.lastKeyHash = newHash;
+      this.ephemeralIndex = {};
+      const refreshedAll = JSON.parse(newKeyListJson) as KeyEntry[];
+      for (let i = 0; i < refreshedAll.length; i++) {
+        const key = refreshedAll[i];
+        this.ephemeralIndex[key.id] = buildSearchTokens(key);
+      }
+    }
+
+    // Now build typed-HTML
     const refreshed = await this._vault.getAllKeys();
     const hierarchy = buildKeyHierarchy(refreshed);
-    const elements = hierarchy.map((node) => renderKeyRecursive(node, 0));
+    const elements = [];
+    for (let i = 0; i < hierarchy.length; i++) {
+      elements.push(renderKeyRecursive(hierarchy[i], 0));
+    }
 
-    // Final HTML
+    // Build final payload for script
+    const payload = {
+      keys: refreshed,
+      searchIndex: this.ephemeralIndex,
+    };
+    const payloadJson = JSON.stringify(payload);
+
     const nonce = getNonce();
     const cspSource = this._panel.webview.cspSource;
-    const allKeysJson = JSON.stringify(refreshed);
-    const script = getPanelScript(allKeysJson);
+    const script = getPanelScript(payloadJson);
 
     this._panel.webview.html = getPanelHtml({
       nonce,
@@ -100,7 +215,6 @@ export class KeyPanel {
     currentLabel?: string;
   }) {
     switch (msg.command) {
-      /** Replacing the old "editLabel" with "requestEditLabel" => showInputBox => update label. */
       case 'requestEditLabel':
         if (msg.id && msg.currentLabel !== undefined) {
           const newLabel = await vsApi.window.showInputBox({
@@ -113,7 +227,6 @@ export class KeyPanel {
         }
         break;
 
-      // The old 'updateLabel' command (if used externally)
       case 'updateLabel':
         if (msg.id && msg.label !== undefined) {
           this._vault.updateKeyLabel(msg.id, msg.label).catch((err) =>
@@ -122,9 +235,6 @@ export class KeyPanel {
         }
         break;
 
-      // ---------------------------------------------------------------------
-      // The rest of your commands remain unchanged
-      // ---------------------------------------------------------------------
       case 'generateRandomKey':
         if (msg.type) this.generateRandomKey(msg.type);
         break;
@@ -197,9 +307,6 @@ export class KeyPanel {
     }
   }
 
-  // -------------------------------------------------------------------------
-  // The rest is unchanged
-  // -------------------------------------------------------------------------
   private async generateRandomKey(type: KeyType) {
     try {
       let val = '';
@@ -323,7 +430,6 @@ export class KeyPanel {
     }
   }
 
-  // Copy commands:
   private async copyPrivate(id: string) {
     const k = await this._vault.getKey(id);
     if (!k) return;
@@ -434,7 +540,6 @@ export class KeyPanel {
     vsApi.window.showInformationMessage('Mnemonic words copied');
   }
 
-  // Derivations
   private async deriveAddressPrompt(id: string) {
     const k = await this._vault.getKey(id);
     if (!k) return;
@@ -465,10 +570,10 @@ export class KeyPanel {
     if (!invoice) return;
 
     const all = await this._vault.getAllKeys();
-    const siblings = all.filter((x) => x.metadata?.parentId === id);
-    for (let i = 0; i < siblings.length; i++) {
-      const s = siblings[i];
+    for (let i = 0; i < all.length; i++) {
+      const s = all[i];
       if (
+        s.metadata?.parentId === id &&
         s.metadata?.type42OtherPub === otherPubStr &&
         s.metadata?.type42Invoice === invoice
       ) {
@@ -510,10 +615,9 @@ export class KeyPanel {
     if (!path) return;
 
     const all = await this._vault.getAllKeys();
-    const siblings = all.filter((x) => x.metadata?.parentId === id);
-    for (let i = 0; i < siblings.length; i++) {
-      const s = siblings[i];
-      if (s.metadata?.bip32Path === path) {
+    for (let i = 0; i < all.length; i++) {
+      const s = all[i];
+      if (s.metadata?.parentId === id && s.metadata?.bip32Path === path) {
         vsApi.window.showWarningMessage('A BIP32 child with that path already exists');
         return;
       }
