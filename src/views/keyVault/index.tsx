@@ -1,9 +1,3 @@
-/**
- * src/views/keyVault/index.tsx
- * - "mnemonic" now stores both the phrase in metadata AND the derived xprv in .value
- * - We add a "copyWords" command for copying the stored phrase.
- */
-
 import vsApi, { type WebviewPanel, type Disposable } from '../../vsShim';
 import type { KeyVault, KeyEntry, KeyType } from '../../keyVault';
 import { PrivateKey, PublicKey, HD, Mnemonic } from '@bsv/sdk';
@@ -19,6 +13,27 @@ import {
 import { getPanelHtml } from './layout';
 import { getPanelScript } from './script';
 
+/**
+ * Helper for creating a mnemonic KeyEntry that
+ *  - .value is the user’s phrase
+ *  - .metadata.xprv is the derived xprv
+ */
+function createMnemonicEntry(phrase: string, label: string) {
+  const mn = Mnemonic.fromString(phrase);
+  if (!mn.isValid()) {
+    throw new Error('Invalid mnemonic phrase');
+  }
+  const hd = HD.fromSeed(mn.toSeed());
+  const xprv = hd.toString(); // derived xprv
+  // Return everything needed to store
+  return {
+    type: 'mnemonic' as const,
+    value: phrase,
+    label,
+    metadata: { xprv },
+  };
+}
+
 export class KeyPanel {
   public static currentPanel: KeyPanel | undefined;
   private readonly _panel: WebviewPanel;
@@ -29,21 +44,32 @@ export class KeyPanel {
     this._panel = panel;
     this._vault = vault;
 
-    this.updateContent();
+    void this.updateContent();
 
     this._panel.onDidDispose(() => this.dispose(), null, this._disposables);
-    this._panel.webview.onDidReceiveMessage((msg) => this.handleMessage(msg), null, this._disposables);
-    this._vault.onDidChangeKeys(() => this.updateContent());
+    this._panel.webview.onDidReceiveMessage(
+      (msg) => void this.handleMessage(msg),
+      null,
+      this._disposables,
+    );
+    this._vault.onDidChangeKeys(() => {
+      void this.updateContent();
+    });
   }
 
   public static show(vault: KeyVault) {
     if (KeyPanel.currentPanel) {
       KeyPanel.currentPanel._panel.reveal(1);
     } else {
-      const panel = vsApi.window.createWebviewPanel('bitcoinKeyVault', 'Bitcoin Key Vault', 1, {
-        enableScripts: true,
-        retainContextWhenHidden: true,
-      });
+      const panel = vsApi.window.createWebviewPanel(
+        'bitcoinKeyVault',
+        'Bitcoin Key Vault',
+        1,
+        {
+          enableScripts: true,
+          retainContextWhenHidden: true,
+        },
+      );
       KeyPanel.currentPanel = new KeyPanel(panel, vault);
     }
   }
@@ -53,18 +79,26 @@ export class KeyPanel {
     const all = await this._vault.getAllKeys();
     const enc = await this._vault.getEncryptionKey();
     if (!enc) {
-      const singlePriv = all.find(
-        (k) =>
-          (k.type === 'private' || k.type === 'wif' || k.type === 'encryption') && !k.isEncryptionKey
-      );
-      if (singlePriv) {
-        await this._vault.setEncryptionKey(singlePriv.id);
+      for (const k of all) {
+        if (
+          (k.type === 'private' ||
+            k.type === 'wif' ||
+            k.type === 'encryption') &&
+          !k.isEncryptionKey
+        ) {
+          await this._vault.setEncryptionKey(k.id);
+          break;
+        }
       }
     }
 
     const refreshed = await this._vault.getAllKeys();
     const hierarchy = buildKeyHierarchy(refreshed);
-    const elements = hierarchy.map((node) => renderKeyRecursive(node, 0));
+
+    const elements = [];
+    for (let i = 0; i < hierarchy.length; i++) {
+      elements.push(renderKeyRecursive(hierarchy[i], 0));
+    }
 
     const nonce = getNonce();
     const cspSource = this._panel.webview.cspSource;
@@ -88,77 +122,86 @@ export class KeyPanel {
     value?: string;
   }) {
     switch (msg.command) {
-      case 'generateRandomKey':
-        if (msg.type) this.generateRandomKey(msg.type);
+      case 'generateRandomKey': {
+        if (msg.type) {
+          await this.generateRandomKey(msg.type);
+        }
         break;
-      case 'submitAddKey':
+      }
+      case 'submitAddKey': {
         if (msg.type && msg.value !== undefined) {
-          this.addKey(msg.type, msg.value, msg.label ?? 'Imported Key');
+          await this.addKey(msg.type, msg.value, msg.label ?? 'Imported Key');
         }
         break;
-      case 'deleteKey':
-        if (msg.id) this.deleteKey(msg.id);
-        break;
-      case 'updateLabel':
-        if (msg.id && msg.label !== undefined) {
-          this._vault.updateKeyLabel(msg.id, msg.label).catch((err) => vsApi.window.showErrorMessage(String(err)));
-        }
-        break;
-      case 'setEncryptionKey':
+      }
+      case 'deleteKey': {
         if (msg.id) {
-          this._vault
-            .setEncryptionKey(msg.id)
-            .then(() => vsApi.window.showInformationMessage('Default encryption key set'))
-            .finally(() => this.updateContent())
-            .catch((err) => vsApi.window.showErrorMessage(String(err)));
+          await this.deleteKey(msg.id);
         }
         break;
-
-      // Copy commands
+      }
+      case 'updateLabel': {
+        if (msg.id && msg.label !== undefined) {
+          try {
+            await this._vault.updateKeyLabel(msg.id, msg.label);
+          } catch (err) {
+            vsApi.window.showErrorMessage(String(err));
+          }
+        }
+        break;
+      }
+      case 'setEncryptionKey': {
+        if (msg.id) {
+          try {
+            await this._vault.setEncryptionKey(msg.id);
+            vsApi.window.showInformationMessage('Default encryption key set');
+          } catch (err) {
+            vsApi.window.showErrorMessage(String(err));
+          } finally {
+            await this.updateContent();
+          }
+        }
+        break;
+      }
       case 'copyPrivate':
-        if (msg.id) this.copyPrivate(msg.id);
-        break;
       case 'copyPublic':
-        if (msg.id) this.copyPublic(msg.id);
-        break;
       case 'copyAddress':
-        if (msg.id) this.copyAddress(msg.id);
-        break;
       case 'copyEntireKey':
-        if (msg.id) this.copyEntireKey(msg.id);
-        break;
       case 'copyHex':
-        if (msg.id) this.copyHex(msg.id);
-        break;
       case 'copyWif':
-        if (msg.id) this.copyWif(msg.id);
-        break;
       case 'copyXprv':
-        if (msg.id) this.copyXprv(msg.id);
-        break;
       case 'copyXpub':
-        if (msg.id) this.copyXpub(msg.id);
-        break;
       case 'copyPub':
-        if (msg.id) this.copyPub(msg.id);
+      case 'copyWords': {
+        if (msg.id) {
+          await this.handleCopyCommand(msg.command, msg.id);
+        }
         break;
-      case 'copyWords':
-        if (msg.id) this.copyWords(msg.id);
+      }
+      case 'deriveAddress': {
+        if (msg.id) {
+          await this.deriveAddressPrompt(msg.id);
+        }
         break;
-
-      // Derivations
-      case 'deriveAddress':
-        if (msg.id) this.deriveAddressPrompt(msg.id);
+      }
+      case 'type42Child': {
+        if (msg.id) {
+          await this.type42Child(msg.id);
+        }
         break;
-      case 'type42Child':
-        if (msg.id) this.type42Child(msg.id);
+      }
+      case 'bip32Child': {
+        if (msg.id) {
+          await this.bip32Child(msg.id);
+        }
         break;
-      case 'bip32Child':
-        if (msg.id) this.bip32Child(msg.id);
+      }
+      case 'publicChild': {
+        if (msg.id) {
+          await this.createPublicChild(msg.id);
+        }
         break;
-      case 'publicChild':
-        if (msg.id) this.createPublicChild(msg.id);
-        break;
+      }
     }
   }
 
@@ -169,6 +212,7 @@ export class KeyPanel {
     try {
       let val = '';
       let finalType = type;
+
       switch (type) {
         case 'wif':
         case 'encryption': {
@@ -184,11 +228,12 @@ export class KeyPanel {
           break;
         }
         case 'mnemonic': {
+          // Just generate the BIP39 words
           const mn = Mnemonic.fromRandom();
-          val = mn.toString(); // the actual words
+          val = mn.toString();
           break;
         }
-        // Not offered in modal, but just in case:
+        // Not offered in the modal now:
         case 'private':
         case 'public': {
           const pk = PrivateKey.fromRandom();
@@ -196,6 +241,8 @@ export class KeyPanel {
           break;
         }
       }
+
+      // Put the generated result into the modal
       this._panel.webview.postMessage({
         command: 'populateGeneratedKey',
         value: val,
@@ -211,57 +258,35 @@ export class KeyPanel {
   // -------------------------------------------------------------------------
   private async addKey(type: KeyType, value: string, label: string) {
     try {
-      let storeVal = value;
-      const storeType: KeyType = type;
-      const meta: Record<string, string> = {};
-
-      switch (type) {
-        case 'wif':
-        case 'encryption': {
-          // parse as WIF => store WIF
-          const pk = PrivateKey.fromWif(value);
-          storeVal = pk.toWif();
-          break;
+      // If user typed a mnemonic, unify logic with createMnemonicEntry
+      if (type === 'mnemonic') {
+        const entry = createMnemonicEntry(value, label);
+        await this._vault.storeKey(entry);
+      } else if (type === 'wif' || type === 'encryption') {
+        // parse as WIF => store WIF
+        const pk = PrivateKey.fromWif(value);
+        await this._vault.storeKey({
+          type,
+          value: pk.toWif(),
+          label,
+        });
+      } else if (type === 'hdprivate' || type === 'hdpublic') {
+        if (!value.startsWith('xprv')) {
+          throw new Error('Invalid xprv (must start with xprv).');
         }
-        case 'hdprivate':
-        case 'hdpublic': {
-          // parse xprv
-          if (!value.startsWith('xprv')) {
-            throw new Error('Invalid xprv (must start with xprv).');
-          }
-          HD.fromString(value);
-          break;
-        }
-        case 'mnemonic': {
-          // parse BIP39 phrase => store phrase in metadata => also store xprv in .value
-          const mn = Mnemonic.fromString(value);
-          if (!mn.isValid()) {
-            throw new Error('Invalid mnemonic phrase');
-          }
-          // store the phrase in metadata:
-          meta.mnemonicWords = mn.toString();
-          // also store the xprv in .value
-          const hd = HD.fromSeed(mn.toSeed());
-          storeVal = hd.toString(); // xprv
-          // Keep storeType as 'mnemonic'
-          break;
-        }
-        // Not shown in the new modal, but if user forcibly does it:
-        case 'private':
-        case 'public': {
-          throw new Error('Unsupported key type in modal. Use WIF instead.');
-        }
+        // confirm parse
+        HD.fromString(value);
+        await this._vault.storeKey({
+          type,
+          value,
+          label,
+        });
+      } else {
+        throw new Error('Unsupported key type in modal. Use WIF or HD or Mnemonic.');
       }
 
-      await this._vault.storeKey({
-        type: storeType,
-        value: storeVal,
-        label,
-        metadata: meta,
-      });
-
       vsApi.window.showInformationMessage('Key added successfully');
-      this.updateContent();
+      await this.updateContent();
     } catch (err) {
       vsApi.window.showErrorMessage(`Failed to add key: ${String(err)}`);
     }
@@ -274,22 +299,31 @@ export class KeyPanel {
     try {
       await this.deleteKeyAndDescendants(id);
       vsApi.window.showInformationMessage('Key & children deleted');
-      this.updateContent();
+      await this.updateContent();
     } catch (err) {
       vsApi.window.showErrorMessage(`Delete failed: ${String(err)}`);
     }
   }
 
   private async deleteKeyAndDescendants(id: string) {
-    const toDelete = new Set<string>([id]);
+    const toDelete = new Set<string>();
+    toDelete.add(id);
+
     const queue = [id];
-    while (queue.length) {
-      const cur = queue.pop();
-      if (!cur) continue;
-      const kids = await this._vault
-        .getAllKeys()
-        .then((arr) => arr.filter((c) => c.metadata?.parentId === cur));
-      for (const ch of kids) {
+    for (let i = 0; i < queue.length; i++) {
+      const cur = queue[i];
+      const kids = await this._vault.getAllKeys().then((arr) => {
+        const children = [];
+        for (let j = 0; j < arr.length; j++) {
+          const c = arr[j];
+          if (c.metadata?.parentId === cur) {
+            children.push(c);
+          }
+        }
+        return children;
+      });
+      for (let j = 0; j < kids.length; j++) {
+        const ch = kids[j];
         if (!toDelete.has(ch.id)) {
           toDelete.add(ch.id);
           queue.push(ch.id);
@@ -302,134 +336,127 @@ export class KeyPanel {
   }
 
   // -------------------------------------------------------------------------
-  // Copy commands
+  // Handle all copy commands
   // -------------------------------------------------------------------------
-  private async copyPrivate(id: string) {
-    const k = await this._vault.getKey(id);
-    if (!k) return;
-    await vsApi.env.clipboard.writeText(k.value);
-    vsApi.window.showInformationMessage('Private key copied.');
-  }
-  private async copyPublic(id: string) {
-    const k = await this._vault.getKey(id);
-    if (!k) return;
-    const pub = derivePublicKeyString(k);
-    await vsApi.env.clipboard.writeText(pub);
-    vsApi.window.showInformationMessage('Public key copied.');
-  }
-  private async copyAddress(id: string) {
-    const k = await this._vault.getKey(id);
-    if (!k) return;
-    const addr = deriveAddress(k);
-    await vsApi.env.clipboard.writeText(addr);
-    vsApi.window.showInformationMessage('Address copied.');
-  }
-  private async copyEntireKey(id: string) {
-    const k = await this._vault.getKey(id);
-    if (!k) return;
-    await vsApi.env.clipboard.writeText(k.value);
-    vsApi.window.showInformationMessage('Full key copied.');
-  }
-
-  private async copyHex(id: string) {
+  private async handleCopyCommand(cmd: string, id: string) {
     const k = await this._vault.getKey(id);
     if (!k) return;
 
-    // For 'public', we copy the derived pubkey in hex form
-    if (k.type === 'public') {
-      const pub = derivePublicKeyString(k);
-      await vsApi.env.clipboard.writeText(pub);
-      vsApi.window.showInformationMessage('HEX (public) copied');
-      return;
+    switch (cmd) {
+      case 'copyPrivate':
+        await vsApi.env.clipboard.writeText(k.value);
+        vsApi.window.showInformationMessage('Private key copied.');
+        break;
+      case 'copyPublic': {
+        const pub = derivePublicKeyString(k);
+        await vsApi.env.clipboard.writeText(pub);
+        vsApi.window.showInformationMessage('Public key copied.');
+        break;
+      }
+      case 'copyAddress': {
+        const addr = deriveAddress(k);
+        await vsApi.env.clipboard.writeText(addr);
+        vsApi.window.showInformationMessage('Address copied.');
+        break;
+      }
+      case 'copyEntireKey': {
+        await vsApi.env.clipboard.writeText(k.value);
+        vsApi.window.showInformationMessage('Full key copied.');
+        break;
+      }
+      case 'copyHex': {
+        // For 'public', derive pubkey
+        if (k.type === 'public') {
+          const pub = derivePublicKeyString(k);
+          await vsApi.env.clipboard.writeText(pub);
+          vsApi.window.showInformationMessage('HEX (public) copied');
+        } else if (k.type === 'wif' || k.type === 'encryption') {
+          const pk = PrivateKey.fromWif(k.value);
+          await vsApi.env.clipboard.writeText(pk.toString());
+          vsApi.window.showInformationMessage('HEX (private) copied');
+        } else {
+          vsApi.window.showErrorMessage('copyHex not valid for this type');
+        }
+        break;
+      }
+      case 'copyWif': {
+        if (k.type === 'wif' || k.type === 'encryption') {
+          await vsApi.env.clipboard.writeText(k.value);
+          vsApi.window.showInformationMessage('WIF copied.');
+        } else if (k.type === 'public') {
+          const pk = PrivateKey.fromString(k.value);
+          await vsApi.env.clipboard.writeText(pk.toWif());
+          vsApi.window.showInformationMessage('WIF (from public) copied');
+        } else {
+          vsApi.window.showErrorMessage('copyWif not valid for this type');
+        }
+        break;
+      }
+      case 'copyXprv': {
+        // If mnemonic => get from metadata.xprv
+        if (k.type === 'mnemonic') {
+          const xprv = k.metadata?.xprv;
+          if (!xprv) {
+            vsApi.window.showErrorMessage('No xprv in metadata');
+          } else {
+            await vsApi.env.clipboard.writeText(xprv);
+            vsApi.window.showInformationMessage('XPRV copied (mnemonic).');
+          }
+        } else if (k.type === 'hdprivate') {
+          await vsApi.env.clipboard.writeText(k.value);
+          vsApi.window.showInformationMessage('XPRV copied');
+        } else {
+          vsApi.window.showErrorMessage('copyXprv not valid for this type');
+        }
+        break;
+      }
+      case 'copyXpub': {
+        if (k.type === 'hdpublic') {
+          await vsApi.env.clipboard.writeText(k.value);
+          vsApi.window.showInformationMessage('XPUB copied');
+        } else if (k.type === 'hdprivate') {
+          const hd = HD.fromString(k.value);
+          const xpub = hd.toPublic().toString();
+          await vsApi.env.clipboard.writeText(xpub);
+          vsApi.window.showInformationMessage('XPUB copied');
+        } else if (k.type === 'mnemonic') {
+          // retrieve xprv => derive xpub
+          const xprv = k.metadata?.xprv;
+          if (!xprv) {
+            vsApi.window.showErrorMessage('No xprv in metadata');
+            return;
+          }
+          const hd = HD.fromString(xprv);
+          const xpub = hd.toPublic().toString();
+          await vsApi.env.clipboard.writeText(xpub);
+          vsApi.window.showInformationMessage('XPUB (mnemonic) copied');
+        } else {
+          vsApi.window.showErrorMessage('copyXpub not valid for this type');
+        }
+        break;
+      }
+      case 'copyPub': {
+        // single 'public' => same as copyHex
+        // or we can fallback to 'copyHex' logic
+        if (k.type === 'public') {
+          const pub = derivePublicKeyString(k);
+          await vsApi.env.clipboard.writeText(pub);
+          vsApi.window.showInformationMessage('Public (hex) copied');
+        } else {
+          vsApi.window.showErrorMessage('copyPub not valid for this type');
+        }
+        break;
+      }
+      case 'copyWords': {
+        if (k.type === 'mnemonic') {
+          await vsApi.env.clipboard.writeText(k.value);
+          vsApi.window.showInformationMessage('Mnemonic words copied');
+        } else {
+          vsApi.window.showErrorMessage('No mnemonic words for this key type');
+        }
+        break;
+      }
     }
-    // For 'wif' or 'encryption', parse => get hex
-    if (k.type === 'wif' || k.type === 'encryption') {
-      const pk = PrivateKey.fromWif(k.value);
-      await vsApi.env.clipboard.writeText(pk.toString());
-      vsApi.window.showInformationMessage('HEX (private) copied');
-      return;
-    }
-    vsApi.window.showErrorMessage('copyHex not valid for this type');
-  }
-
-  private async copyWif(id: string) {
-    const k = await this._vault.getKey(id);
-    if (!k) return;
-
-    if (k.type === 'wif' || k.type === 'encryption') {
-      await vsApi.env.clipboard.writeText(k.value);
-      vsApi.window.showInformationMessage('WIF copied.');
-      return;
-    }
-    if (k.type === 'public') {
-      // stored private in .value => convert to wif
-      const pk = PrivateKey.fromString(k.value);
-      await vsApi.env.clipboard.writeText(pk.toWif());
-      vsApi.window.showInformationMessage('WIF (from public) copied');
-      return;
-    }
-    vsApi.window.showErrorMessage('copyWif not valid for this type');
-  }
-
-  private async copyXprv(id: string) {
-    const k = await this._vault.getKey(id);
-    if (!k) return;
-
-    if (k.type === 'hdprivate') {
-      // The .value is xprv
-      await vsApi.env.clipboard.writeText(k.value);
-      vsApi.window.showInformationMessage('XPRV copied');
-      return;
-    }
-    if (k.type === 'mnemonic') {
-      // We store xprv in .value
-      await vsApi.env.clipboard.writeText(k.value);
-      vsApi.window.showInformationMessage('XPRV (mnemonic) copied');
-      return;
-    }
-    vsApi.window.showErrorMessage('copyXprv not valid for this type');
-  }
-
-  private async copyXpub(id: string) {
-    const k = await this._vault.getKey(id);
-    if (!k) return;
-
-    if (k.type === 'hdpublic') {
-      await vsApi.env.clipboard.writeText(k.value);
-      vsApi.window.showInformationMessage('XPUB copied');
-      return;
-    }
-    if (k.type === 'hdprivate' || k.type === 'mnemonic') {
-      const hd = HD.fromString(k.value);
-      const xpub = hd.toPublic().toString();
-      await vsApi.env.clipboard.writeText(xpub);
-      vsApi.window.showInformationMessage('XPUB copied');
-      return;
-    }
-    vsApi.window.showErrorMessage('copyXpub not valid for this type');
-  }
-
-  private async copyPub(id: string) {
-    // Single 'public' => same as copyHex
-    await this.copyHex(id);
-  }
-
-  private async copyWords(id: string) {
-    const k = await this._vault.getKey(id);
-    if (!k) return;
-
-    // Only valid if type='mnemonic'
-    if (k.type !== 'mnemonic') {
-      vsApi.window.showErrorMessage('No mnemonic words for this key type');
-      return;
-    }
-    const words = k.metadata?.mnemonicWords;
-    if (!words) {
-      vsApi.window.showErrorMessage('No stored mnemonic phrase');
-      return;
-    }
-    await vsApi.env.clipboard.writeText(words);
-    vsApi.window.showInformationMessage('Mnemonic words copied');
   }
 
   // -------------------------------------------------------------------------
@@ -466,13 +493,20 @@ export class KeyPanel {
     });
     if (!invoice) return;
 
-    // check duplicates
     const all = await this._vault.getAllKeys();
-    const siblings = all.filter((x) => x.metadata?.parentId === id);
-    const dup = siblings.find(
-      (s) => s.metadata?.type42OtherPub === otherPubStr && s.metadata?.type42Invoice === invoice
-    );
-    if (dup) {
+    let duplicateFound = false;
+    for (let i = 0; i < all.length; i++) {
+      const ck = all[i];
+      if (
+        ck.metadata?.parentId === id &&
+        ck.metadata?.type42OtherPub === otherPubStr &&
+        ck.metadata?.type42Invoice === invoice
+      ) {
+        duplicateFound = true;
+        break;
+      }
+    }
+    if (duplicateFound) {
       vsApi.window.showWarningMessage('Type42 child with same pub & invoice already exists');
       return;
     }
@@ -497,7 +531,7 @@ export class KeyPanel {
       },
     });
     vsApi.window.showInformationMessage('Type42 child created');
-    this.updateContent();
+    await this.updateContent();
   }
 
   private async bip32Child(id: string) {
@@ -510,16 +544,15 @@ export class KeyPanel {
     });
     if (!path) return;
 
-    // check duplicates
     const all = await this._vault.getAllKeys();
-    const siblings = all.filter((x) => x.metadata?.parentId === id);
-    const dup = siblings.find((s) => s.metadata?.bip32Path === path);
-    if (dup) {
-      vsApi.window.showWarningMessage('A BIP32 child with that path already exists');
-      return;
+    for (let i = 0; i < all.length; i++) {
+      const ck = all[i];
+      if (ck.metadata?.parentId === id && ck.metadata?.bip32Path === path) {
+        vsApi.window.showWarningMessage('A BIP32 child with that path already exists.');
+        return;
+      }
     }
 
-    // must be hdprivate, hdpublic, or mnemonic
     if (
       parent.type !== 'hdprivate' &&
       parent.type !== 'hdpublic' &&
@@ -547,7 +580,7 @@ export class KeyPanel {
       },
     });
     vsApi.window.showInformationMessage('BIP32 child created');
-    this.updateContent();
+    await this.updateContent();
   }
 
   private async createPublicChild(id: string) {
@@ -564,11 +597,10 @@ export class KeyPanel {
       return;
     }
 
-    // no duplication check for "public" children
-    let privHex = '';
+    let privHex: string;
     if (parent.type === 'wif' || parent.type === 'encryption') {
       const pk = PrivateKey.fromWif(parent.value);
-      privHex = pk.toString(); // 64-hex
+      privHex = pk.toString();
     } else {
       // parent.type === 'private' or 'public'
       privHex = parent.value;
@@ -578,26 +610,25 @@ export class KeyPanel {
       type: 'public',
       value: privHex,
       label: `Public child of ${parent.label ?? parent.type}`,
-      metadata: {
-        parentId: parent.id,
-      },
+      metadata: { parentId: parent.id },
     });
     vsApi.window.showInformationMessage('Public key child created.');
-    this.updateContent();
+    await this.updateContent();
   }
 
   public dispose() {
     KeyPanel.currentPanel = undefined;
     this._panel.dispose();
-    while (this._disposables.length) {
-      const d = this._disposables.pop();
-      if (d) d.dispose();
+    for (let i = 0; i < this._disposables.length; i++) {
+      this._disposables[i].dispose();
     }
+    this._disposables = [];
   }
 }
 
 function getNonce(): string {
-  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+  const chars =
+    'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
   let res = '';
   for (let i = 0; i < 16; i++) {
     res += chars.charAt(Math.floor(Math.random() * chars.length));
