@@ -1,4 +1,6 @@
 // src/views/keyVault/layout.tsx
+// - Replaces "Private Key (hex)" with "Private Key (WIF)"
+// - Shows only WIF, HD Private, Mnemonic
 
 export function getPanelHtml(opts: {
   nonce: string;
@@ -16,7 +18,12 @@ export function getPanelHtml(opts: {
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
         <meta
           http-equiv="Content-Security-Policy"
-          content={`default-src 'none'; style-src ${cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}';`}
+          content={`
+            default-src 'none';
+            sandbox allow-scripts allow-same-origin allow-forms allow-modals;
+            style-src ${cspSource} 'unsafe-inline';
+            script-src 'nonce-${nonce}';
+          `}
         />
         <title>Bitcoin Key Vault</title>
         <style safe>{styles}</style>
@@ -32,6 +39,7 @@ export function getPanelHtml(opts: {
     </html>
   );
 
+  // Convert typed-HTML to a string
   return `<!DOCTYPE html>\n${String(page)}`;
 }
 
@@ -61,25 +69,26 @@ export function Modal(): JSX.Element {
             ×
           </button>
         </div>
+
         <div class="form-group">
           <label for="keyType">Key Type</label>
           <select id="keyType">
-            <option value="private">Private Key (hex)</option>
             <option value="wif">Private Key (WIF)</option>
-            <option value="encryption">Encryption (WIF)</option>
             <option value="hdprivate">HD Private (xprv)</option>
-            <option value="hdpublic">HD Public (Generate random xprv, show as xpub)</option>
-            <option value="mnemonic">Mnemonic (store xprv)</option>
+            <option value="mnemonic">Mnemonic (BIP39 phrase)</option>
           </select>
         </div>
+
         <div class="form-group">
           <label for="keyLabel">Label</label>
           <input type="text" id="keyLabel" placeholder="Optional label" />
         </div>
+
         <div class="form-group">
           <label for="keyValue">Key Value</label>
           <input type="password" id="keyValue" />
         </div>
+
         <div class="modal-actions">
           <button class="secondary" data-cmd="generateRandom" type="button">
             Generate

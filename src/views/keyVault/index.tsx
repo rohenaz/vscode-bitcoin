@@ -1,25 +1,22 @@
-// src/views/keyVault/index.tsx
-// Main KeyPanel entry point. Manages the WebviewPanel, handles incoming messages
-// from script.ts, and orchestrates the KeyVault updates.
+/**
+ * src/views/keyVault/index.tsx
+ * - "mnemonic" now stores both the phrase in metadata AND the derived xprv in .value
+ * - We add a "copyWords" command for copying the stored phrase.
+ */
 
 import vsApi, { type WebviewPanel, type Disposable } from '../../vsShim';
 import type { KeyVault, KeyEntry, KeyType } from '../../keyVault';
 import { PrivateKey, PublicKey, HD, Mnemonic } from '@bsv/sdk';
 import { keyPanelStyles } from './styles';
-
-// We import typed-HTML subcomponents from render.tsx
 import {
   buildKeyHierarchy,
   renderKeyRecursive,
+  derivePublicKeyString,
   deriveAddress,
   deriveHdAddress,
-  derivePublicKeyString,
-  toPrivateKey
+  toPrivateKey,
 } from './render';
-
-// We import getPanelHtml for the layout
 import { getPanelHtml } from './layout';
-// We import getPanelScript for the front-end script
 import { getPanelScript } from './script';
 
 export class KeyPanel {
@@ -32,19 +29,10 @@ export class KeyPanel {
     this._panel = panel;
     this._vault = vault;
 
-    // Render initial content
     this.updateContent();
 
-    // Clean up when panel is disposed
     this._panel.onDidDispose(() => this.dispose(), null, this._disposables);
-
-    // Handle messages from the webview script
-    this._panel.webview.onDidReceiveMessage((message) => this.handleMessage(message),
-      null,
-      this._disposables
-    );
-
-    // Re-render if the vault changes
+    this._panel.webview.onDidReceiveMessage((msg) => this.handleMessage(msg), null, this._disposables);
     this._vault.onDidChangeKeys(() => this.updateContent());
   }
 
@@ -52,29 +40,22 @@ export class KeyPanel {
     if (KeyPanel.currentPanel) {
       KeyPanel.currentPanel._panel.reveal(1);
     } else {
-      const panel = vsApi.window.createWebviewPanel(
-        'bitcoinKeyVault',
-        'Bitcoin Key Vault',
-        1,
-        {
-          enableScripts: true,
-          retainContextWhenHidden: true,
-        }
-      );
+      const panel = vsApi.window.createWebviewPanel('bitcoinKeyVault', 'Bitcoin Key Vault', 1, {
+        enableScripts: true,
+        retainContextWhenHidden: true,
+      });
       KeyPanel.currentPanel = new KeyPanel(panel, vault);
     }
   }
 
   private async updateContent() {
-    const allKeys = await this._vault.getAllKeys();
-
-    // Attempt to set a default encryption key if not set
+    // Attempt default encryption key
+    const all = await this._vault.getAllKeys();
     const enc = await this._vault.getEncryptionKey();
     if (!enc) {
-      const singlePriv = allKeys.find(
+      const singlePriv = all.find(
         (k) =>
-          (k.type === 'private' || k.type === 'wif' || k.type === 'encryption')
-          && !k.isEncryptionKey
+          (k.type === 'private' || k.type === 'wif' || k.type === 'encryption') && !k.isEncryptionKey
       );
       if (singlePriv) {
         await this._vault.setEncryptionKey(singlePriv.id);
@@ -83,24 +64,19 @@ export class KeyPanel {
 
     const refreshed = await this._vault.getAllKeys();
     const hierarchy = buildKeyHierarchy(refreshed);
+    const elements = hierarchy.map((node) => renderKeyRecursive(node, 0));
 
     const nonce = getNonce();
     const cspSource = this._panel.webview.cspSource;
-
-    // Render typed HTML for each root item
-    const keyElements = hierarchy.map((node) => renderKeyRecursive(node, 0));
-
-    // Generate front-end script
     const allKeysJson = JSON.stringify(refreshed);
     const script = getPanelScript(allKeysJson);
 
-    // Build the final HTML
     this._panel.webview.html = getPanelHtml({
       nonce,
       cspSource,
-      keyElements,
+      keyElements: elements,
       script,
-      styles: keyPanelStyles
+      styles: keyPanelStyles,
     });
   }
 
@@ -109,182 +85,195 @@ export class KeyPanel {
     id?: string;
     label?: string;
     type?: KeyType;
-    value?: string; // optional key data from script
+    value?: string;
   }) {
     switch (msg.command) {
       case 'generateRandomKey':
-        if (msg.type) {
-          this.generateRandomKey(msg.type).catch((err) => {
-            vsApi.window.showErrorMessage(String(err));
-          });
-        }
+        if (msg.type) this.generateRandomKey(msg.type);
         break;
-
       case 'submitAddKey':
         if (msg.type && msg.value !== undefined) {
-          this.addKey(msg.type, msg.value, msg.label ?? 'Imported Key')
-            .catch((err) => vsApi.window.showErrorMessage(String(err)));
+          this.addKey(msg.type, msg.value, msg.label ?? 'Imported Key');
         }
         break;
-
       case 'deleteKey':
-        if (msg.id) {
-          this.deleteKey(msg.id);
-        }
+        if (msg.id) this.deleteKey(msg.id);
         break;
-
       case 'updateLabel':
         if (msg.id && msg.label !== undefined) {
-          this._vault.updateKeyLabel(msg.id, msg.label)
-            .catch((err) => vsApi.window.showErrorMessage(String(err)));
+          this._vault.updateKeyLabel(msg.id, msg.label).catch((err) => vsApi.window.showErrorMessage(String(err)));
         }
         break;
-
       case 'setEncryptionKey':
         if (msg.id) {
           this._vault
             .setEncryptionKey(msg.id)
-            .then(() =>
-              vsApi.window.showInformationMessage('Default encryption key set')
-            )
+            .then(() => vsApi.window.showInformationMessage('Default encryption key set'))
             .finally(() => this.updateContent())
             .catch((err) => vsApi.window.showErrorMessage(String(err)));
         }
         break;
 
+      // Copy commands
       case 'copyPrivate':
-        if (msg.id) await this.copyPrivate(msg.id);
+        if (msg.id) this.copyPrivate(msg.id);
         break;
       case 'copyPublic':
-        if (msg.id) await this.copyPublic(msg.id);
+        if (msg.id) this.copyPublic(msg.id);
         break;
       case 'copyAddress':
-        if (msg.id) await this.copyAddress(msg.id);
+        if (msg.id) this.copyAddress(msg.id);
+        break;
+      case 'copyEntireKey':
+        if (msg.id) this.copyEntireKey(msg.id);
+        break;
+      case 'copyHex':
+        if (msg.id) this.copyHex(msg.id);
+        break;
+      case 'copyWif':
+        if (msg.id) this.copyWif(msg.id);
+        break;
+      case 'copyXprv':
+        if (msg.id) this.copyXprv(msg.id);
+        break;
+      case 'copyXpub':
+        if (msg.id) this.copyXpub(msg.id);
+        break;
+      case 'copyPub':
+        if (msg.id) this.copyPub(msg.id);
+        break;
+      case 'copyWords':
+        if (msg.id) this.copyWords(msg.id);
         break;
 
+      // Derivations
       case 'deriveAddress':
-        if (msg.id) await this.deriveAddressPrompt(msg.id);
+        if (msg.id) this.deriveAddressPrompt(msg.id);
         break;
       case 'type42Child':
-        if (msg.id) await this.type42Child(msg.id);
+        if (msg.id) this.type42Child(msg.id);
         break;
-
-      // "copyEntireKey" if script calls it
-      case 'copyEntireKey':
-        if (msg.id) await this.copyEntireKey(msg.id);
+      case 'bip32Child':
+        if (msg.id) this.bip32Child(msg.id);
+        break;
+      case 'publicChild':
+        if (msg.id) this.createPublicChild(msg.id);
         break;
     }
   }
 
-  // ----------------------------------------------------------------
-  // Implementation details for each command
-  // ----------------------------------------------------------------
-
+  // -------------------------------------------------------------------------
+  // Generate random
+  // -------------------------------------------------------------------------
   private async generateRandomKey(type: KeyType) {
     try {
-      let generatedValue = '';
-      let finalType: KeyType = type;
-
+      let val = '';
+      let finalType = type;
       switch (type) {
-        case 'private':
-        case 'public': {
-          const priv = PrivateKey.fromRandom();
-          generatedValue = priv.toString(); // hex
-          if (type === 'public') {
-            finalType = 'public';
-          } else {
-            finalType = 'private';
-          }
-          break;
-        }
         case 'wif':
         case 'encryption': {
-          generatedValue = PrivateKey.fromRandom().toWif();
+          val = PrivateKey.fromRandom().toWif();
           break;
         }
         case 'hdprivate':
         case 'hdpublic': {
-          const hdPriv = HD.fromRandom();
-          generatedValue = hdPriv.toString();
-          if (type === 'hdpublic') {
-            finalType = 'hdpublic';
-          } else {
-            finalType = 'hdprivate';
-          }
+          const hd = HD.fromRandom();
+          val = hd.toString();
+          if (type === 'hdpublic') finalType = 'hdpublic';
+          else finalType = 'hdprivate';
           break;
         }
         case 'mnemonic': {
           const mn = Mnemonic.fromRandom();
-          generatedValue = mn.toString();
+          val = mn.toString(); // the actual words
+          break;
+        }
+        // Not offered in modal, but just in case:
+        case 'private':
+        case 'public': {
+          const pk = PrivateKey.fromRandom();
+          val = pk.toString();
           break;
         }
       }
-
       this._panel.webview.postMessage({
         command: 'populateGeneratedKey',
-        value: generatedValue,
-        finalType
+        value: val,
+        finalType,
       });
-    } catch (error) {
-      throw new Error(`Failed to generate random key: ${String(error)}`);
+    } catch (err) {
+      vsApi.window.showErrorMessage(`Failed to generate random key: ${String(err)}`);
     }
   }
 
+  // -------------------------------------------------------------------------
+  // Add Key
+  // -------------------------------------------------------------------------
   private async addKey(type: KeyType, value: string, label: string) {
-    let storeValue = value;
-    let storeType: KeyType = type;
+    try {
+      let storeVal = value;
+      const storeType: KeyType = type;
+      const meta: Record<string, string> = {};
 
-    switch (type) {
-      case 'private':
-      case 'public': {
-        // must be 64 hex
-        if (!/^[0-9A-Fa-f]{64}$/.test(value)) {
-          throw new Error('Invalid private key hex (64 chars).');
+      switch (type) {
+        case 'wif':
+        case 'encryption': {
+          // parse as WIF => store WIF
+          const pk = PrivateKey.fromWif(value);
+          storeVal = pk.toWif();
+          break;
         }
-        PrivateKey.fromString(value); // confirm parse
-        break;
-      }
-      case 'wif':
-      case 'encryption': {
-        const priv = PrivateKey.fromWif(value);
-        storeValue = priv.toWif();
-        break;
-      }
-      case 'hdprivate':
-      case 'hdpublic': {
-        if (!value.startsWith('xprv')) {
-          throw new Error('Invalid xprv (must start with xprv).');
+        case 'hdprivate':
+        case 'hdpublic': {
+          // parse xprv
+          if (!value.startsWith('xprv')) {
+            throw new Error('Invalid xprv (must start with xprv).');
+          }
+          HD.fromString(value);
+          break;
         }
-        HD.fromString(value);
-        break;
-      }
-      case 'mnemonic': {
-        const mn = Mnemonic.fromString(value);
-        if (!mn.isValid()) {
-          throw new Error('Invalid mnemonic phrase.');
+        case 'mnemonic': {
+          // parse BIP39 phrase => store phrase in metadata => also store xprv in .value
+          const mn = Mnemonic.fromString(value);
+          if (!mn.isValid()) {
+            throw new Error('Invalid mnemonic phrase');
+          }
+          // store the phrase in metadata:
+          meta.mnemonicWords = mn.toString();
+          // also store the xprv in .value
+          const hd = HD.fromSeed(mn.toSeed());
+          storeVal = hd.toString(); // xprv
+          // Keep storeType as 'mnemonic'
+          break;
         }
-        // store xprv
-        const hdPriv = HD.fromSeed(mn.toSeed());
-        storeValue = hdPriv.toString();
-        storeType = 'hdprivate';
-        break;
+        // Not shown in the new modal, but if user forcibly does it:
+        case 'private':
+        case 'public': {
+          throw new Error('Unsupported key type in modal. Use WIF instead.');
+        }
       }
+
+      await this._vault.storeKey({
+        type: storeType,
+        value: storeVal,
+        label,
+        metadata: meta,
+      });
+
+      vsApi.window.showInformationMessage('Key added successfully');
+      this.updateContent();
+    } catch (err) {
+      vsApi.window.showErrorMessage(`Failed to add key: ${String(err)}`);
     }
-
-    await this._vault.storeKey({
-      type: storeType,
-      value: storeValue,
-      label
-    });
-
-    vsApi.window.showInformationMessage('Key added successfully.');
-    this.updateContent();
   }
 
+  // -------------------------------------------------------------------------
+  // Delete
+  // -------------------------------------------------------------------------
   private async deleteKey(id: string) {
     try {
       await this.deleteKeyAndDescendants(id);
-      vsApi.window.showInformationMessage('Key (and children) deleted.');
+      vsApi.window.showInformationMessage('Key & children deleted');
       this.updateContent();
     } catch (err) {
       vsApi.window.showErrorMessage(`Delete failed: ${String(err)}`);
@@ -292,113 +281,308 @@ export class KeyPanel {
   }
 
   private async deleteKeyAndDescendants(id: string) {
-    const toDelete = new Set([id]);
+    const toDelete = new Set<string>([id]);
     const queue = [id];
     while (queue.length) {
-      const current = queue.pop();
-      if (!current) continue;
-      const kids = await this._vault.getAllKeys().then(keys =>
-        keys.filter(k => k.metadata?.parentId === current)
-      );
-      for (const child of kids) {
-        if (!toDelete.has(child.id)) {
-          toDelete.add(child.id);
-          queue.push(child.id);
+      const cur = queue.pop();
+      if (!cur) continue;
+      const kids = await this._vault
+        .getAllKeys()
+        .then((arr) => arr.filter((c) => c.metadata?.parentId === cur));
+      for (const ch of kids) {
+        if (!toDelete.has(ch.id)) {
+          toDelete.add(ch.id);
+          queue.push(ch.id);
         }
       }
     }
-    for (const delId of toDelete) {
-      await this._vault.deleteKey(delId);
+    for (const d of toDelete) {
+      await this._vault.deleteKey(d);
     }
   }
 
+  // -------------------------------------------------------------------------
+  // Copy commands
+  // -------------------------------------------------------------------------
   private async copyPrivate(id: string) {
-    const key = await this._vault.getKey(id);
-    if (!key) throw new Error('Key not found');
-    await vsApi.env.clipboard.writeText(key.value);
+    const k = await this._vault.getKey(id);
+    if (!k) return;
+    await vsApi.env.clipboard.writeText(k.value);
     vsApi.window.showInformationMessage('Private key copied.');
   }
-
   private async copyPublic(id: string) {
-    const key = await this._vault.getKey(id);
-    if (!key) throw new Error('Key not found');
-    const pubKey = derivePublicKeyString(key);
-    await vsApi.env.clipboard.writeText(pubKey);
+    const k = await this._vault.getKey(id);
+    if (!k) return;
+    const pub = derivePublicKeyString(k);
+    await vsApi.env.clipboard.writeText(pub);
     vsApi.window.showInformationMessage('Public key copied.');
   }
-
   private async copyAddress(id: string) {
-    const key = await this._vault.getKey(id);
-    if (!key) throw new Error('Key not found');
-    const addr = deriveAddress(key);
+    const k = await this._vault.getKey(id);
+    if (!k) return;
+    const addr = deriveAddress(k);
     await vsApi.env.clipboard.writeText(addr);
     vsApi.window.showInformationMessage('Address copied.');
   }
-
   private async copyEntireKey(id: string) {
-    const key = await this._vault.getKey(id);
-    if (!key) throw new Error('Key not found');
-    await vsApi.env.clipboard.writeText(key.value);
+    const k = await this._vault.getKey(id);
+    if (!k) return;
+    await vsApi.env.clipboard.writeText(k.value);
     vsApi.window.showInformationMessage('Full key copied.');
   }
 
-  private async deriveAddressPrompt(id: string) {
-    const key = await this._vault.getKey(id);
-    if (!key) throw new Error('Key not found');
+  private async copyHex(id: string) {
+    const k = await this._vault.getKey(id);
+    if (!k) return;
 
-    if (key.type === 'hdprivate' || key.type === 'hdpublic') {
+    // For 'public', we copy the derived pubkey in hex form
+    if (k.type === 'public') {
+      const pub = derivePublicKeyString(k);
+      await vsApi.env.clipboard.writeText(pub);
+      vsApi.window.showInformationMessage('HEX (public) copied');
+      return;
+    }
+    // For 'wif' or 'encryption', parse => get hex
+    if (k.type === 'wif' || k.type === 'encryption') {
+      const pk = PrivateKey.fromWif(k.value);
+      await vsApi.env.clipboard.writeText(pk.toString());
+      vsApi.window.showInformationMessage('HEX (private) copied');
+      return;
+    }
+    vsApi.window.showErrorMessage('copyHex not valid for this type');
+  }
+
+  private async copyWif(id: string) {
+    const k = await this._vault.getKey(id);
+    if (!k) return;
+
+    if (k.type === 'wif' || k.type === 'encryption') {
+      await vsApi.env.clipboard.writeText(k.value);
+      vsApi.window.showInformationMessage('WIF copied.');
+      return;
+    }
+    if (k.type === 'public') {
+      // stored private in .value => convert to wif
+      const pk = PrivateKey.fromString(k.value);
+      await vsApi.env.clipboard.writeText(pk.toWif());
+      vsApi.window.showInformationMessage('WIF (from public) copied');
+      return;
+    }
+    vsApi.window.showErrorMessage('copyWif not valid for this type');
+  }
+
+  private async copyXprv(id: string) {
+    const k = await this._vault.getKey(id);
+    if (!k) return;
+
+    if (k.type === 'hdprivate') {
+      // The .value is xprv
+      await vsApi.env.clipboard.writeText(k.value);
+      vsApi.window.showInformationMessage('XPRV copied');
+      return;
+    }
+    if (k.type === 'mnemonic') {
+      // We store xprv in .value
+      await vsApi.env.clipboard.writeText(k.value);
+      vsApi.window.showInformationMessage('XPRV (mnemonic) copied');
+      return;
+    }
+    vsApi.window.showErrorMessage('copyXprv not valid for this type');
+  }
+
+  private async copyXpub(id: string) {
+    const k = await this._vault.getKey(id);
+    if (!k) return;
+
+    if (k.type === 'hdpublic') {
+      await vsApi.env.clipboard.writeText(k.value);
+      vsApi.window.showInformationMessage('XPUB copied');
+      return;
+    }
+    if (k.type === 'hdprivate' || k.type === 'mnemonic') {
+      const hd = HD.fromString(k.value);
+      const xpub = hd.toPublic().toString();
+      await vsApi.env.clipboard.writeText(xpub);
+      vsApi.window.showInformationMessage('XPUB copied');
+      return;
+    }
+    vsApi.window.showErrorMessage('copyXpub not valid for this type');
+  }
+
+  private async copyPub(id: string) {
+    // Single 'public' => same as copyHex
+    await this.copyHex(id);
+  }
+
+  private async copyWords(id: string) {
+    const k = await this._vault.getKey(id);
+    if (!k) return;
+
+    // Only valid if type='mnemonic'
+    if (k.type !== 'mnemonic') {
+      vsApi.window.showErrorMessage('No mnemonic words for this key type');
+      return;
+    }
+    const words = k.metadata?.mnemonicWords;
+    if (!words) {
+      vsApi.window.showErrorMessage('No stored mnemonic phrase');
+      return;
+    }
+    await vsApi.env.clipboard.writeText(words);
+    vsApi.window.showInformationMessage('Mnemonic words copied');
+  }
+
+  // -------------------------------------------------------------------------
+  // Derivations
+  // -------------------------------------------------------------------------
+  private async deriveAddressPrompt(id: string) {
+    const k = await this._vault.getKey(id);
+    if (!k) return;
+
+    if (k.type === 'hdprivate' || k.type === 'hdpublic') {
       const path = await vsApi.window.showInputBox({
-        prompt: 'Enter HD path, e.g. m/0/0',
-        value: 'm/0/0'
+        prompt: 'Enter bip32 path, e.g. m/0/0',
+        value: 'm/0/0',
       });
       if (!path) return;
-      const newAddr = deriveHdAddress(key, path);
-      vsApi.window.showInformationMessage(`Derived address: ${newAddr}`);
+      const addr = deriveHdAddress(k, path);
+      vsApi.window.showInformationMessage(`Derived address: ${addr}`);
     } else {
-      const newAddr = deriveAddress(key);
-      vsApi.window.showInformationMessage(`Address: ${newAddr}`);
+      const addr = deriveAddress(k);
+      vsApi.window.showInformationMessage(`Address: ${addr}`);
     }
   }
 
   private async type42Child(id: string) {
-    const key = await this._vault.getKey(id);
-    if (!key) throw new Error('Key not found');
+    const parent = await this._vault.getKey(id);
+    if (!parent) return;
 
     const otherPubStr = await vsApi.window.showInputBox({
-      prompt: "Enter other's compressed pubkey (66 hex, starting 02/03)"
+      prompt: "Enter other party's compressed pubkey (66 hex)",
     });
     if (!otherPubStr) return;
-    if (!otherPubStr.startsWith('02') && !otherPubStr.startsWith('03')) {
-      vsApi.window.showErrorMessage('Invalid pubkey. Must start with 02 or 03.');
-      return;
-    }
-    if (otherPubStr.length !== 66) {
-      vsApi.window.showErrorMessage('Invalid length. Must be 66 hex chars.');
-      return;
-    }
-
     const invoice = await vsApi.window.showInputBox({
-      prompt: 'Invoice number (any string).'
+      prompt: 'Invoice number (any string)',
     });
     if (!invoice) return;
 
-    const priv = toPrivateKey(key);
+    // check duplicates
+    const all = await this._vault.getAllKeys();
+    const siblings = all.filter((x) => x.metadata?.parentId === id);
+    const dup = siblings.find(
+      (s) => s.metadata?.type42OtherPub === otherPubStr && s.metadata?.type42Invoice === invoice
+    );
+    if (dup) {
+      vsApi.window.showWarningMessage('Type42 child with same pub & invoice already exists');
+      return;
+    }
+
+    const priv = toPrivateKey(parent);
     if (!priv) {
-      vsApi.window.showErrorMessage('Cannot perform Type42 on this key.');
+      vsApi.window.showErrorMessage('Cannot do Type42 derivation on this key type');
       return;
     }
     const otherPub = PublicKey.fromString(otherPubStr);
     const child = priv.deriveChild(otherPub, invoice);
     const wif = child.toWif();
 
-    const childLabel = `Type42 child of ${key.label ?? key.type}`;
     await this._vault.storeKey({
       type: 'wif',
       value: wif,
-      label: childLabel,
-      metadata: { parentId: id }
+      label: `Type42 child of ${parent.label ?? parent.type}`,
+      metadata: {
+        parentId: parent.id,
+        type42OtherPub: otherPubStr,
+        type42Invoice: invoice,
+      },
     });
-    vsApi.window.showInformationMessage('Type42 child derived & stored.');
+    vsApi.window.showInformationMessage('Type42 child created');
+    this.updateContent();
+  }
+
+  private async bip32Child(id: string) {
+    const parent = await this._vault.getKey(id);
+    if (!parent) return;
+
+    const path = await vsApi.window.showInputBox({
+      prompt: 'Enter bip32 path, e.g. m/0/0',
+      value: 'm/0/0',
+    });
+    if (!path) return;
+
+    // check duplicates
+    const all = await this._vault.getAllKeys();
+    const siblings = all.filter((x) => x.metadata?.parentId === id);
+    const dup = siblings.find((s) => s.metadata?.bip32Path === path);
+    if (dup) {
+      vsApi.window.showWarningMessage('A BIP32 child with that path already exists');
+      return;
+    }
+
+    // must be hdprivate, hdpublic, or mnemonic
+    if (
+      parent.type !== 'hdprivate' &&
+      parent.type !== 'hdpublic' &&
+      parent.type !== 'mnemonic'
+    ) {
+      vsApi.window.showErrorMessage('BIP32 derivation only valid for HD or mnemonic keys');
+      return;
+    }
+    const hd = HD.fromString(parent.value);
+    const derived = hd.derive(path);
+    if (!derived.privKey) {
+      vsApi.window.showErrorMessage('No private key at that path (maybe xpub only?)');
+      return;
+    }
+    const pv = PrivateKey.fromHex(derived.privKey.toString());
+    const wif = pv.toWif();
+
+    await this._vault.storeKey({
+      type: 'wif',
+      value: wif,
+      label: `BIP32 child of ${parent.label ?? parent.type}`,
+      metadata: {
+        parentId: parent.id,
+        bip32Path: path,
+      },
+    });
+    vsApi.window.showInformationMessage('BIP32 child created');
+    this.updateContent();
+  }
+
+  private async createPublicChild(id: string) {
+    const parent = await this._vault.getKey(id);
+    if (!parent) return;
+
+    if (
+      parent.type !== 'wif' &&
+      parent.type !== 'private' &&
+      parent.type !== 'encryption' &&
+      parent.type !== 'public'
+    ) {
+      vsApi.window.showErrorMessage('Cannot create public child from this key type');
+      return;
+    }
+
+    // no duplication check for "public" children
+    let privHex = '';
+    if (parent.type === 'wif' || parent.type === 'encryption') {
+      const pk = PrivateKey.fromWif(parent.value);
+      privHex = pk.toString(); // 64-hex
+    } else {
+      // parent.type === 'private' or 'public'
+      privHex = parent.value;
+    }
+
+    await this._vault.storeKey({
+      type: 'public',
+      value: privHex,
+      label: `Public child of ${parent.label ?? parent.type}`,
+      metadata: {
+        parentId: parent.id,
+      },
+    });
+    vsApi.window.showInformationMessage('Public key child created.');
     this.updateContent();
   }
 
@@ -412,12 +596,11 @@ export class KeyPanel {
   }
 }
 
-// Helper for CSP nonce
 function getNonce(): string {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-  let result = '';
+  let res = '';
   for (let i = 0; i < 16; i++) {
-    result += chars.charAt(Math.floor(Math.random() * chars.length));
+    res += chars.charAt(Math.floor(Math.random() * chars.length));
   }
-  return result;
+  return res;
 }
