@@ -1,6 +1,3 @@
-/* eslint-disable no-constant-binary-expression */
-/* eslint-disable no-constant-condition */
-/* eslint-disable no-shadow */
 import vsApi, { type WebviewPanel, type Disposable } from '../../vsShim';
 import type { KeyVault, KeyEntry, KeyType } from '../../keyVault';
 import { PrivateKey, PublicKey, HD, Mnemonic } from '@bsv/sdk';
@@ -15,92 +12,68 @@ import {
 } from './render';
 import { getPanelHtml } from './layout';
 import { getPanelScript } from './script';
-import crypto from 'node:crypto';
-
-function parsePrivateKey(key: KeyEntry): PrivateKey | null {
-  try {
-    if (key.type === 'private') return PrivateKey.fromString(key.value);
-    if (key.type === 'public') return PrivateKey.fromString(key.value);
-    if (key.type === 'wif' || key.type === 'encryption') {
-      return PrivateKey.fromWif(key.value);
-    }
-  } catch {
-    // ignore
-  }
-  return null;
-}
 
 /**
- * Build an expanded set of "search tokens" for ephemeral indexing.
+ * Build ephemeral search tokens for a single KeyEntry,
+ * including derived addresses, WIF, xpub, etc.
  */
-function buildSearchTokens(key: KeyEntry): string[] {
-  // Always include label, type, raw value in lowercase
-  const tokens = [
-    (key.label || '').toLowerCase(),
-    key.type.toLowerCase(),
-    key.value.toLowerCase(),
-  ];
+function buildSearchTokens(k: KeyEntry): string[] {
+  const out: string[] = [];
+
+  // Always label, type, raw value
+  out.push((k.label || '').toLowerCase());
+  out.push(k.type.toLowerCase());
+  out.push(k.value.toLowerCase());
 
   try {
     if (
-      key.type === 'wif' ||
-      key.type === 'private' ||
-      key.type === 'encryption'
+      k.type === 'private' ||
+      k.type === 'wif' ||
+      k.type === 'encryption' ||
+      k.type === 'public'
     ) {
-      const priv = parsePrivateKey(key);
+      const priv = toPrivateKey(k);
       if (priv) {
-        tokens.push(priv.toWif().toLowerCase());
-        tokens.push(priv.toAddress().toString().toLowerCase());
-        tokens.push(priv.toPublicKey().toString().toLowerCase());
+        out.push(priv.toWif().toLowerCase());
+        out.push(priv.toAddress().toString().toLowerCase());
+        out.push(priv.toPublicKey().toString().toLowerCase());
       }
-    } else if (key.type === 'hdprivate') {
-      const hd = HD.fromString(key.value);
+    } else if (k.type === 'hdprivate') {
+      const hd = HD.fromString(k.value);
       if (hd.privKey) {
-        const hex = hd.privKey.toString();
-        const p = PrivateKey.fromHex(hex);
-        tokens.push(p.toWif().toLowerCase());
-        tokens.push(p.toAddress().toString().toLowerCase());
+        const p = PrivateKey.fromHex(hd.privKey.toString());
+        out.push(p.toWif().toLowerCase());
+        out.push(p.toAddress().toString().toLowerCase());
       }
       // xpub
-      const xpub = hd.toPublic().toString();
-      tokens.push(xpub.toLowerCase());
-    } else if (key.type === 'mnemonic') {
-      // The user’s BIP39 phrase is stored in key.value if we store it that way
-      tokens.push(key.value.toLowerCase());
-      // Possibly xprv is not stored, or is in metadata
-      // But you can parse it if you want to
-      // (We do an optional parse below)
-      try {
-        // Convert mnemonic => HD => add xpub, address
-        const mn = Mnemonic.fromString(key.value);
-        const hd = HD.fromSeed(mn.toSeed());
-        const hex = hd.privKey ? hd.privKey.toString() : '';
-        if (hex) {
-          const p = PrivateKey.fromHex(hex);
-          tokens.push(p.toWif().toLowerCase());
-          tokens.push(p.toAddress().toString().toLowerCase());
-        }
-        tokens.push(hd.toPublic().toString().toLowerCase());
-      } catch {
-        // ignore parse errors
+      out.push(hd.toPublic().toString().toLowerCase());
+    } else if (k.type === 'hdpublic') {
+      const hdpub = HD.fromString(k.value).toPublic();
+      out.push(hdpub.toString().toLowerCase());
+      out.push(hdpub.pubKey.toAddress().toString().toLowerCase());
+    } else if (k.type === 'mnemonic') {
+      // actual phrase
+      out.push(k.value.toLowerCase());
+      // parse xprv
+      const hd = HD.fromString(k.value);
+      out.push(hd.toPublic().toString().toLowerCase());
+      if (hd.privKey) {
+        const p = PrivateKey.fromHex(hd.privKey.toString());
+        out.push(p.toWif().toLowerCase());
+        out.push(p.toAddress().toString().toLowerCase());
       }
-    } else if (key.type === 'hdpublic') {
-      const hdPub = HD.fromString(key.value);
-      tokens.push(hdPub.toPublic().toString().toLowerCase());
     }
   } catch {
     // ignore derivation errors
   }
 
-  // Remove duplicates
-  const unique = new Set<string>();
-  for (let i = 0; i < tokens.length; i++) {
-    const t = tokens[i];
-    if (t && t.trim().length > 0) {
-      unique.add(t.trim());
-    }
+  // Remove duplicates or empty strings
+  const uniq = new Set<string>();
+  for (let i = 0; i < out.length; i++) {
+    const t = out[i].trim();
+    if (t) uniq.add(t);
   }
-  return Array.from(unique);
+  return Array.from(uniq);
 }
 
 export class KeyPanel {
@@ -119,11 +92,15 @@ export class KeyPanel {
     // Initial render
     this.updateContent();
 
-    // Cleanup
+    // Cleanup listeners
     this._panel.onDidDispose(() => this.dispose(), null, this._disposables);
-    this._panel.webview.onDidReceiveMessage((msg) => this.handleMessage(msg), null, this._disposables);
+    this._panel.webview.onDidReceiveMessage(
+      (msg) => this.handleMessage(msg),
+      null,
+      this._disposables,
+    );
 
-    // Re-render if vault changes
+    // Re-render on vault changes
     this._vault.onDidChangeKeys(() => this.updateContent());
   }
 
@@ -135,72 +112,63 @@ export class KeyPanel {
         'bitcoinKeyVault',
         'Bitcoin Key Vault',
         1,
-        {
-          enableScripts: true,
-          retainContextWhenHidden: true,
-        },
+        { enableScripts: true, retainContextWhenHidden: true },
       );
       KeyPanel.currentPanel = new KeyPanel(panel, vault);
     }
   }
 
   private async updateContent() {
-    // Attempt to set default encryption key if none
-    const all = await this._vault.getAllKeys();
-    const encKey = await this._vault.getEncryptionKey();
-    if (!encKey) {
-      for (let i = 0; i < all.length; i++) {
-        const k = all[i];
+    // Possibly set default encryption key
+    const allKeys = await this._vault.getAllKeys();
+    const enc = await this._vault.getEncryptionKey();
+    if (!enc) {
+      for (let i = 0; i < allKeys.length; i++) {
+        const candidate = allKeys[i];
         if (
-          (k.type === 'private' || k.type === 'wif' || k.type === 'encryption') &&
-          !k.isEncryptionKey
+          (candidate.type === 'private' ||
+            candidate.type === 'wif' ||
+            candidate.type === 'encryption') &&
+          !candidate.isEncryptionKey
         ) {
-          await this._vault.setEncryptionKey(k.id);
+          await this._vault.setEncryptionKey(candidate.id);
           break;
         }
       }
     }
 
-    // Build ephemeral index if needed
-    const newKeyListJson = JSON.stringify(await this._vault.getAllKeys());
-    const newHash = crypto
-      .createHash('md5')
-      .update(newKeyListJson)
-      .digest('hex');
-
-    if (this.lastKeyHash !== newHash) {
-      this.lastKeyHash = newHash;
-      this.ephemeralIndex = {};
-      const refreshedAll = JSON.parse(newKeyListJson) as KeyEntry[];
-      for (let i = 0; i < refreshedAll.length; i++) {
-        const key = refreshedAll[i];
-        this.ephemeralIndex[key.id] = buildSearchTokens(key);
-      }
-    }
-
-    // Now build typed-HTML
+    // Fetch updated keys
     const refreshed = await this._vault.getAllKeys();
-    const hierarchy = buildKeyHierarchy(refreshed);
-    const elements = [];
-    for (let i = 0; i < hierarchy.length; i++) {
-      elements.push(renderKeyRecursive(hierarchy[i], 0));
+
+    // Build ephemeral index if changed
+    const newHash = JSON.stringify(refreshed);
+    if (newHash !== this.lastKeyHash) {
+      this.lastKeyHash = newHash;
+      const idx: Record<string, string[]> = {};
+      for (let i = 0; i < refreshed.length; i++) {
+        idx[refreshed[i].id] = buildSearchTokens(refreshed[i]);
+      }
+      this.ephemeralIndex = idx;
     }
 
-    // Build final payload for script
+    // Build hierarchy
+    const hierarchy = buildKeyHierarchy(refreshed);
+    const cards = hierarchy.map((node) => renderKeyRecursive(node, 0));
+
+    // Prepare for webview
     const payload = {
       keys: refreshed,
       searchIndex: this.ephemeralIndex,
     };
-    const payloadJson = JSON.stringify(payload);
 
     const nonce = getNonce();
     const cspSource = this._panel.webview.cspSource;
-    const script = getPanelScript(payloadJson);
+    const script = getPanelScript(JSON.stringify(payload));
 
     this._panel.webview.html = getPanelHtml({
       nonce,
       cspSource,
-      keyElements: elements,
+      keyElements: cards,
       script,
       styles: keyPanelStyles,
     });
@@ -215,7 +183,7 @@ export class KeyPanel {
     currentLabel?: string;
   }) {
     switch (msg.command) {
-      case 'requestEditLabel':
+      case 'requestEditLabel': {
         if (msg.id && msg.currentLabel !== undefined) {
           const newLabel = await vsApi.window.showInputBox({
             prompt: 'Enter new label',
@@ -226,30 +194,35 @@ export class KeyPanel {
           }
         }
         break;
+      }
 
-      case 'updateLabel':
+      case 'updateLabel': {
         if (msg.id && msg.label !== undefined) {
-          this._vault.updateKeyLabel(msg.id, msg.label).catch((err) =>
-            vsApi.window.showErrorMessage(String(err)),
-          );
+          this._vault
+            .updateKeyLabel(msg.id, msg.label)
+            .catch((err) => vsApi.window.showErrorMessage(String(err)));
         }
         break;
+      }
 
-      case 'generateRandomKey':
+      case 'generateRandomKey': {
         if (msg.type) this.generateRandomKey(msg.type);
         break;
+      }
 
-      case 'submitAddKey':
+      case 'submitAddKey': {
         if (msg.type && msg.value !== undefined) {
           this.addKey(msg.type, msg.value, msg.label ?? 'Imported Key');
         }
         break;
+      }
 
-      case 'deleteKey':
+      case 'deleteKey': {
         if (msg.id) this.deleteKey(msg.id);
         break;
+      }
 
-      case 'setEncryptionKey':
+      case 'setEncryptionKey': {
         if (msg.id) {
           this._vault
             .setEncryptionKey(msg.id)
@@ -258,6 +231,7 @@ export class KeyPanel {
             .catch((err) => vsApi.window.showErrorMessage(String(err)));
         }
         break;
+      }
 
       // Copy commands
       case 'copyPrivate':
@@ -307,10 +281,14 @@ export class KeyPanel {
     }
   }
 
+  /**
+   * Generate random key
+   */
   private async generateRandomKey(type: KeyType) {
     try {
       let val = '';
       let finalType = type;
+
       switch (type) {
         case 'wif':
         case 'encryption': {
@@ -337,6 +315,7 @@ export class KeyPanel {
           break;
         }
       }
+
       this._panel.webview.postMessage({
         command: 'populateGeneratedKey',
         value: val,
@@ -347,10 +326,13 @@ export class KeyPanel {
     }
   }
 
+  /**
+   * Add Key from modal
+   */
   private async addKey(type: KeyType, value: string, label: string) {
     try {
       let storeVal = value;
-      const storeType: KeyType = type;
+      const storeType = type;
       const meta: Record<string, string> = {};
 
       switch (type) {
@@ -379,9 +361,8 @@ export class KeyPanel {
           break;
         }
         case 'private':
-        case 'public': {
+        case 'public':
           throw new Error('Unsupported key type in modal. Use WIF instead.');
-        }
       }
 
       await this._vault.storeKey({
@@ -398,6 +379,9 @@ export class KeyPanel {
     }
   }
 
+  /**
+   * Delete key + all descendants
+   */
   private async deleteKey(id: string) {
     try {
       await this.deleteKeyAndDescendants(id);
@@ -411,17 +395,18 @@ export class KeyPanel {
   private async deleteKeyAndDescendants(id: string) {
     const toDelete = new Set<string>([id]);
     const queue = [id];
-    while (queue.length) {
+
+    while (queue.length > 0) {
       const cur = queue.pop();
       if (!cur) continue;
-      const kids = await this._vault
-        .getAllKeys()
-        .then((arr) => arr.filter((c) => c.metadata?.parentId === cur));
-      for (let i = 0; i < kids.length; i++) {
-        const ch = kids[i];
-        if (!toDelete.has(ch.id)) {
-          toDelete.add(ch.id);
-          queue.push(ch.id);
+      const all = await this._vault.getAllKeys();
+      for (let i = 0; i < all.length; i++) {
+        const child = all[i];
+        if (child.metadata?.parentId === cur) {
+          if (!toDelete.has(child.id)) {
+            toDelete.add(child.id);
+            queue.push(child.id);
+          }
         }
       }
     }
@@ -430,6 +415,9 @@ export class KeyPanel {
     }
   }
 
+  // -------------------------------------------------------------------------
+  // Copy commands
+  // -------------------------------------------------------------------------
   private async copyPrivate(id: string) {
     const k = await this._vault.getKey(id);
     if (!k) return;
@@ -448,46 +436,54 @@ export class KeyPanel {
     if (!k) return;
     const addr = deriveAddress(k);
     await vsApi.env.clipboard.writeText(addr);
-    vsApi.window.showInformationMessage('Address copied.');
+    vsApi.window.showInformationMessage(`Address ${addr} copied.`);
   }
   private async copyEntireKey(id: string) {
     const k = await this._vault.getKey(id);
     if (!k) return;
     await vsApi.env.clipboard.writeText(k.value);
-    vsApi.window.showInformationMessage('Full key copied.');
+    vsApi.window.showInformationMessage('Key copied.');
   }
   private async copyHex(id: string) {
     const k = await this._vault.getKey(id);
     if (!k) return;
+
     if (k.type === 'public') {
       const pub = derivePublicKeyString(k);
       await vsApi.env.clipboard.writeText(pub);
       vsApi.window.showInformationMessage('HEX (public) copied');
-      return;
+    } else if (
+      k.type === 'wif' ||
+      k.type === 'encryption' ||
+      k.type === 'private'
+    ) {
+      const pk = toPrivateKey(k);
+      if (pk) {
+        await vsApi.env.clipboard.writeText(pk.toString());
+        vsApi.window.showInformationMessage('HEX (private) copied');
+      }
+    } else {
+      vsApi.window.showErrorMessage('copyHex not valid for this type');
     }
-    if (k.type === 'wif' || k.type === 'encryption') {
-      const pk = PrivateKey.fromWif(k.value);
-      await vsApi.env.clipboard.writeText(pk.toString());
-      vsApi.window.showInformationMessage('HEX (private) copied');
-      return;
-    }
-    vsApi.window.showErrorMessage('copyHex not valid for this type');
   }
   private async copyWif(id: string) {
     const k = await this._vault.getKey(id);
     if (!k) return;
+
     if (k.type === 'wif' || k.type === 'encryption') {
       await vsApi.env.clipboard.writeText(k.value);
       vsApi.window.showInformationMessage('WIF copied.');
       return;
     }
-    if (k.type === 'public') {
-      const pk = PrivateKey.fromString(k.value);
-      await vsApi.env.clipboard.writeText(pk.toWif());
-      vsApi.window.showInformationMessage('WIF (from public) copied');
+    if (k.type === 'private' || k.type === 'public') {
+      const pk = toPrivateKey(k);
+      if (pk) {
+        await vsApi.env.clipboard.writeText(pk.toWif());
+        vsApi.window.showInformationMessage('WIF copied.');
+      }
       return;
     }
-    vsApi.window.showErrorMessage('copyWif not valid for this type');
+    vsApi.window.showErrorMessage('copyWif not valid for this key type');
   }
   private async copyXprv(id: string) {
     const k = await this._vault.getKey(id);
@@ -495,14 +491,12 @@ export class KeyPanel {
     if (k.type === 'hdprivate') {
       await vsApi.env.clipboard.writeText(k.value);
       vsApi.window.showInformationMessage('XPRV copied');
-      return;
-    }
-    if (k.type === 'mnemonic') {
+    } else if (k.type === 'mnemonic') {
       await vsApi.env.clipboard.writeText(k.value);
       vsApi.window.showInformationMessage('XPRV (mnemonic) copied');
-      return;
+    } else {
+      vsApi.window.showErrorMessage('copyXprv not valid for this type');
     }
-    vsApi.window.showErrorMessage('copyXprv not valid for this type');
   }
   private async copyXpub(id: string) {
     const k = await this._vault.getKey(id);
@@ -540,26 +534,35 @@ export class KeyPanel {
     vsApi.window.showInformationMessage('Mnemonic words copied');
   }
 
+  // -------------------------------------------------------------------------
+  // Derive Address
+  // -------------------------------------------------------------------------
   private async deriveAddressPrompt(id: string) {
-    const k = await this._vault.getKey(id);
-    if (!k) return;
-    if (k.type === 'hdprivate' || k.type === 'hdpublic') {
+    const key = await this._vault.getKey(id);
+    if (!key) return;
+
+    if (key.type === 'hdprivate' || key.type === 'hdpublic') {
       const path = await vsApi.window.showInputBox({
         prompt: 'Enter bip32 path, e.g. m/0/0',
         value: 'm/0/0',
       });
       if (!path) return;
-      const addr = deriveHdAddress(k, path);
+
+      const addr = deriveHdAddress(key, path);
       vsApi.window.showInformationMessage(`Derived address: ${addr}`);
     } else {
-      const addr = deriveAddress(k);
-      vsApi.window.showInformationMessage(`Address: ${addr}`);
+      const a = deriveAddress(key);
+      vsApi.window.showInformationMessage(`Address: ${a}`);
     }
   }
 
+  // -------------------------------------------------------------------------
+  // Type42 child
+  // -------------------------------------------------------------------------
   private async type42Child(id: string) {
     const parent = await this._vault.getKey(id);
     if (!parent) return;
+
     const otherPubStr = await vsApi.window.showInputBox({
       prompt: "Enter other party's compressed pubkey (66 hex)",
     });
@@ -572,13 +575,16 @@ export class KeyPanel {
     const all = await this._vault.getAllKeys();
     for (let i = 0; i < all.length; i++) {
       const s = all[i];
-      if (
-        s.metadata?.parentId === id &&
-        s.metadata?.type42OtherPub === otherPubStr &&
-        s.metadata?.type42Invoice === invoice
-      ) {
-        vsApi.window.showWarningMessage('Type42 child with same pub & invoice already exists');
-        return;
+      if (s.metadata?.parentId === id) {
+        if (
+          s.metadata?.type42OtherPub === otherPubStr &&
+          s.metadata?.type42Invoice === invoice
+        ) {
+          vsApi.window.showWarningMessage(
+            'Type42 child with same pub & invoice already exists',
+          );
+          return;
+        }
       }
     }
 
@@ -605,9 +611,13 @@ export class KeyPanel {
     this.updateContent();
   }
 
+  // -------------------------------------------------------------------------
+  // BIP32 child
+  // -------------------------------------------------------------------------
   private async bip32Child(id: string) {
     const parent = await this._vault.getKey(id);
     if (!parent) return;
+
     const path = await vsApi.window.showInputBox({
       prompt: 'Enter bip32 path, e.g. m/0/0',
       value: 'm/0/0',
@@ -618,7 +628,9 @@ export class KeyPanel {
     for (let i = 0; i < all.length; i++) {
       const s = all[i];
       if (s.metadata?.parentId === id && s.metadata?.bip32Path === path) {
-        vsApi.window.showWarningMessage('A BIP32 child with that path already exists');
+        vsApi.window.showWarningMessage(
+          'A BIP32 child with that path already exists.',
+        );
         return;
       }
     }
@@ -632,7 +644,7 @@ export class KeyPanel {
       return;
     }
     const hd = HD.fromString(parent.value);
-    const derived = hd.derive(path);
+    const derived = hd.derive(path.replace(/'/g, 'h'));
     if (!derived.privKey) {
       vsApi.window.showErrorMessage('No private key at that path (maybe xpub only?)');
       return;
@@ -653,18 +665,33 @@ export class KeyPanel {
     this.updateContent();
   }
 
+  // -------------------------------------------------------------------------
+  // Create a "Public" child from single wif/private
+  // -------------------------------------------------------------------------
   private async createPublicChild(id: string) {
     const parent = await this._vault.getKey(id);
     if (!parent) return;
+
     if (
       parent.type !== 'wif' &&
       parent.type !== 'private' &&
       parent.type !== 'encryption' &&
       parent.type !== 'public'
     ) {
-      vsApi.window.showErrorMessage('Cannot create public child from this key type');
+      vsApi.window.showErrorMessage('Cannot create a public child from this key type');
       return;
     }
+
+    // check if public child already exists
+    const all = await this._vault.getAllKeys();
+    for (let i = 0; i < all.length; i++) {
+      const c = all[i];
+      if (c.metadata?.parentId === parent.id && c.type === 'public') {
+        vsApi.window.showWarningMessage('A public child already exists for this key');
+        return;
+      }
+    }
+
     let privHex = '';
     if (parent.type === 'wif' || parent.type === 'encryption') {
       const pk = PrivateKey.fromWif(parent.value);
@@ -688,7 +715,7 @@ export class KeyPanel {
   public dispose() {
     KeyPanel.currentPanel = undefined;
     this._panel.dispose();
-    while (this._disposables.length) {
+    while (this._disposables.length > 0) {
       const d = this._disposables.pop();
       if (d) d.dispose();
     }
@@ -697,9 +724,9 @@ export class KeyPanel {
 
 function getNonce(): string {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-  let res = '';
+  let out = '';
   for (let i = 0; i < 16; i++) {
-    res += chars.charAt(Math.floor(Math.random() * chars.length));
+    out += chars.charAt(Math.floor(Math.random() * chars.length));
   }
-  return res;
+  return out;
 }

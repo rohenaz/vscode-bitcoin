@@ -26,6 +26,7 @@ import type {
   SemanticTokens,
   SemanticTokensBuilder,
   SemanticTokensLegend,
+  QuickPickOptions,
 } from 'vscode';
 
 let vsApi: typeof import('vscode');
@@ -66,6 +67,7 @@ export type {
   SemanticTokens,
   SemanticTokensBuilder,
   SemanticTokensLegend,
+  QuickPickOptions,
 };
 
 export function isUri(obj: unknown): obj is Uri {

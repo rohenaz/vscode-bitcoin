@@ -16,6 +16,8 @@ const isAutoStoreEnabledMock = mock(() => true);
 const mockKeyVault = {
   storeKey: storeKeyMock,
   isAutoStoreEnabled: isAutoStoreEnabledMock,
+  isUnlocked: true,
+  unlockVault: mock(() => Promise.resolve()),
 } as unknown as KeyVault;
 
 // Mock window.showErrorMessage
@@ -45,6 +47,9 @@ describe('generateMnemonic', () => {
       type: 'mnemonic',
       value: expect.any(String),
       label: 'Generated Mnemonic',
+      metadata: {
+        xprv: expect.any(String),
+      },
     });
 
     // Verify the mnemonic is valid

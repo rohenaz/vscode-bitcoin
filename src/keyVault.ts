@@ -1,10 +1,17 @@
 import * as crypto from 'node:crypto';
+import { Hash, PrivateKey, SymmetricKey, Utils } from '@bsv/sdk';
 import vsApi, {
   type SecretStorage,
   type ExtensionContext,
   type EventEmitter,
   type Event,
 } from './vsShim';
+
+const { toArray } = Utils;
+
+// Constants for vault encryption
+const ENCRYPTED_VAULT_BLOB = 'bitcoin.encryptedVaultBlob';
+const SALT_KEY = 'bitcoin.vaultSalt';
 
 export type KeyType =
   | 'private'
@@ -34,9 +41,91 @@ export class KeyVault {
   private encryptionKeyIdKey = 'bitcoin.encryptionKeyId';
   private onKeyListChanged: EventEmitter<void>;
 
+  // New fields for encryption
+  private ephemeralKey: SymmetricKey | null = null;
+  private decryptedKeys: KeyEntry[] | null = null;
+
   constructor(context: ExtensionContext) {
     this.storage = context.secrets;
     this.onKeyListChanged = new vsApi.EventEmitter<void>();
+  }
+
+  /**
+   * Is the vault currently unlocked in memory?
+   */
+  public get isUnlocked(): boolean {
+    return !!this.ephemeralKey && !!this.decryptedKeys;
+  }
+
+  /**
+   * Load or create a random salt used for PBKDF2
+   */
+  private async getOrCreateSalt(): Promise<number[]> {
+    let saltHex = await this.storage.get(SALT_KEY);
+    if (!saltHex) {
+      const randomSalt = crypto.randomBytes(16);
+      saltHex = randomSalt.toString('hex');
+      await this.storage.store(SALT_KEY, saltHex);
+    }
+    return toArray(saltHex, 'hex');
+  }
+
+  /**
+   * Unlocks vault using a user-provided master password.
+   * - Creates a SymmetricKey from the password
+   * - Decrypts the stored ciphertext
+   * - Parses JSON => in-memory KeyEntry[]
+   * 
+   * Throws error on bad password or if data is corrupted.
+   */
+  public async unlockVault(password: string): Promise<void> {
+    if (this.isUnlocked) return; // Already unlocked
+
+    // 1) Get or generate salt from secret storage
+    const salt = await this.getOrCreateSalt();
+
+    // 2) Create a 32-byte key using SHA-256
+    const key = Hash.sha256(toArray(password).concat(salt));
+    // Create symmetric key from the 32-byte hash
+    const symKey = new SymmetricKey(key);
+
+    // 3) Load the existing ciphertext from storage
+    const cipherHex = await this.storage.get(ENCRYPTED_VAULT_BLOB);
+    if (!cipherHex) {
+      // No existing vault => treat as empty
+      this.ephemeralKey = symKey;
+      this.decryptedKeys = [];
+      return;
+    }
+
+    // 4) Attempt to decrypt
+    try {
+      const plain = symKey.decrypt(cipherHex, 'utf8') as string;
+      const arr = JSON.parse(plain) as KeyEntry[];
+      this.ephemeralKey = symKey;
+      this.decryptedKeys = arr;
+    } catch (err) {
+      // Wrong password or data corrupted
+      throw new Error('Vault decryption failed. Possibly incorrect password.');
+    }
+  }
+
+  /**
+   * Lock the vault => forget ephemeral in-memory data + key
+   */
+  public lockVault(): void {
+    this.ephemeralKey = null;
+    this.decryptedKeys = null;
+  }
+
+  /**
+   * Overwrite entire vault array with re-encrypted data
+   */
+  private async saveVault(): Promise<void> {
+    if (!this.ephemeralKey || !this.decryptedKeys) return;
+    const json = JSON.stringify(this.decryptedKeys);
+    const cipherHex = this.ephemeralKey.encrypt(json) as string;
+    await this.storage.store(ENCRYPTED_VAULT_BLOB, cipherHex);
   }
 
   isAutoStoreEnabled(): boolean {
@@ -64,6 +153,10 @@ export class KeyVault {
   }
 
   async storeKey(entry: Omit<KeyEntry, 'id' | 'timestamp'>): Promise<string> {
+    if (!this.isUnlocked) {
+      throw new Error('Vault is locked. Must unlock with password first.');
+    }
+
     const id = crypto.randomUUID();
     const fullEntry: KeyEntry = {
       ...entry,
@@ -71,61 +164,58 @@ export class KeyVault {
       timestamp: Date.now(),
     };
 
-    // Store the key entry first
-    await this.storage.store(id, JSON.stringify(fullEntry));
-
-    // Update key list atomically
-    const list = await this.getKeyList();
-    if (!list.includes(id)) {
-      list.push(id);
-      await this.saveKeyList(list);
+    // Add to decrypted array
+    if (!this.decryptedKeys) {
+      throw new Error('Vault is in an invalid state');
     }
+    this.decryptedKeys.push(fullEntry);
+
+    // Re-encrypt and save
+    await this.saveVault();
+    this.onKeyListChanged.fire();
 
     return id;
   }
 
   async getKey(id: string): Promise<KeyEntry | undefined> {
-    const entry = await this.storage.get(id);
-    return entry ? JSON.parse(entry) : undefined;
+    if (!this.isUnlocked || !this.decryptedKeys) {
+      throw new Error('Vault is locked. Must unlock with password first.');
+    }
+    return this.decryptedKeys.find(k => k.id === id);
   }
 
   async getAllKeys(): Promise<KeyEntry[]> {
-    const list = await this.getKeyList();
-    const entries = await Promise.all(
-      list.map(async (keyId) => {
-        try {
-          const entry = await this.getKey(keyId);
-          return entry;
-        } catch (error) {
-          console.error(`Error retrieving key ${keyId}:`, error);
-          return undefined;
-        }
-      }),
-    );
-    return entries.filter((entry): entry is KeyEntry => entry !== undefined);
+    if (!this.isUnlocked || !this.decryptedKeys) {
+      throw new Error('Vault is locked. Must unlock with password first.');
+    }
+    return [...this.decryptedKeys];
   }
 
   async deleteKey(id: string): Promise<void> {
-    // Remove from storage
-    await this.storage.delete(id);
-
-    // Update key list
-    const list = await this.getKeyList();
-    const newList = list.filter((existingId) => existingId !== id);
-    await this.saveKeyList(newList);
+    if (!this.isUnlocked || !this.decryptedKeys) {
+      throw new Error('Vault is locked. Must unlock with password first.');
+    }
+    this.decryptedKeys = this.decryptedKeys.filter(k => k.id !== id);
+    await this.saveVault();
+    this.onKeyListChanged.fire();
   }
 
   async clearAllKeys(): Promise<void> {
-    const list = await this.getKeyList();
-    await Promise.all(list.map((id) => this.storage.delete(id)));
-    await this.saveKeyList([]);
+    if (!this.isUnlocked) {
+      throw new Error('Vault is locked. Must unlock with password first.');
+    }
+    this.decryptedKeys = [];
+    await this.saveVault();
+    this.onKeyListChanged.fire();
   }
 
   async searchKeys(query: string): Promise<KeyEntry[]> {
-    const allKeys = await this.getAllKeys();
-    const lowerQuery = query.toLowerCase();
+    if (!this.isUnlocked || !this.decryptedKeys) {
+      throw new Error('Vault is locked. Must unlock with password first.');
+    }
 
-    return allKeys.filter(
+    const lowerQuery = query.toLowerCase();
+    return this.decryptedKeys.filter(
       (entry) =>
         entry.label?.toLowerCase().includes(lowerQuery) ||
         entry.type.toLowerCase().includes(lowerQuery) ||
@@ -137,57 +227,64 @@ export class KeyVault {
   }
 
   async updateKeyLabel(id: string, newLabel: string): Promise<void> {
-    const entry = await this.getKey(id);
-    if (!entry) {
+    if (!this.isUnlocked || !this.decryptedKeys) {
+      throw new Error('Vault is locked. Must unlock with password first.');
+    }
+
+    const keyIndex = this.decryptedKeys.findIndex(k => k.id === id);
+    if (keyIndex === -1) {
       throw new Error('Key not found');
     }
 
-    const updatedEntry: KeyEntry = {
-      ...entry,
+    this.decryptedKeys[keyIndex] = {
+      ...this.decryptedKeys[keyIndex],
       label: newLabel,
     };
 
-    await this.storage.store(id, JSON.stringify(updatedEntry));
+    await this.saveVault();
     this.onKeyListChanged.fire();
   }
 
   async getEncryptionKey(): Promise<KeyEntry | undefined> {
-    const encryptionKeyId = await this.storage.get(this.encryptionKeyIdKey);
-    if (!encryptionKeyId) return undefined;
-    return this.getKey(encryptionKeyId);
+    if (!this.isUnlocked || !this.decryptedKeys) {
+      throw new Error('Vault is locked. Must unlock with password first.');
+    }
+    return this.decryptedKeys.find(k => k.isEncryptionKey);
   }
 
   async setEncryptionKey(id: string): Promise<void> {
-    const key = await this.getKey(id);
-    if (!key) {
+    if (!this.isUnlocked || !this.decryptedKeys) {
+      throw new Error('Vault is locked. Must unlock with password first.');
+    }
+
+    // Find the key
+    const keyIndex = this.decryptedKeys.findIndex(k => k.id === id);
+    if (keyIndex === -1) {
       throw new Error('Key not found');
     }
 
     // Clear isEncryptionKey flag from all keys
-    const allKeys = await this.getAllKeys();
-    await Promise.all(
-      allKeys
-        .filter(k => k.isEncryptionKey)
-        .map(async k => {
-          const updated = { ...k, isEncryptionKey: false };
-          await this.storage.store(k.id, JSON.stringify(updated));
-        })
-    );
+    this.decryptedKeys = this.decryptedKeys.map(k => ({
+      ...k,
+      isEncryptionKey: k.id === id
+    }));
 
-    // Set the new encryption key
-    const updatedKey = { ...key, isEncryptionKey: true };
-    await this.storage.store(id, JSON.stringify(updatedKey));
-    await this.storage.store(this.encryptionKeyIdKey, id);
+    await this.saveVault();
     this.onKeyListChanged.fire();
   }
 
   async clearEncryptionKey(): Promise<void> {
-    const key = await this.getEncryptionKey();
-    if (key) {
-      const updatedKey = { ...key, isEncryptionKey: false };
-      await this.storage.store(key.id, JSON.stringify(updatedKey));
+    if (!this.isUnlocked || !this.decryptedKeys) {
+      throw new Error('Vault is locked. Must unlock with password first.');
     }
-    await this.storage.delete(this.encryptionKeyIdKey);
+
+    // Clear isEncryptionKey flag from all keys
+    this.decryptedKeys = this.decryptedKeys.map(k => ({
+      ...k,
+      isEncryptionKey: false
+    }));
+
+    await this.saveVault();
     this.onKeyListChanged.fire();
   }
 }

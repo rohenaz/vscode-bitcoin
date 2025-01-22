@@ -1,8 +1,5 @@
-// src/views/keyVault/styles.ts
-
 export const keyPanelStyles = `
 :root {
-  /* Map your short variables to real VS Code theme variables: */
   --bg: var(--vscode-editor-background);
   --fg: var(--vscode-editor-foreground);
   --border: var(--vscode-panel-border);
@@ -119,6 +116,7 @@ input, select, button {
   flex-wrap: wrap;
   gap: 6px;
 }
+/* The main action buttons (PUB, BIP32, Type42, etc.) */
 .key-button {
   border: none;
   padding: 4px 8px;
@@ -127,8 +125,23 @@ input, select, button {
   background: var(--secondary-btn);
   color: var(--secondary-btn-text);
   font-size: 0.85rem;
+  transition: background 0.15s;
 }
 .key-button:hover {
+  background: var(--secondary-btn-hover);
+}
+/* The smaller "HEX", "WIF", "XPUB" badges for alternate copies. */
+.format-badge {
+  border: none;
+  padding: 4px 6px;
+  border-radius: 3px;
+  cursor: pointer;
+  background: var(--secondary-btn);
+  color: var(--secondary-btn-text);
+  font-size: 0.75rem;
+  transition: background 0.15s;
+}
+.format-badge:hover {
   background: var(--secondary-btn-hover);
 }
 .key-metadata {

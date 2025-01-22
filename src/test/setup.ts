@@ -1,3 +1,4 @@
+import { QuickPickOptions } from 'src/vsShim';
 import type {
   CancellationToken,
   Disposable,
@@ -219,7 +220,7 @@ interface VSCodeMock {
     >;
     showQuickPick: (
       items: string[],
-      options?: { placeHolder?: string },
+      options?: QuickPickOptions,
     ) => Promise<string | undefined>;
     showTextDocument: (document: { uri: Uri }) => Promise<void>;
     activeTextEditor: {

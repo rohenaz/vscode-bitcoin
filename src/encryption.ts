@@ -1,7 +1,9 @@
 import * as crypto from 'node:crypto';
-import { PrivateKey } from '@bsv/sdk';
+import { Hash, PrivateKey, SymmetricKey, Utils } from '@bsv/sdk';
 import type { KeyVault } from './keyVault';
 import vsApi from './vsShim';
+
+const { toArray, toBase64, toHex, toUTF8 } = Utils;
 
 export class EncryptionService {
   constructor(private keyVault: KeyVault) {}
@@ -22,6 +24,8 @@ export class EncryptionService {
    * @param privateKey Optional private key to use. If not provided, a new one will be generated
    * @param context Additional context about the encryption operation
    * @returns Object containing the encrypted data and the private key used
+   * 
+   * NOTE: This is your existing ephemeral "private key" encryption approach.
    */
   async encrypt(
     data: string | Buffer,
@@ -49,21 +53,19 @@ export class EncryptionService {
         });
       }
 
-      // Encrypt the data
-      // We'll use the private key to derive a shared secret
+      // Derive a shared key from the private key's public key
       const publicKey = key.toPublicKey();
       const sharedKey = crypto
         .createHash('sha256')
         .update(publicKey.toString())
         .digest();
 
-      // Use AES encryption with the shared key
+      // AES-256-CBC
       const iv = crypto.randomBytes(16);
       const cipher = crypto.createCipheriv('aes-256-cbc', sharedKey, iv);
-
       const encrypted = Buffer.concat([cipher.update(buffer), cipher.final()]);
 
-      // Combine IV and encrypted data
+      // Combine IV + encrypted payload
       const result = Buffer.concat([iv, encrypted]);
 
       return {
@@ -81,27 +83,29 @@ export class EncryptionService {
    * @param encryptedData Base64 encoded encrypted data
    * @param privateKey The private key used for encryption
    * @returns The decrypted data
+   * 
+   * NOTE: This is your existing ephemeral "private key" decryption approach.
    */
   async decrypt(
     encryptedData: string,
     privateKey: PrivateKey,
   ): Promise<Buffer> {
     try {
-      // Decode base64 data
+      // Decode base64
       const data = Buffer.from(encryptedData, 'base64');
 
-      // Extract IV and encrypted data
+      // Split out the IV
       const iv = data.slice(0, 16);
       const encrypted = data.slice(16);
 
-      // Derive shared key
+      // Derive shared key from the private key's public key
       const publicKey = privateKey.toPublicKey();
       const sharedKey = crypto
         .createHash('sha256')
         .update(publicKey.toString())
         .digest();
 
-      // Decrypt the data
+      // AES-256-CBC decrypt
       const decipher = crypto.createDecipheriv('aes-256-cbc', sharedKey, iv);
       const decrypted = Buffer.concat([
         decipher.update(encrypted),
@@ -119,6 +123,8 @@ export class EncryptionService {
    * Prompt user for encryption key
    * @param mode Whether this is for encryption or decryption
    * @returns PrivateKey or undefined if cancelled
+   * 
+   * NOTE: This is your existing ephemeral "private key" prompt approach.
    */
   async promptForKey(
     mode: 'encrypt' | 'decrypt',
@@ -163,7 +169,7 @@ export class EncryptionService {
       }
     }
 
-    // For decryption, or if user chose to use existing key for encryption
+    // For decryption or user-chosen "Existing Key (WIF)" 
     const wif = await vsApi.window.showInputBox({
       prompt:
         mode === 'encrypt'
@@ -185,5 +191,42 @@ export class EncryptionService {
     }
 
     return PrivateKey.fromWif(wif);
+  }
+
+  /* 
+   * --------------------------------------------------------------------------
+   * ADDITIONAL: Password-based AES example using bsv-sdk's SymmetricKey
+   * --------------------------------------------------------------------------
+   */
+
+  /**
+   * Derive a 256-bit SymmetricKey from a raw password.
+   * Currently we do one pass of sha256. In production, you'd do PBKDF2 or Argon2, etc.
+   */
+  deriveSymmetricKeyFromPassword(password: string): SymmetricKey {
+    const hash = Hash.sha256(password);
+    return new SymmetricKey(toArray(hash));
+  }
+
+  /**
+   * AES-GCM encrypt with a SymmetricKey (returns base64)
+   */
+  encryptWithSymKey(key: SymmetricKey, plaintext: string): string {
+    // Convert plaintext to array
+    const plaintextArray = toHex(toArray(plaintext));
+    // By default, SymmetricKey.encrypt returns IV|ciphertext|authTag in hex
+    const hex = key.encrypt(plaintextArray, 'hex');
+    // Convert hex to base64 for storage/transmission
+    return toBase64(toArray(hex, 'hex'));
+  }
+
+  /**
+   * AES-GCM decrypt with a SymmetricKey (plaintext returned as UTF-8 string)
+   */
+  decryptWithSymKey(key: SymmetricKey, ciphertextBase64: string): string {
+    // Convert base64 back to hex
+    const hex = toHex(toArray(ciphertextBase64, 'base64'));
+    // Returns the plaintext as a UTF-8 string
+    return toUTF8(toArray(key.decrypt(hex, 'hex') as string, 'hex'));
   }
 }

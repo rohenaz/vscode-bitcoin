@@ -1,4 +1,4 @@
-import { createRequire } from 'module';
+import { createRequire } from 'node:module';
 import {
   existsSync,
   mkdirSync,
@@ -384,110 +384,108 @@ describe('Bitcoin Extension Tests', () => {
 
   // Key Vault tests
   describe('Key Vault', () => {
-    let vault: KeyVault;
+    let keyVault: KeyVault;
 
-    beforeEach(() => {
-      vault = new KeyVault(mockContext as ExtensionContext);
-    });
-
-    afterEach(async () => {
-      await vault.clearAllKeys();
+    beforeEach(async () => {
+      keyVault = new KeyVault(mockContext as ExtensionContext);
+      // Unlock the vault with a test password
+      await keyVault.unlockVault('test123');
     });
 
     test('stores and retrieves a key', async () => {
-      const keyEntry = {
-        type: 'private' as KeyType,
+      const id = await keyVault.storeKey({
+        type: 'wif',
+        value: 'L1abc123...',
         label: 'Test Key',
-        value: 'test-value'
-      };
+      });
 
-      const id = await vault.storeKey(keyEntry);
-      expect(typeof id).toBe('string');
-      expect(id.length).toBeGreaterThan(0);
-
-      const retrieved = await vault.getKey(id);
-      expect(retrieved).toBeDefined();
-      expect(retrieved?.type).toBe(keyEntry.type);
-      expect(retrieved?.label).toBe(keyEntry.label);
-      expect(retrieved?.value).toBe(keyEntry.value);
+      const key = await keyVault.getKey(id);
+      expect(key).toBeDefined();
+      expect(key?.type).toBe('wif');
+      expect(key?.value).toBe('L1abc123...');
+      expect(key?.label).toBe('Test Key');
     });
 
     test('lists all stored keys', async () => {
-      const keys = [
-        { type: 'private' as KeyType, label: 'Key 1', value: 'value1' },
-        { type: 'public' as KeyType, label: 'Key 2', value: 'value2' }
-      ];
+      await keyVault.clearAllKeys();
+      
+      await keyVault.storeKey({
+        type: 'wif',
+        value: 'L1abc123...',
+        label: 'Test Key 1',
+      });
 
-      // Store keys sequentially to avoid race condition
-      const id1 = await vault.storeKey(keys[0]);
-      const id2 = await vault.storeKey(keys[1]);
-      const ids = [id1, id2];
+      await keyVault.storeKey({
+        type: 'wif',
+        value: 'L2def456...',
+        label: 'Test Key 2',
+      });
 
-      console.log('Stored key IDs:', ids);
-
-      const allKeys = await vault.getAllKeys();
-      console.log('Retrieved keys:', allKeys);
-
-      expect(allKeys).toHaveLength(2);
-      expect(allKeys.map(k => k.id).sort()).toEqual(ids.sort());
+      const keys = await keyVault.getAllKeys();
+      expect(keys).toHaveLength(2);
+      expect(keys[0].label).toBe('Test Key 1');
+      expect(keys[1].label).toBe('Test Key 2');
     });
 
     test('deletes a key', async () => {
-      const id = await vault.storeKey({
-        type: 'private' as KeyType,
-        label: 'To Delete',
-        value: 'delete-me'
+      const id = await keyVault.storeKey({
+        type: 'wif',
+        value: 'L1abc123...',
+        label: 'Test Key',
       });
 
-      await vault.deleteKey(id);
-      const retrieved = await vault.getKey(id);
-      expect(retrieved).toBeUndefined();
+      await keyVault.deleteKey(id);
+      const key = await keyVault.getKey(id);
+      expect(key).toBeUndefined();
     });
 
     test('updates key label', async () => {
-      const id = await vault.storeKey({
-        type: 'private' as KeyType,
-        label: 'Old Label',
-        value: 'test-value'
+      const id = await keyVault.storeKey({
+        type: 'wif',
+        value: 'L1abc123...',
+        label: 'Test Key',
       });
 
-      await vault.updateKeyLabel(id, 'New Label');
-      const updated = await vault.getKey(id);
-      expect(updated?.label).toBe('New Label');
+      await keyVault.updateKeyLabel(id, 'Updated Label');
+      const key = await keyVault.getKey(id);
+      expect(key?.label).toBe('Updated Label');
     });
 
     test('manages encryption key', async () => {
-      const id = await vault.storeKey({
-        type: 'encryption' as KeyType,
+      const id = await keyVault.storeKey({
+        type: 'encryption',
+        value: 'L1abc123...',
         label: 'Encryption Key',
-        value: 'secret'
       });
 
-      await vault.setEncryptionKey(id);
-      const encKey = await vault.getEncryptionKey();
+      await keyVault.setEncryptionKey(id);
+      const encKey = await keyVault.getEncryptionKey();
+      expect(encKey).toBeDefined();
       expect(encKey?.id).toBe(id);
-      expect(encKey?.isEncryptionKey).toBe(true);
 
-      await vault.clearEncryptionKey();
-      const cleared = await vault.getEncryptionKey();
-      expect(cleared).toBeUndefined();
+      await keyVault.clearEncryptionKey();
+      const clearedKey = await keyVault.getEncryptionKey();
+      expect(clearedKey).toBeUndefined();
     });
 
     test('searches keys', async () => {
-      await vault.storeKey({
-        type: 'private' as KeyType,
-        label: 'Test Key',
-        value: 'value1'
-      });
-      await vault.storeKey({
-        type: 'public' as KeyType,
-        label: 'Another Key',
-        value: 'value2'
+      await keyVault.clearAllKeys();
+      
+      await keyVault.storeKey({
+        type: 'wif',
+        value: 'L1abc123...',
+        label: 'Test Key 1',
       });
 
-      const results = await vault.searchKeys('test');
+      await keyVault.storeKey({
+        type: 'wif',
+        value: 'L2def456...',
+        label: 'Test Key 2',
+      });
+
+      const results = await keyVault.searchKeys('Key 1');
       expect(results).toHaveLength(1);
-      expect(results[0].label).toBe('Test Key');
+      expect(results[0].label).toBe('Test Key 1');
     });
   });
 
