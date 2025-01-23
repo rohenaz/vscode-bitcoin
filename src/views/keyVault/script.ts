@@ -55,7 +55,7 @@ export function getPanelScript(payloadJson: string): string {
       const keyId = item.getAttribute('data-keyid');
       if (!keyId) continue;
       const tokens = payload.searchIndex[keyId] || [];
-      const matches = tokens.some(t => t.includes(query));
+      const matches = tokens.some(t => t && t.toLowerCase().includes(query));
       item.style.display = matches ? '' : 'none';
     }
   });

@@ -16,66 +16,76 @@ import * as vscode from 'vscode';
 import { P2PKH } from '@bsv/sdk';
 
 /**
- * Build ephemeral search tokens for a single KeyEntry,
- * including derived addresses, WIF, xpub, etc.
+ * Build an expanded set of "search tokens" for ephemeral indexing.
  */
-function buildSearchTokens(k: KeyEntry): string[] {
-  const out: string[] = [];
-
-  // Always label, type, raw value
-  out.push((k.label || '').toLowerCase());
-  out.push(k.type.toLowerCase());
-  out.push(k.value.toLowerCase());
+function buildSearchTokens(key: KeyEntry): string[] {
+  // Always include label, type, raw value in lowercase
+  const tokens = [
+    (key.label || '').toLowerCase(),
+    key.type.toLowerCase(),
+    key.value.toLowerCase(),
+  ];
 
   try {
     if (
-      k.type === 'private' ||
-      k.type === 'wif' ||
-      k.type === 'encryption' ||
-      k.type === 'public'
+      key.type === 'wif' ||
+      key.type === 'private' ||
+      key.type === 'encryption'
     ) {
-      const priv = toPrivateKey(k);
+      const priv = toPrivateKey(key);
       if (priv) {
-        out.push(priv.toWif().toLowerCase());
-        out.push(priv.toAddress().toString().toLowerCase());
-        out.push(priv.toPublicKey().toString().toLowerCase());
+        tokens.push(priv.toWif().toLowerCase());
+        tokens.push(priv.toAddress().toString().toLowerCase());
+        tokens.push(priv.toPublicKey().toString().toLowerCase());
       }
-    } else if (k.type === 'hdprivate') {
-      const hd = HD.fromString(k.value);
+    } else if (key.type === 'hdprivate') {
+      const hd = HD.fromString(key.value);
       if (hd.privKey) {
-        const p = PrivateKey.fromHex(hd.privKey.toString());
-        out.push(p.toWif().toLowerCase());
-        out.push(p.toAddress().toString().toLowerCase());
+        const hex = hd.privKey.toString();
+        const p = PrivateKey.fromHex(hex);
+        tokens.push(p.toWif().toLowerCase());
+        tokens.push(p.toAddress().toString().toLowerCase());
       }
       // xpub
-      out.push(hd.toPublic().toString().toLowerCase());
-    } else if (k.type === 'hdpublic') {
-      const hdpub = HD.fromString(k.value).toPublic();
-      out.push(hdpub.toString().toLowerCase());
-      out.push(hdpub.pubKey.toAddress().toString().toLowerCase());
-    } else if (k.type === 'mnemonic') {
-      // actual phrase
-      out.push(k.value.toLowerCase());
-      // parse xprv
-      const hd = HD.fromString(k.value);
-      out.push(hd.toPublic().toString().toLowerCase());
-      if (hd.privKey) {
-        const p = PrivateKey.fromHex(hd.privKey.toString());
-        out.push(p.toWif().toLowerCase());
-        out.push(p.toAddress().toString().toLowerCase());
+      const xpub = hd.toPublic().toString();
+      tokens.push(xpub.toLowerCase());
+    } else if (key.type === 'mnemonic') {
+      // The user’s BIP39 phrase is stored in key.value if we store it that way
+      tokens.push(key.value.toLowerCase());
+      // Possibly xprv is not stored, or is in metadata
+      // But you can parse it if you want to
+      // (We do an optional parse below)
+      try {
+        // Convert mnemonic => HD => add xpub, address
+        const mn = Mnemonic.fromString(key.value);
+        const hd = HD.fromSeed(mn.toSeed());
+        const hex = hd.privKey ? hd.privKey.toString() : '';
+        if (hex) {
+          const p = PrivateKey.fromHex(hex);
+          tokens.push(p.toWif().toLowerCase());
+          tokens.push(p.toAddress().toString().toLowerCase());
+        }
+        tokens.push(hd.toPublic().toString().toLowerCase());
+      } catch {
+        // ignore parse errors
       }
+    } else if (key.type === 'hdpublic') {
+      const hdPub = HD.fromString(key.value);
+      tokens.push(hdPub.toPublic().toString().toLowerCase());
     }
   } catch {
     // ignore derivation errors
   }
 
-  // Remove duplicates or empty strings
-  const uniq = new Set<string>();
-  for (let i = 0; i < out.length; i++) {
-    const t = out[i].trim();
-    if (t) uniq.add(t);
+  // Remove duplicates
+  const unique = new Set<string>();
+  for (let i = 0; i < tokens.length; i++) {
+    const t = tokens[i];
+    if (t && t.trim().length > 0) {
+      unique.add(t.trim());
+    }
   }
-  return Array.from(uniq);
+  return Array.from(unique);
 }
 
 export class KeyPanel {
@@ -166,12 +176,23 @@ export class KeyPanel {
     // Build ephemeral index if changed
     const newHash = JSON.stringify(refreshed);
     if (newHash !== this.lastKeyHash) {
+      console.log('Keys changed, rebuilding search index...');
+      console.log('Keys:', refreshed);
+      
       this.lastKeyHash = newHash;
       const idx: Record<string, string[]> = {};
       for (let i = 0; i < refreshed.length; i++) {
-        idx[refreshed[i].id] = buildSearchTokens(refreshed[i]);
+        const key = refreshed[i];
+        console.log(`\nBuilding search tokens for key ${key.id}:`);
+        console.log('Key:', key);
+        
+        const tokens = buildSearchTokens(key);
+        console.log('Generated tokens:', tokens);
+        
+        idx[key.id] = tokens;
       }
       this.ephemeralIndex = idx;
+      console.log('\nFull search index:', this.ephemeralIndex);
     }
 
     // Build hierarchy
@@ -518,6 +539,10 @@ export class KeyPanel {
     const k = await this._vault.getKey(id);
     if (!k) return;
     const pub = derivePublicKeyString(k);
+    if (!pub) {
+      vsApi.window.showErrorMessage('Public key derivation failed');
+      return;
+    }
     await vsApi.env.clipboard.writeText(pub);
     vsApi.window.showInformationMessage('Public key copied.');
   }
@@ -540,6 +565,10 @@ export class KeyPanel {
 
     if (k.type === 'public') {
       const pub = derivePublicKeyString(k);
+      if (!pub) {
+        vsApi.window.showErrorMessage('Public key derivation failed');
+        return;
+      }
       await vsApi.env.clipboard.writeText(pub);
       vsApi.window.showInformationMessage('HEX (public) copied');
     } else if (

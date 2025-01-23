@@ -1,8 +1,8 @@
 import { escapeHtml } from '@kitajs/html';
 import type { KeyEntry } from '../../keyVault';
-import { HD, PrivateKey, Utils } from '@bsv/sdk';
+import { HD, PrivateKey, type PublicKey, Utils } from '@bsv/sdk';
 
-const { toArray, toHex } = Utils;
+const { toArray, toHex, toBase58Check } = Utils;
 
 /**
  * Build a parent->child hierarchy without using forEach or map.
@@ -146,15 +146,19 @@ export function displayedKeyValue(k: KeyEntry): JSX.Element {
  * Derive display value from key type
  */
 function deriveValueForDisplay(k: KeyEntry): string {
-  if (k.type === 'hdpublic') {
-    const hd = HD.fromString(k.value).toPublic();
-    return hd.toString();
+  try {
+    if (k.type === 'hdpublic') {
+      const hd = HD.fromString(k.value).toPublic();
+      return hd.toString();
+    }
+    if (k.type === 'public') {
+      return k.value; // Already a public key string
+    }
+    return k.value;
+  } catch (e) {
+    console.error('Error deriving display value:', e);
+    return k.value;
   }
-  if (k.type === 'public') {
-    const pubKey = PrivateKey.fromString(k.value).toPublicKey();
-    return pubKey.toString();
-  }
-  return k.value;
 }
 
 /**
@@ -349,52 +353,49 @@ export function deriveHdAddress(k: KeyEntry, path: string): string {
 }
 
 /**
- * Convert KeyEntry to PrivateKey if possible
+ * Parse private key from key entry
  */
-export function toPrivateKey(k: KeyEntry): PrivateKey | null {
+export function toPrivateKey(key: KeyEntry): PrivateKey | null {
   try {
-    if (k.type === 'private') {
-      return PrivateKey.fromString(k.value);
+    if (key.type === 'private') return PrivateKey.fromString(key.value);
+    if (key.type === 'public') return PrivateKey.fromString(key.value);
+    if (key.type === 'wif' || key.type === 'encryption') {
+      return PrivateKey.fromWif(key.value);
     }
-    if (k.type === 'public') {
-      return PrivateKey.fromString(k.value);
-    }
-    if (k.type === 'wif' || k.type === 'encryption') {
-      return PrivateKey.fromWif(k.value);
-    }
-    if (k.type === 'hdprivate' || k.type === 'hdpublic') {
-      const hd = HD.fromString(k.value);
-      return hd.privKey ? PrivateKey.fromHex(hd.privKey.toString()) : null;
-    }
-    return null;
   } catch {
     return null;
   }
+  return null;
 }
 
-/**
- * Derive public key string from various key types
+/*
+ * Derive public key string from single key types
  */
-export function derivePublicKeyString(k: KeyEntry): string {
+export function derivePublicKeyString(k: KeyEntry): string | null {
+  return derivePublicKey(k)?.toString() ?? null;
+}
+
+export function derivePublicKey(k: KeyEntry): PublicKey | null {
   try {
     switch (k.type) {
       case 'hdpublic':
-        return HD.fromString(k.value).toPublic().toString();
+        return null;
       case 'hdprivate':
-        return HD.fromString(k.value).toPublic().toString();
+        return null;
       case 'public':
-        return PrivateKey.fromString(k.value).toPublicKey().toString();
+        return null;
       case 'private':
-        return PrivateKey.fromString(k.value).toPublicKey().toString();
+        return PrivateKey.fromString(k.value).toPublicKey();
       case 'wif':
       case 'encryption':
-        return PrivateKey.fromWif(k.value).toPublicKey().toString();
+        return PrivateKey.fromWif(k.value).toPublicKey();
       default:
-        return 'Unsupported key type';
+        return null;
     }
   } catch {
-    return 'Invalid key format';
+    return null;
   }
+  
 }
 
 /**
@@ -402,8 +403,10 @@ export function derivePublicKeyString(k: KeyEntry): string {
  */
 export function deriveAddress(k: KeyEntry): string {
   try {
-    const pubKey = derivePublicKeyString(k);
-    return PrivateKey.fromString(pubKey).toAddress().toString();
+    const pubKey = derivePublicKey(k);
+    const pkh = pubKey?.toHash() as number[] | undefined;
+    if (!pkh) return 'Invalid address derivation';
+    return toBase58Check(pkh);
   } catch {
     return 'Invalid address derivation';
   }
