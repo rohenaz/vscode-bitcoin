@@ -318,22 +318,34 @@ export class KeyPanel {
         if (msg.id) this.createPublicChild(msg.id);
         break;
 
-      case 'p2pkh':
-        if (msg.type === 'public' && msg.value) {
-          const pubKey = PublicKey.fromString(msg.value);
-          const p2pkh = new P2PKH();
-          const script = p2pkh.lock(pubKey.toString());
+      case 'p2pkhScript':
+        if (msg.id) {
+          const key = await this._vault.getKey(msg.id);
+          if (!key) return;
+          
+          const address = deriveAddress(key);
+          if (!address) {
+            vsApi.window.showErrorMessage('Could not derive address');
+            return;
+          }
+
+          const script = new P2PKH().lock(address);
           await vsApi.env.clipboard.writeText(script.toASM());
           vsApi.window.showInformationMessage('P2PKH script copied to clipboard');
         }
         break;
 
-      case 'woc':
-        if (msg.type === 'public' && msg.value) {
-          const pubKey = PublicKey.fromString(msg.value);
-          const p2pkh = new P2PKH();
-          const script = p2pkh.lock(pubKey.toString());
-          const address = pubKey.toAddress().toString();
+      case 'viewOnChain':
+        if (msg.id) {
+          const key = await this._vault.getKey(msg.id);
+          if (!key) return;
+
+          const address = deriveAddress(key);
+          if (!address) {
+            vsApi.window.showErrorMessage('Could not derive address');
+            return;
+          }
+
           const url = `https://whatsonchain.com/address/${address}`;
           await vscode.env.openExternal(vscode.Uri.parse(url));
         }

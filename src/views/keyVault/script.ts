@@ -117,6 +117,8 @@ export function getPanelScript(payloadJson: string): string {
       case 'type42Child':
       case 'bip32Child':
       case 'publicChild':
+      case 'p2pkhScript':
+      case 'viewOnChain':
         vscode.postMessage({ command: cmd, id });
         break;
 

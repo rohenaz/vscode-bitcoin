@@ -63,23 +63,24 @@ export function renderKeyRecursive(
         </div>
       </div>
 
-      <button
-        type="button"
-        class="key-value"
-        data-cmd="copyKeyValue"
-        data-id={k.id}
-        data-type={k.type}
-        title={k.type === 'mnemonic' ? 'Hover to reveal, click to copy' : 'Click to copy'}
-      >
-        <div>
+      <div class="key-value" style="display: flex; justify-content: space-between; align-items: center;">
+        <div 
+          style="
+            font-family: var(--vscode-editor-font-family, monospace);
+            font-size: 0.75rem;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+          "
+          title={displayedTitle(k)}
+        >
           {displayedKeyValue(k)}
         </div>
-
-      </button>
-      <div style="display: flex; align-items: center;">
-          <div style="flex: 1;">&nbsp;</div>
-          <div style="display: flex; align-items: end; gap: 6px;">{renderFormatBadges(k)}</div>
+        <div style="display: flex; gap: 6px;">
+          {renderFormatBadges(k)}
         </div>
+      </div>
+
       {k.children?.map((child) => renderKeyRecursive(child, indent + 1))}
     </div>
   );
@@ -147,11 +148,13 @@ function deriveValueForDisplay(k: KeyEntry): string {
 }
 
 /**
- * Truncate long values with middle ellipsis
+ * Custom truncation that shows dots equal to hidden characters
  */
-function customTruncate(str: string): string {
-  if (str.length <= 12) return str;
-  return `${str.slice(0, 6)}...${str.slice(-6)}`;
+function customTruncate(val: string): string {
+  if (val.length <= 10) return val;
+  const hiddenCount = val.length - 8; // chars replaced by dots
+  const dots = '.'.repeat(hiddenCount);
+  return val.slice(0, 4) + dots + val.slice(-4);
 }
 
 /**
@@ -200,8 +203,14 @@ function renderFormatBadges(k: KeyEntry): JSX.Element[] {
         <button class="format-badge" data-cmd="copyHex" data-id={k.id} type="button">
           HEX
         </button>,
+        <button class="format-badge" data-cmd="copyPub" data-id={k.id} type="button">
+          PUB
+        </button>,
         <button class="format-badge" data-cmd="copyAddress" data-id={k.id} type="button">
           ADDR
+        </button>,
+        <button class="format-badge" data-cmd="p2pkhScript" data-id={k.id} type="button">
+          P2PKH
         </button>
       );
       break;
@@ -233,76 +242,88 @@ function renderFormatBadges(k: KeyEntry): JSX.Element[] {
  * Action buttons for key management
  */
 export function renderActions(k: KeyEntry): JSX.Element[] {
-  const actions: JSX.Element[] = [];
-  const isHdKey = k.type === 'hdprivate' || k.type === 'hdpublic';
-  const isPrivate = k.type === 'private' || k.type === 'wif';
+  const buttons: JSX.Element[] = [];
+  const singlePriv =
+    k.type === 'private' ||
+    k.type === 'wif' ||
+    k.type === 'encryption';
+  const hdType =
+    k.type === 'hdprivate' ||
+    k.type === 'hdpublic' ||
+    k.type === 'mnemonic';
 
-  // Common actions
-  actions.push(
-    <button 
-      class="action-button" 
-      data-cmd="deleteKey" 
-      data-id={k.id} 
-      type="button"
-      title="Delete key"
-    >
-      <i class="codicon codicon-trash" />
-    </button>
-  );
-
-  // Key-specific actions
-  if (isHdKey || k.type === 'mnemonic') {
-    actions.push(
-      <button 
-        class="action-button" 
-        data-cmd="bip32Child" 
-        data-id={k.id} 
+  if (singlePriv) {
+    buttons.push(
+      <button
+        class="key-button"
+        data-cmd="publicChild"
+        data-id={k.id}
         type="button"
-        title="Create BIP32 child key"
       >
-        <i class="codicon codicon-git-branch" />
-      </button>
+        PUB
+      </button>,
+      <button
+        class="key-button"
+        data-cmd="type42Child"
+        data-id={k.id}
+        type="button"
+      >
+        Type42
+      </button>,
     );
+    if (!k.isEncryptionKey) {
+      buttons.push(
+        <button
+          class="key-button"
+          data-cmd="setEncryptionKey"
+          data-id={k.id}
+          type="button"
+        >
+          Set Default
+        </button>,
+      );
+    }
   }
 
-  if (isPrivate) {
-    actions.push(
-      <button 
-        class="action-button" 
-        data-cmd="publicChild" 
-        data-id={k.id} 
+  if (hdType) {
+    buttons.push(
+      <button
+        class="key-button"
+        data-cmd="bip32Child"
+        data-id={k.id}
         type="button"
-        title="Create public key"
       >
-        <i class="codicon codicon-key" />
-      </button>
+        BIP32
+      </button>,
     );
   }
 
   if (k.type === 'public') {
-    actions.push(
+    buttons.push(
       <button 
-        class="action-button" 
-        data-cmd="p2pkhScript" 
-        data-id={k.id} 
-        type="button"
-        title="Create P2PKH script"
-      >
-        <i class="codicon codicon-symbol-key" />
-      </button>,
-      <button 
-        class="action-button" 
+        class="key-button" 
         data-cmd="viewOnChain" 
         data-id={k.id} 
         type="button"
         title="View on WhatsOnChain"
       >
-        <i class="codicon codicon-globe" />
+        WoC
       </button>
     );
   }
 
-  return actions;
+  buttons.push(
+    <button
+      class="key-button"
+      data-cmd="deleteKey"
+      data-id={k.id}
+      type="button"
+    >
+      DEL
+    </button>,
+  );
+
+  return buttons;
 }
 
 /**
