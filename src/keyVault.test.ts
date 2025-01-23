@@ -193,10 +193,14 @@ describe('KeyVault', () => {
     await vault.unlockVault('test123');
     expect(vault.isUnlocked).toBe(true);
 
-    // Verify the stored data is JSON
+    // Verify the stored data exists and is encrypted
     const storedVault = await mockContext.secrets.get('bitcoin.encryptedVaultBlob');
     expect(storedVault).toBeDefined();
-    expect(storedVault).toBe('[]');
+    expect(storedVault).not.toBe('[]'); // It should be encrypted
+    
+    // Verify we can get an empty array of keys
+    const keys = await vault.getAllKeys();
+    expect(keys).toEqual([]);
   });
 
   test('can store and retrieve keys when unlocked', async () => {
@@ -215,14 +219,14 @@ describe('KeyVault', () => {
     expect(key?.value).toBe('L1abc123...');
     expect(key?.label).toBe('Test Key');
 
-    // Verify the stored data is JSON
+    // Verify the stored data is encrypted
     const storedVault = await mockContext.secrets.get('bitcoin.encryptedVaultBlob');
     expect(storedVault).toBeDefined();
-    if (!storedVault) {
-      throw new Error('Expected stored vault to be defined');
-    }
-    const parsed = JSON.parse(storedVault);
-    expect(parsed).toEqual([{
+    expect(storedVault).not.toBe('[]'); // It should be encrypted
+    
+    // Verify we can get all keys
+    const keys = await vault.getAllKeys();
+    expect(keys).toEqual([{
       id,
       type: 'wif',
       value: 'L1abc123...',
