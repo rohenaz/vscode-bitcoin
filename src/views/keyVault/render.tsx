@@ -65,35 +65,21 @@ export function renderKeyRecursive(
 
       <button
         type="button"
-        class={`key-value ${k.type === 'mnemonic' ? 'mnemonic-value' : ''}`}
+        class="key-value"
         data-cmd="copyKeyValue"
         data-id={k.id}
         data-type={k.type}
-        style="
-          display:flex;
-          justify-content:space-between;
-          align-items:center;
-          font-family: var(--vscode-editor-font-family, monospace);
-          font-size: 0.8rem;
-          width: 100%;
-          text-align: left;
-          background: none;
-          border: none;
-          padding: 4px 8px;
-          cursor: pointer;
-        "
+        title={k.type === 'mnemonic' ? 'Hover to reveal, click to copy' : 'Click to copy'}
       >
-        <div
-          style="overflow:hidden; text-overflow:ellipsis;"
-          title={displayedTitle(k)}
-        >
+        <div>
           {displayedKeyValue(k)}
         </div>
-        <div style="display:flex; gap:6px;">
-          {renderFormatBadges(k)}
-        </div>
-      </button>
 
+      </button>
+      <div style="display: flex; align-items: center;">
+          <div style="flex: 1;">&nbsp;</div>
+          <div style="display: flex; align-items: end; gap: 6px;">{renderFormatBadges(k)}</div>
+        </div>
       {k.children?.map((child) => renderKeyRecursive(child, indent + 1))}
     </div>
   );
@@ -139,9 +125,10 @@ function displayedTitle(k: KeyEntry): string {
 export function displayedKeyValue(k: KeyEntry): JSX.Element {
   if (k.type === 'mnemonic') {
     const phrase = k.metadata?.mnemonicWords || k.value;
-    return <span class="mnemonic-text" safe>{customTruncate(phrase)}</span>;
+    return <span class="mnemonic-text" title={phrase} safe>{customTruncate(phrase)}</span>;
   }
-  return <span safe>{customTruncate(deriveValueForDisplay(k))}</span>;
+  const displayValue = deriveValueForDisplay(k);
+  return <span title={displayValue} safe>{customTruncate(displayValue)}</span>;
 }
 
 /**

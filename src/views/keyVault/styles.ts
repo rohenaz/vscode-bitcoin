@@ -133,38 +133,55 @@ input, select, button {
 }
 /* The smaller "HEX", "WIF", "XPUB" badges for alternate copies. */
 .format-badge {
-  border: none;
-  padding: 4px 6px;
+  white-space: nowrap;
+  padding: 2px 6px;
   border-radius: 3px;
+  font-size: 0.7rem;
+  background: var(--vscode-badge-background);
+  color: var(--vscode-badge-foreground);
+  border: none;
   cursor: pointer;
-  background: var(--secondary-btn);
-  color: var(--secondary-btn-text);
-  font-size: 0.75rem;
-  transition: background 0.15s;
 }
 .format-badge:hover {
-  background: var(--secondary-btn-hover);
+  background: var(--vscode-badge-background);
+  filter: brightness(1.2);
 }
 .key-metadata {
   font-size: 0.8rem;
   color: var(--description-fg);
 }
 .key-value {
-  background: var(--input-bg);
-  color: var(--input-fg);
-  padding: 6px;
-  font-size: 0.85rem;
-  word-break: break-word;
-  border-radius: 3px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  padding: 4px 8px;
   cursor: pointer;
+  font-family: var(--vscode-editor-font-family, monospace);
+  font-size: 0.8rem;
   position: relative;
 }
 .key-value[data-type="mnemonic"] {
-  filter: blur(4px);
+  filter: blur(5px);
   transition: filter 0.2s ease-in-out;
 }
 .key-value[data-type="mnemonic"]:hover {
   filter: none;
+}
+.key-value > div:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex-grow: 1;
+  text-align: left;
+}
+.key-value > div:last-child {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
 }
 .key-value:hover::after {
   content: "Click to copy";
