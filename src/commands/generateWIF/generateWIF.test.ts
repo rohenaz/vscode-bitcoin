@@ -17,6 +17,7 @@ const isAutoStoreEnabledMock = mock<() => boolean>(() => true);
 const mockKeyVault = {
   storeKey: storeKeyMock,
   isAutoStoreEnabled: isAutoStoreEnabledMock,
+  isUnlocked: true,
 } as unknown as KeyVault;
 
 // Mock window.showErrorMessage

@@ -1,4 +1,4 @@
-import { QuickPickOptions } from 'src/vsShim';
+import type { QuickPickOptions } from 'src/vsShim';
 import type {
   CancellationToken,
   Disposable,

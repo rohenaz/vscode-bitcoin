@@ -1,6 +1,8 @@
 import { escapeHtml } from '@kitajs/html';
 import type { KeyEntry } from '../../keyVault';
-import { HD, PrivateKey } from '@bsv/sdk';
+import { HD, PrivateKey, Utils } from '@bsv/sdk';
+
+const { toArray, toHex } = Utils;
 
 /**
  * Build a parent->child hierarchy without using forEach or map.
@@ -61,17 +63,26 @@ export function renderKeyRecursive(
         </div>
       </div>
 
-      <div
-        class="key-value"
+      <button
+        type="button"
+        class={`key-value ${k.type === 'mnemonic' ? 'mnemonic-value' : ''}`}
+        data-cmd="copyKeyValue"
+        data-id={k.id}
+        data-type={k.type}
         style="
           display:flex;
           justify-content:space-between;
           align-items:center;
           font-family: var(--vscode-editor-font-family, monospace);
           font-size: 0.8rem;
+          width: 100%;
+          text-align: left;
+          background: none;
+          border: none;
+          padding: 4px 8px;
+          cursor: pointer;
         "
       >
-        {/* The truncated or full value + title for hover */}
         <div
           style="overflow:hidden; text-overflow:ellipsis;"
           title={displayedTitle(k)}
@@ -81,7 +92,7 @@ export function renderKeyRecursive(
         <div style="display:flex; gap:6px;">
           {renderFormatBadges(k)}
         </div>
-      </div>
+      </button>
 
       {k.children?.map((child) => renderKeyRecursive(child, indent + 1))}
     </div>
@@ -114,313 +125,241 @@ function renderChildMetadata(k: KeyEntry): JSX.Element {
 
 /**
  * Return the full string to use in the 'title' hover.
- * For mnemonics, we just show the entire .value (which is the xprv),
- * but the actual words are in metadata. For other keys, we show the entire key or derived pub.
  */
 function displayedTitle(k: KeyEntry): string {
   if (k.type === 'mnemonic') {
-    // The user might want the entire xprv or phrase. We'll show xprv here
-    return k.value;
+    return k.metadata?.mnemonicWords || k.value;
   }
-  if (k.type === 'hdpublic') {
-    // show xpub
-    return derivePublicKeyString(k);
-  }
-  if (k.type === 'public') {
-    // single pub
-    return derivePublicKeyString(k);
-  }
-  // otherwise just the raw .value
-  return k.value;
+  return deriveValueForDisplay(k);
 }
 
 /**
- * Show the "display" portion. For mnemonics, we show the entire phrase in plain text.
- * For others, we do a customTruncate unless short enough already.
+ * Show truncated display value with proper HTML escaping
  */
 export function displayedKeyValue(k: KeyEntry): JSX.Element {
   if (k.type === 'mnemonic') {
-    // Show the entire BIP39 phrase? Actually we store xprv in .value (some flows), but user wants the entire item.
-    // The user said "Creating a mnemonic is supposed to show the phrase." The phrase is in metadata? Actually let's see.
-    // We decided the entire .value is an xprv. The "words" are in metadata. But the user wants to see the phrase?
-    // The user previously said they'd rather see the entire .value is the xprv, or the phrase? The code used to show just xprv. 
-    // The user insisted "the phrase is displayed." So let's see if we want to read metadata?.mnemonicWords:
-    const phrase = k.metadata?.mnemonicWords;
-    if (phrase) {
-      // if we have it, let's show the actual words
-      return phrase;
-    }
-    // fallback to k.value if we don't have the words in metadata
-    return k.value;
+    const phrase = k.metadata?.mnemonicWords || k.value;
+    return <span class="mnemonic-text" safe>{customTruncate(phrase)}</span>;
   }
-
-  // For other key types, we do a custom truncation if the length > 10
-  return customTruncate(deriveValueForDisplay(k));
+  return <span safe>{customTruncate(deriveValueForDisplay(k))}</span>;
 }
 
 /**
- * Derive the actual string to display (before truncation).
- * For HD public => we show the derived xpub, for single public => derived pub hex, else just k.value
+ * Derive display value from key type
  */
 function deriveValueForDisplay(k: KeyEntry): string {
   if (k.type === 'hdpublic') {
-    return derivePublicKeyString(k); // xpub
+    const hd = HD.fromString(k.value).toPublic();
+    return hd.toString();
   }
   if (k.type === 'public') {
-    return derivePublicKeyString(k); // single pub hex
+    const pubKey = PrivateKey.fromString(k.value).toPublicKey();
+    return pubKey.toString();
   }
-  // otherwise just k.value
   return k.value;
 }
 
 /**
- * Use a custom truncation approach that replaces the middle with the same number of dots
- * as the hidden characters. We show first 4 and last 4, unless it's short enough.
+ * Truncate long values with middle ellipsis
  */
-function customTruncate(val: string): string {
-  if (val.length <= 10) return val;
-  const hiddenCount = val.length - 8; // those are the chars replaced by dots
-  let dots = '';
-  for (let i = 0; i < hiddenCount; i++) {
-    dots += '.';
-  }
-  return val.slice(0, 4) + dots + val.slice(-4);
+function customTruncate(str: string): string {
+  if (str.length <= 12) return str;
+  return `${str.slice(0, 6)}...${str.slice(-6)}`;
 }
 
 /**
- * The small format badges row next to the truncated value.
- * For single private/public => [HEX, WIF, ADDR].
- * For mnemonic => [WORDS, XPRIV, XPUB].
- * For HD private => [XPRIV, XPUB].
- * For HD public => [XPUB].
+ * Format badges based on key type
  */
 function renderFormatBadges(k: KeyEntry): JSX.Element[] {
   const badges: JSX.Element[] = [];
 
-  if (k.type === 'mnemonic') {
-    badges.push(
-      <button class="format-badge" data-cmd="copyWords" data-id={k.id} type="button">
-        WORDS
-      </button>,
-      <button class="format-badge" data-cmd="copyXprv" data-id={k.id} type="button">
-        XPRIV
-      </button>,
-      <button class="format-badge" data-cmd="copyXpub" data-id={k.id} type="button">
-        XPUB
-      </button>,
-    );
-    return badges;
-  }
-
-  // Single private/public/wif/encryption => [HEX, WIF], if wif or public => ADDR
-  if (
-    k.type === 'private' ||
-    k.type === 'wif' ||
-    k.type === 'encryption' ||
-    k.type === 'public'
-  ) {
-    badges.push(
-      <button class="format-badge" data-cmd="copyHex" data-id={k.id} type="button">
-        HEX
-      </button>,
-      <button class="format-badge" data-cmd="copyWif" data-id={k.id} type="button">
-        WIF
-      </button>,
-    );
-    // For WIF or Public => also an "ADDR" button
-    if (k.type === 'wif' || k.type === 'public') {
+  switch (k.type) {
+    case 'mnemonic':
       badges.push(
+        <button class="format-badge" data-cmd="copyWords" data-id={k.id} type="button">
+          WORDS
+        </button>,
+        <button class="format-badge" data-cmd="copyXprv" data-id={k.id} type="button">
+          XPRIV
+        </button>,
+        <button class="format-badge" data-cmd="copyXpub" data-id={k.id} type="button">
+          XPUB
+        </button>
+      );
+      break;
+
+    case 'private':
+    case 'wif':
+    case 'encryption':
+      badges.push(
+        <button class="format-badge" data-cmd="copyHex" data-id={k.id} type="button">
+          HEX
+        </button>,
+        <button class="format-badge" data-cmd="copyWif" data-id={k.id} type="button">
+          WIF
+        </button>
+      );
+      if (k.type === 'wif') {
+        badges.push(
+          <button class="format-badge" data-cmd="copyAddress" data-id={k.id} type="button">
+            ADDR
+          </button>
+        );
+      }
+      break;
+
+    case 'public':
+      badges.push(
+        <button class="format-badge" data-cmd="copyHex" data-id={k.id} type="button">
+          HEX
+        </button>,
         <button class="format-badge" data-cmd="copyAddress" data-id={k.id} type="button">
           ADDR
-        </button>,
+        </button>
       );
-    }
-  }
+      break;
 
-  // HD private => [XPRIV, XPUB]
-  if (k.type === 'hdprivate') {
-    badges.push(
-      <button class="format-badge" data-cmd="copyXprv" data-id={k.id} type="button">
-        XPRIV
-      </button>,
-      <button class="format-badge" data-cmd="copyXpub" data-id={k.id} type="button">
-        XPUB
-      </button>,
-    );
-  }
+    case 'hdprivate':
+      badges.push(
+        <button class="format-badge" data-cmd="copyXprv" data-id={k.id} type="button">
+          XPRIV
+        </button>,
+        <button class="format-badge" data-cmd="copyXpub" data-id={k.id} type="button">
+          XPUB
+        </button>
+      );
+      break;
 
-  // HD public => [XPUB]
-  if (k.type === 'hdpublic') {
-    badges.push(
-      <button class="format-badge" data-cmd="copyXpub" data-id={k.id} type="button">
-        XPUB
-      </button>,
-    );
+    case 'hdpublic':
+      badges.push(
+        <button class="format-badge" data-cmd="copyXpub" data-id={k.id} type="button">
+          XPUB
+        </button>
+      );
+      break;
   }
 
   return badges;
 }
 
 /**
- * The top-right row of action buttons.
+ * Action buttons for key management
  */
 export function renderActions(k: KeyEntry): JSX.Element[] {
-  const buttons: JSX.Element[] = [];
-  const singlePriv =
-    k.type === 'private' ||
-    k.type === 'wif' ||
-    k.type === 'encryption';
+  const actions: JSX.Element[] = [];
+  const isHdKey = k.type === 'hdprivate' || k.type === 'hdpublic';
+  const isPrivate = k.type === 'private' || k.type === 'wif';
 
-  const hdType =
-    k.type === 'hdprivate' ||
-    k.type === 'hdpublic' ||
-    k.type === 'mnemonic';
-
-  if (singlePriv) {
-    buttons.push(
-      <button
-        class="key-button"
-        data-cmd="publicChild"
-        data-id={k.id}
-        type="button"
-      >
-        PUB
-      </button>,
-      <button
-        class="key-button"
-        data-cmd="type42Child"
-        data-id={k.id}
-        type="button"
-      >
-        Type42
-      </button>,
-    );
-    if (!k.isEncryptionKey) {
-      buttons.push(
-        <button
-          class="key-button"
-          data-cmd="setEncryptionKey"
-          data-id={k.id}
-          type="button"
-        >
-          Set Default
-        </button>,
-      );
-    }
-  }
-
-  if (hdType) {
-    buttons.push(
-      <button
-        class="key-button"
-        data-cmd="bip32Child"
-        data-id={k.id}
-        type="button"
-      >
-        BIP32
-      </button>,
-    );
-  }
-
-  buttons.push(
-    <button
-      class="key-button"
-      data-cmd="deleteKey"
-      data-id={k.id}
-      type="button"
-    >
-      Delete
-    </button>,
+  // Common actions
+  actions.push(
+    <button class="action-button" data-cmd="deleteKey" data-id={k.id} type="button">
+      <i class="codicon codicon-trash" />
+    </button>
   );
 
-  return buttons;
-}
+  // Key-specific actions
+  if (isHdKey || k.type === 'mnemonic') {
+    actions.push(
+      <button class="action-button" data-cmd="bip32Child" data-id={k.id} type="button">
+        <i class="codicon codicon-git-branch" />
+      </button>
+    );
+  }
 
-/**
- * Return xpub or single compressed pub string for HD or single keys.
- */
-export function derivePublicKeyString(k: KeyEntry): string {
-  if (k.type === 'hdpublic') {
-    const hdPub = HD.fromString(k.value);
-    return hdPub.toPublic().toString(); // xpub
+  if (isPrivate) {
+    actions.push(
+      <button class="action-button" data-cmd="publicChild" data-id={k.id} type="button">
+        <i class="codicon codicon-eye" />
+      </button>
+    );
   }
-  if (k.type === 'hdprivate') {
-    const hdPriv = HD.fromString(k.value);
-    return hdPriv.toPublic().toString(); // xpub
-  }
+
   if (k.type === 'public') {
-    const priv = PrivateKey.fromString(k.value);
-    return priv.toPublicKey().toString();
+    actions.push(
+      <button class="action-button" data-cmd="p2pkhScript" data-id={k.id} type="button">
+        <i class="codicon codicon-symbol-key" />
+      </button>,
+      <button class="action-button" data-cmd="viewOnChain" data-id={k.id} type="button">
+        <i class="codicon codicon-globe" />
+      </button>
+    );
   }
-  if (k.type === 'private') {
-    const pv = PrivateKey.fromString(k.value);
-    return pv.toPublicKey().toString();
-  }
-  if (k.type === 'wif' || k.type === 'encryption') {
-    const pv = PrivateKey.fromWif(k.value);
-    return pv.toPublicKey().toString();
-  }
-  return '(unknown)';
+
+  return actions;
 }
 
 /**
- * Single address for simple keys or root address for HD.
- */
-export function deriveAddress(k: KeyEntry): string {
-  if (k.type === 'hdpublic') {
-    const hd = HD.fromString(k.value).toPublic();
-    return hd.pubKey.toAddress().toString();
-  }
-  if (k.type === 'hdprivate') {
-    const hd = HD.fromString(k.value);
-    if (!hd.privKey) return '(no privkey)';
-    const p = PrivateKey.fromHex(hd.privKey.toString());
-    return p.toAddress().toString();
-  }
-  if (k.type === 'public') {
-    const priv = PrivateKey.fromString(k.value);
-    return priv.toAddress().toString();
-  }
-  if (k.type === 'private') {
-    const priv = PrivateKey.fromString(k.value);
-    return priv.toAddress().toString();
-  }
-  if (k.type === 'wif' || k.type === 'encryption') {
-    const pv = PrivateKey.fromWif(k.value);
-    return pv.toAddress().toString();
-  }
-  return '(unknown)';
-}
-
-/**
- * Derive address from HD path.
+ * Derive HD address from path
  */
 export function deriveHdAddress(k: KeyEntry, path: string): string {
-  const hd = HD.fromString(k.value);
-  const derived = hd.derive(path.replace(/'/g, 'h'));
-  if (!derived.privKey) {
-    return '(no privkey at path)';
+  try {
+    const hd = HD.fromString(k.value);
+    const derived = hd.derive(path.replace(/'/g, 'h'));
+    if (!derived.privKey) return '(no privkey at path)';
+    const priv = PrivateKey.fromHex(derived.privKey.toString());
+    return priv.toAddress().toString();
+  } catch {
+    return 'Invalid derivation path';
   }
-  const priv = PrivateKey.fromHex(derived.privKey.toString());
-  return priv.toAddress().toString();
 }
 
 /**
- * Convert KeyEntry => PrivateKey if possible.
+ * Convert KeyEntry to PrivateKey if possible
  */
 export function toPrivateKey(k: KeyEntry): PrivateKey | null {
-  if (k.type === 'private') {
-    return PrivateKey.fromString(k.value);
+  try {
+    if (k.type === 'private') {
+      return PrivateKey.fromString(k.value);
+    }
+    if (k.type === 'public') {
+      return PrivateKey.fromString(k.value);
+    }
+    if (k.type === 'wif' || k.type === 'encryption') {
+      return PrivateKey.fromWif(k.value);
+    }
+    if (k.type === 'hdprivate' || k.type === 'hdpublic') {
+      const hd = HD.fromString(k.value);
+      return hd.privKey ? PrivateKey.fromHex(hd.privKey.toString()) : null;
+    }
+    return null;
+  } catch {
+    return null;
   }
-  if (k.type === 'public') {
-    return PrivateKey.fromString(k.value);
+}
+
+/**
+ * Derive public key string from various key types
+ */
+export function derivePublicKeyString(k: KeyEntry): string {
+  try {
+    switch (k.type) {
+      case 'hdpublic':
+        return HD.fromString(k.value).toPublic().toString();
+      case 'hdprivate':
+        return HD.fromString(k.value).toPublic().toString();
+      case 'public':
+        return PrivateKey.fromString(k.value).toPublicKey().toString();
+      case 'private':
+        return PrivateKey.fromString(k.value).toPublicKey().toString();
+      case 'wif':
+      case 'encryption':
+        return PrivateKey.fromWif(k.value).toPublicKey().toString();
+      default:
+        return 'Unsupported key type';
+    }
+  } catch {
+    return 'Invalid key format';
   }
-  if (k.type === 'wif' || k.type === 'encryption') {
-    return PrivateKey.fromWif(k.value);
+}
+
+/**
+ * Derive address from key
+ */
+export function deriveAddress(k: KeyEntry): string {
+  try {
+    const pubKey = derivePublicKeyString(k);
+    return PrivateKey.fromString(pubKey).toAddress().toString();
+  } catch {
+    return 'Invalid address derivation';
   }
-  if (k.type === 'hdprivate' || k.type === 'hdpublic') {
-    const hd = HD.fromString(k.value);
-    return hd.privKey || null;
-  }
-  return null;
 }

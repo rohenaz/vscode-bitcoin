@@ -12,6 +12,8 @@ import {
 } from './render';
 import { getPanelHtml } from './layout';
 import { getPanelScript } from './script';
+import * as vscode from 'vscode';
+import { P2PKH } from '@bsv/sdk';
 
 /**
  * Build ephemeral search tokens for a single KeyEntry,
@@ -104,7 +106,28 @@ export class KeyPanel {
     this._vault.onDidChangeKeys(() => this.updateContent());
   }
 
-  public static show(vault: KeyVault) {
+  public static async show(vault: KeyVault) {
+    // Check if vault is locked
+    if (!vault.isUnlocked) {
+      // Check if this is first-time setup
+      const hasExistingVault = await vault.hasExistingVault();
+      
+      const password = await vsApi.window.showInputBox({
+        prompt: hasExistingVault ? 'Enter vault password to unlock' : 'Set a password for your key vault',
+        password: true,
+        placeHolder: hasExistingVault ? undefined : 'Choose a strong password'
+      });
+      if (!password) return; // User cancelled
+      
+      try {
+        await vault.unlockVault(password);
+      } catch (err) {
+        vsApi.window.showErrorMessage(String(err));
+        return;
+      }
+    }
+
+    // Now show the panel
     if (KeyPanel.currentPanel) {
       KeyPanel.currentPanel._panel.reveal(1);
     } else {
@@ -183,6 +206,22 @@ export class KeyPanel {
     currentLabel?: string;
   }) {
     switch (msg.command) {
+      case 'copyKeyValue': {
+        if (msg.id && msg.type) {
+          const key = await this._vault.getKey(msg.id);
+          if (!key) return;
+
+          let value = key.value;
+          if (msg.type === 'mnemonic') {
+            value = key.metadata?.mnemonicWords || value;
+          }
+
+          await vsApi.env.clipboard.writeText(value);
+          vsApi.window.showInformationMessage(`Copied ${msg.type} to clipboard`);
+        }
+        break;
+      }
+
       case 'requestEditLabel': {
         if (msg.id && msg.currentLabel !== undefined) {
           const newLabel = await vsApi.window.showInputBox({
@@ -278,6 +317,27 @@ export class KeyPanel {
       case 'publicChild':
         if (msg.id) this.createPublicChild(msg.id);
         break;
+
+      case 'p2pkh':
+        if (msg.type === 'public' && msg.value) {
+          const pubKey = PublicKey.fromString(msg.value);
+          const p2pkh = new P2PKH();
+          const script = p2pkh.lock(pubKey.toString());
+          await vsApi.env.clipboard.writeText(script.toASM());
+          vsApi.window.showInformationMessage('P2PKH script copied to clipboard');
+        }
+        break;
+
+      case 'woc':
+        if (msg.type === 'public' && msg.value) {
+          const pubKey = PublicKey.fromString(msg.value);
+          const p2pkh = new P2PKH();
+          const script = p2pkh.lock(pubKey.toString());
+          const address = pubKey.toAddress().toString();
+          const url = `https://whatsonchain.com/address/${address}`;
+          await vscode.env.openExternal(vscode.Uri.parse(url));
+        }
+        break;
     }
   }
 
@@ -331,6 +391,24 @@ export class KeyPanel {
    */
   private async addKey(type: KeyType, value: string, label: string) {
     try {
+      // If vault is locked, prompt for password
+      if (!this._vault.isUnlocked) {
+        const hasExistingVault = await this._vault.hasExistingVault();
+        const password = await vsApi.window.showInputBox({
+          prompt: hasExistingVault ? 'Enter vault password to unlock' : 'Set a password for your key vault',
+          password: true,
+          placeHolder: hasExistingVault ? undefined : 'Choose a strong password'
+        });
+        if (!password) return; // User cancelled
+        
+        try {
+          await this._vault.unlockVault(password);
+        } catch (err) {
+          vsApi.window.showErrorMessage(String(err));
+          return;
+        }
+      }
+
       let storeVal = value;
       const storeType = type;
       const meta: Record<string, string> = {};
@@ -369,7 +447,7 @@ export class KeyPanel {
         type: storeType,
         value: storeVal,
         label,
-        metadata: meta,
+        metadata: meta
       });
 
       vsApi.window.showInformationMessage('Key added successfully');

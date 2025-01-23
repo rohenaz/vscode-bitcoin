@@ -155,6 +155,26 @@ input, select, button {
   font-size: 0.85rem;
   word-break: break-word;
   border-radius: 3px;
+  cursor: pointer;
+  position: relative;
+}
+.key-value[data-type="mnemonic"] {
+  filter: blur(4px);
+  transition: filter 0.2s ease-in-out;
+}
+.key-value[data-type="mnemonic"]:hover {
+  filter: none;
+}
+.key-value:hover::after {
+  content: "Click to copy";
+  position: absolute;
+  right: 0;
+  top: -20px;
+  background: var(--vscode-editor-background);
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  white-space: nowrap;
 }
 .encryption-key-badge {
   display: inline-block;
@@ -242,5 +262,13 @@ input, select, button {
 }
 .secondary:hover {
   background: var(--secondary-btn-hover);
+}
+.mnemonic-value {
+  filter: blur(4px);
+  transition: filter 0.2s ease-in-out;
+  cursor: pointer;
+}
+.mnemonic-value:hover {
+  filter: none;
 }
 `;

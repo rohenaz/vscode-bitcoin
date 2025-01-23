@@ -27,9 +27,15 @@ export function getPanelScript(payloadJson: string): string {
 
     const cmd = btn.getAttribute('data-cmd');
     const id = btn.getAttribute('data-id');
+    const type = btn.getAttribute('data-type');
     const currentLabel = btn.getAttribute('data-currentlabel') || '';
 
-    handleCommand(cmd, id, currentLabel);
+    vscode.postMessage({
+      command: cmd,
+      id,
+      type,
+      currentLabel
+    });
   });
 
   document.addEventListener('input', evt => {
@@ -78,6 +84,16 @@ export function getPanelScript(payloadJson: string): string {
       case 'editLabel':
         vscode.postMessage({ command: 'requestEditLabel', id, currentLabel });
         break;
+
+      case 'copyValue': {
+        const value = btn.getAttribute('data-value');
+        if (!value) return;
+        vscode.postMessage({
+          command: 'copyToClipboard',
+          value
+        });
+        break;
+      }
 
       // Forward these directly to the extension side:
       case 'deleteKey':

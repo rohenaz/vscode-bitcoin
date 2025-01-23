@@ -438,7 +438,8 @@
     "package:pre": "vsce package --pre-release",
     "publish": "vsce publish",
     "publish:pre": "vsce publish --pre-release",
-    "clean": "rm -rf dist node_modules *.vsix out"
+    "clean": "rm -rf dist node_modules *.vsix out",
+    "clear-vault": "bun run scripts/clearVault.ts"
   },
   "devDependencies": {
     "@biomejs/biome": "^1.9.4",
@@ -461,6 +462,7 @@
     "@bsv/sdk": "^1.3.5",
     "@kitajs/html": "^4.2.7",
     "@kitajs/ts-html-plugin": "^4.1.1",
+    "@types/bun": "^1.2.0",
     "node-fetch": "^3.3.2"
   },
   "optionalDependencies": {
