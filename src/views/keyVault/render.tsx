@@ -362,6 +362,9 @@ export function toPrivateKey(key: KeyEntry): PrivateKey | null {
     if (key.type === 'wif' || key.type === 'encryption') {
       return PrivateKey.fromWif(key.value);
     }
+    if (key.type === 'hdprivate') {
+      return PrivateKey.fromString(key.value);
+    }
   } catch {
     return null;
   }
