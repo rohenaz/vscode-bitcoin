@@ -126,10 +126,20 @@ function displayedTitle(k: KeyEntry): string {
 export function displayedKeyValue(k: KeyEntry): JSX.Element {
   if (k.type === 'mnemonic') {
     const phrase = k.metadata?.mnemonicWords || k.value;
-    return <span class="mnemonic-text" title={phrase} safe>{customTruncate(phrase)}</span>;
+    return (
+      <div class="hover-reveal">
+        <span class="hover-hidden" safe>{customTruncate(phrase)}</span>
+        <span class="hover-show" safe>{phrase}</span>
+      </div>
+    );
   }
   const displayValue = deriveValueForDisplay(k);
-  return <span title={displayValue} safe>{customTruncate(displayValue)}</span>;
+  return (
+    <div class="hover-reveal">
+      <span class="hover-hidden" safe>{customTruncate(displayValue)}</span>
+      <span class="hover-show" safe>{displayValue}</span>
+    </div>
+  );
 }
 
 /**
@@ -202,9 +212,6 @@ function renderFormatBadges(k: KeyEntry): JSX.Element[] {
       badges.push(
         <button class="format-badge" data-cmd="copyHex" data-id={k.id} type="button">
           HEX
-        </button>,
-        <button class="format-badge" data-cmd="copyPub" data-id={k.id} type="button">
-          PUB
         </button>,
         <button class="format-badge" data-cmd="copyAddress" data-id={k.id} type="button">
           ADDR

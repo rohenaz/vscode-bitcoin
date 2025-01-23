@@ -131,6 +131,19 @@ input:focus, select:focus, button:focus {
   justify-content: space-between;
   align-items: center;
   gap: 12px;
+  transition: background 0.15s;
+}
+.key-value:hover {
+  background: var(--secondary-btn);
+}
+.key-value:hover span {
+  color: var(--secondary-btn-text);
+}
+.key-value span {
+  transition: color 0.15s;
+}
+.key-value:hover span[title]:after {
+  content: attr(title);
 }
 .key-content {
   display: flex;
@@ -146,6 +159,19 @@ input:focus, select:focus, button:focus {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  position: relative;
+}
+.key-text .unmasked {
+  display: none;
+  position: absolute;
+  left: 0;
+  top: 0;
+}
+.key-text:hover .masked {
+  display: none;
+}
+.key-text:hover .unmasked {
+  display: block;
 }
 .key-badges {
   display: flex;
@@ -298,5 +324,20 @@ button.secondary:hover {
 }
 .mnemonic-text:hover {
   filter: none;
+}
+.hover-reveal {
+  position: relative;
+}
+.hover-reveal .hover-show {
+  display: none;
+}
+.hover-reveal:hover .hover-hidden {
+  visibility: hidden;
+}
+.hover-reveal:hover .hover-show {
+  display: block;
+  position: absolute;
+  left: 0;
+  top: 0;
 }
 `;
