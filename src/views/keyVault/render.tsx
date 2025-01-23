@@ -1,6 +1,6 @@
 import { escapeHtml } from '@kitajs/html';
 import type { KeyEntry } from '../../keyVault';
-import { HD, PrivateKey, type PublicKey, Utils } from '@bsv/sdk';
+import { HD, PrivateKey, PublicKey, Utils } from '@bsv/sdk';
 
 const { toArray, toHex, toBase58Check } = Utils;
 
@@ -383,7 +383,7 @@ export function derivePublicKey(k: KeyEntry): PublicKey | null {
       case 'hdprivate':
         return null;
       case 'public':
-        return null;
+        return PublicKey.fromString(k.value);
       case 'private':
         return PrivateKey.fromString(k.value).toPublicKey();
       case 'wif':
