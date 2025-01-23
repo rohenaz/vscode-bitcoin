@@ -22,20 +22,25 @@ export function getPanelScript(payloadJson: string): string {
   }
 
   document.addEventListener('click', evt => {
-    const btn = evt.target && evt.target.closest('[data-cmd]');
+    const btn = evt.target?.closest('[data-cmd]');
     if (!btn) return;
 
     const cmd = btn.getAttribute('data-cmd');
+    // Handle modal commands immediately
+    switch(cmd) {
+      case 'openModal':
+        openModal();
+        return;
+      case 'closeModal':
+        closeModal();
+        return;
+    }
+
     const id = btn.getAttribute('data-id');
     const type = btn.getAttribute('data-type');
     const currentLabel = btn.getAttribute('data-currentlabel') || '';
 
-    vscode.postMessage({
-      command: cmd,
-      id,
-      type,
-      currentLabel
-    });
+    handleCommand(cmd, id, currentLabel);
   });
 
   document.addEventListener('input', evt => {

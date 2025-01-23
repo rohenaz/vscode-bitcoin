@@ -252,7 +252,13 @@ export function renderActions(k: KeyEntry): JSX.Element[] {
 
   // Common actions
   actions.push(
-    <button class="action-button" data-cmd="deleteKey" data-id={k.id} type="button">
+    <button 
+      class="action-button" 
+      data-cmd="deleteKey" 
+      data-id={k.id} 
+      type="button"
+      title="Delete key"
+    >
       <i class="codicon codicon-trash" />
     </button>
   );
@@ -260,7 +266,13 @@ export function renderActions(k: KeyEntry): JSX.Element[] {
   // Key-specific actions
   if (isHdKey || k.type === 'mnemonic') {
     actions.push(
-      <button class="action-button" data-cmd="bip32Child" data-id={k.id} type="button">
+      <button 
+        class="action-button" 
+        data-cmd="bip32Child" 
+        data-id={k.id} 
+        type="button"
+        title="Create BIP32 child key"
+      >
         <i class="codicon codicon-git-branch" />
       </button>
     );
@@ -268,18 +280,36 @@ export function renderActions(k: KeyEntry): JSX.Element[] {
 
   if (isPrivate) {
     actions.push(
-      <button class="action-button" data-cmd="publicChild" data-id={k.id} type="button">
-        <i class="codicon codicon-eye" />
+      <button 
+        class="action-button" 
+        data-cmd="publicChild" 
+        data-id={k.id} 
+        type="button"
+        title="Create public key"
+      >
+        <i class="codicon codicon-key" />
       </button>
     );
   }
 
   if (k.type === 'public') {
     actions.push(
-      <button class="action-button" data-cmd="p2pkhScript" data-id={k.id} type="button">
+      <button 
+        class="action-button" 
+        data-cmd="p2pkhScript" 
+        data-id={k.id} 
+        type="button"
+        title="Create P2PKH script"
+      >
         <i class="codicon codicon-symbol-key" />
       </button>,
-      <button class="action-button" data-cmd="viewOnChain" data-id={k.id} type="button">
+      <button 
+        class="action-button" 
+        data-cmd="viewOnChain" 
+        data-id={k.id} 
+        type="button"
+        title="View on WhatsOnChain"
+      >
         <i class="codicon codicon-globe" />
       </button>
     );

@@ -52,16 +52,18 @@ input, select, button {
   border-color: var(--focus-border);
 }
 .add-key-button {
-  background: var(--primary-btn);
-  color: var(--primary-btn-text);
+  height: 30px;
+  padding: 0 12px;
+  display: flex;
+  align-items: center;
+  background: var(--vscode-button-background);
+  color: var(--vscode-button-foreground);
   border: none;
-  padding: 6px 12px;
-  border-radius: 4px;
-  cursor: pointer;
-  transition: background 0.2s;
+  border-radius: 2px;
 }
 .add-key-button:hover {
-  background: var(--primary-btn-hover);
+  background: var(--vscode-button-hoverBackground);
+  cursor: pointer;
 }
 #keyList {
   display: flex;
@@ -83,10 +85,8 @@ input, select, button {
 .indent-3 { margin-left: 60px; }
 .key-top {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
   gap: 8px;
+  align-items: center;
 }
 .key-type {
   font-size: 0.8rem;
@@ -113,8 +113,9 @@ input, select, button {
 }
 .key-actions {
   display: flex;
-  flex-wrap: wrap;
   gap: 6px;
+  margin-left: auto;
+  align-items: center;
 }
 /* The main action buttons (PUB, BIP32, Type42, etc.) */
 .key-button {
@@ -270,5 +271,19 @@ input, select, button {
 }
 .mnemonic-value:hover {
   filter: none;
+}
+.action-button {
+  padding: 4px 8px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  background: var(--vscode-button-secondaryBackground);
+  color: var(--vscode-button-secondaryForeground);
+  border: 1px solid var(--vscode-button-border);
+  border-radius: 2px;
+}
+.action-button:hover {
+  background: var(--vscode-button-secondaryHoverBackground);
+  cursor: pointer;
 }
 `;

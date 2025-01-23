@@ -52,7 +52,12 @@ export function HeaderBar(): JSX.Element {
         placeholder="Search keys..."
         data-cmd="searchKeys"
       />
-      <button class="add-key-button" data-cmd="openModal" type="button">
+      <button 
+        class="add-key-button" 
+        data-cmd="openModal" 
+        type="button"
+      >
+        <i class="codicon codicon-add" />
         Add Key
       </button>
     </div>
