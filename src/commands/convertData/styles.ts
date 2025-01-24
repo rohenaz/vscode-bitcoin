@@ -109,7 +109,7 @@ export const styles = css`
     fill: currentColor;
   }
 
-  .convert-button {
+  .convert-button, .copy-button {
     width: 100%;
     height: 28px;
     padding: 0 12px;
@@ -125,42 +125,24 @@ export const styles = css`
     opacity: 0.8;
   }
 
-  .convert-button:hover {
+  .convert-button:hover, .copy-button:hover {
     background-color: var(--vscode-button-secondaryHoverBackground);
     opacity: 1;
   }
 
-  .convert-button:active {
+  .convert-button:active, .copy-button:active {
     transform: translateY(1px);
   }
 
   .output-container {
-    position: relative;
+    display: flex;
+    flex-direction: column;
   }
 
   #output {
     width: 100%;
     box-sizing: border-box;
     padding-right: 36px;
-  }
-
-  .copy-button {
-    position: absolute;
-    right: 4px;
-    top: 4px;
-    min-width: auto;
-    width: 24px;
-    height: 24px;
-    padding: 0;
-    background-color: transparent;
-    color: var(--vscode-button-secondaryForeground);
-    opacity: 0.6;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    border: none;
-    border-radius: 3px;
-    cursor: pointer;
   }
 
   .copy-button svg {

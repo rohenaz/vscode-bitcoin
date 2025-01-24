@@ -214,7 +214,7 @@ function InputSection({ initialValue }: { initialValue: string }) {
   return (
     <div class="form-group">
       <label for="input">Input Data</label>
-      <textarea id="input" placeholder="Paste or type data to convert">
+      <textarea id="input" placeholder="Paste or type data to convert" safe>
         {initialValue}
       </textarea>
     </div>
@@ -269,8 +269,8 @@ function OutputSection() {
           placeholder="Converted output will appear here"
           readonly={true}
         />
-        <button id="copyButton" class="copy-button" type="button" title="Copy">
-          <i class="codicon codicon-copy" aria-label="Copy" />
+        <button id="copyButton" class="convert-button" type="button" title="Copy">
+          Copy
         </button>
       </div>
     </div>
@@ -315,12 +315,7 @@ function getConversionWebviewContent(
   </head>
   <body>
     <div class="container">
-      <div class="panel">
-        ${InputSection({ initialValue: safeInput })}
-        ${FormatSelectors()}
-        ${OutputSection()}
-        ${StatusMessage()}
-      </div>
+      ${ConversionPanel({ initialValue: safeInput })}
     </div>
     <script nonce="${nonce}">
       ${webviewScript}

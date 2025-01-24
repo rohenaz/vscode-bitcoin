@@ -138,12 +138,17 @@ export const webviewScript = js`
         detectFormat(trimmedText);
       });
 
-      input.addEventListener('input', () => {
+      input.addEventListener('blur', () => {
         const trimmedValue = input.value.trim();
         if (trimmedValue !== input.value) {
           input.value = trimmedValue;
+          detectFormat(trimmedValue);
+          tryConvert();
         }
-        detectFormat(trimmedValue);
+      });
+
+      input.addEventListener('input', () => {
+        detectFormat(input.value);
         tryConvert();
       });
 
