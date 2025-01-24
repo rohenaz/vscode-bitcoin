@@ -2,11 +2,11 @@
 
 A comprehensive Bitcoin development toolkit for VS Code, powered by the modern `@bsv/sdk` library.
 
-![](https://raw.githubusercontent.com/rohenaz/vscode-bitcoin/refs/heads/master/images/decode_raw_tx.gif)
+![](https://raw.githubusercontent.com/rohenaz/vscode-bitcoin/refs/heads/v0.1.0-beta/images/decode_raw_tx.gif)
 
-![](https://raw.githubusercontent.com/rohenaz/vscode-bitcoin/refs/heads/master/images/address_from_private_key.gif)
+![](https://raw.githubusercontent.com/rohenaz/vscode-bitcoin/refs/heads/v0.1.0-beta/images/address_from_private_key.gif)
 
-![](https://raw.githubusercontent.com/rohenaz/vscode-bitcoin/refs/heads/master/images/bmap_from_txid.gif)
+![](https://raw.githubusercontent.com/rohenaz/vscode-bitcoin/refs/heads/v0.1.0-beta/images/bmap_from_txid.gif)
 
 ## Features
 
@@ -19,7 +19,7 @@ A comprehensive Bitcoin development toolkit for VS Code, powered by the modern `
 - Color-coded key organization
 - One-click key operations
 
-![Key Vault](https://raw.githubusercontent.com/rohenaz/vscode-bitcoin/refs/heads/master/images/key_vault.png)
+![Key Vault](https://raw.githubusercontent.com/rohenaz/vscode-bitcoin/refs/heads/v0.1.0-beta/images/key_vault.png)
 
 ### Address Operations
 - Generate addresses from any key format  
@@ -36,7 +36,7 @@ A comprehensive Bitcoin development toolkit for VS Code, powered by the modern `
   - P2PKH scripts with address derivation  
   - Address and TXID links to explorers  
 
-![](https://raw.githubusercontent.com/rohenaz/vscode-bitcoin/refs/heads/master/images/p2pkh_tooltip.png)
+![](https://raw.githubusercontent.com/rohenaz/vscode-bitcoin/refs/heads/v0.1.0-beta/images/p2pkh_tooltip.png)
 
 ### Transaction Operations
 - Fetch and decode transactions  
@@ -51,7 +51,7 @@ A comprehensive Bitcoin development toolkit for VS Code, powered by the modern `
   - Themed interface  
 - Supports hex, Base64, binary, UTF-8  
 
-![Data Conversion Tool](https://raw.githubusercontent.com/rohenaz/vscode-bitcoin/refs/heads/master/images/convert_data.png)
+![Data Conversion Tool](https://raw.githubusercontent.com/rohenaz/vscode-bitcoin/refs/heads/v0.1.0-beta/images/convert_data.png)
 
 ### Ordinals & Inscriptions
 - Fetch and display inscriptions  

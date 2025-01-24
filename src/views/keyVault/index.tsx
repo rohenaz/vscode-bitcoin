@@ -566,7 +566,7 @@ export class KeyPanel {
     if (k.type === 'public') {
       const pub = derivePublicKeyString(k);
       if (!pub) {
-        vsApi.window.showErrorMessage('Public key derivation failed');
+        vsApi.window.showErrorMessage('Public key hex derivation failed');
         return;
       }
       await vsApi.env.clipboard.writeText(pub);

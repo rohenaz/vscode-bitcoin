@@ -40,15 +40,17 @@ export function renderKeyRecursive(
   return (
     <div class={`key-card indent-${indent}`} data-keyid={k.id}>
       <div class="key-top">
-        <div class={`key-type type-${k.type}`}>{k.type}</div>
-        <div
-          class="key-label"
-          data-cmd="editLabel"
-          data-id={k.id}
-          data-currentlabel={k.label || ''}
-          safe
-        >
-          {k.label || 'Untitled'}
+        <div class="key-type-container">
+          <div class={`key-type type-${k.type}`}>{k.type}</div>
+          <div
+            class="key-label"
+            data-cmd="editLabel"
+            data-id={k.id}
+            data-currentlabel={k.label || ''}
+            safe
+          >
+            {k.label || 'Untitled'}
+          </div>
         </div>
         <div class="key-actions">{renderActions(k)}</div>
       </div>

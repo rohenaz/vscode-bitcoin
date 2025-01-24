@@ -173,6 +173,35 @@ export function getPanelScript(payloadJson: string): string {
     closeModal();
   }
 
+  function validateKeyValue(value: string): boolean {
+    return value.length >= 10; // Basic length check only
+  }
+
+  function updateAddButtonState() {
+    const addButton = document.querySelector('[data-cmd="submitAddKey"]') as HTMLButtonElement;
+    const keyValue = (document.getElementById('keyValue') as HTMLInputElement).value;
+    
+    if (!addButton) return;
+    
+    const isValid = validateKeyValue(keyValue);
+    addButton.disabled = !isValid;
+  }
+
+  function bindEvents() {
+    const { input, fromFormat, toFormat, convertBtn, copyBtn } = elements;
+
+    // ... existing event listeners ...
+
+    // Add validation on value input
+    const keyValue = document.getElementById('keyValue');
+    if (keyValue) {
+      keyValue.addEventListener('input', updateAddButtonState);
+    }
+
+    // Initialize button state
+    updateAddButtonState();
+  }
+
   // Listen for extension messages
   window.addEventListener('message', event => {
     const msg = event.data;

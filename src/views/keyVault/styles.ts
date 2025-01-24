@@ -90,6 +90,7 @@ input:focus, select:focus, button:focus {
   display: flex;
   align-items: center;
   gap: 8px;
+  cursor: pointer;
 }
 .edit-label {
   background: none;
@@ -98,6 +99,11 @@ input:focus, select:focus, button:focus {
   cursor: pointer;
   font-size: 0.9rem;
   padding: 0;
+}
+.key-type-container {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 .key-type {
   font-size: 0.8rem;
@@ -339,5 +345,9 @@ button.secondary:hover {
   position: absolute;
   left: 0;
   top: 0;
+}
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 `;
