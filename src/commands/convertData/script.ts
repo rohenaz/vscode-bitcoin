@@ -125,11 +125,25 @@ export const webviewScript = js`
       const { input, fromFormat, toFormat, convertBtn, copyBtn } = elements;
 
       input.addEventListener('paste', (e) => {
-        detectFormat(e.clipboardData?.getData('text') || '');
+        const pastedText = e.clipboardData?.getData('text') || '';
+        const trimmedText = pastedText.trim();
+        // Prevent default to handle the paste ourselves
+        e.preventDefault();
+        // Insert the trimmed text at cursor position
+        const start = input.selectionStart;
+        const end = input.selectionEnd;
+        input.value = input.value.substring(0, start) + trimmedText + input.value.substring(end);
+        // Move cursor after pasted text
+        input.selectionStart = input.selectionEnd = start + trimmedText.length;
+        detectFormat(trimmedText);
       });
 
       input.addEventListener('input', () => {
-        detectFormat(input.value);
+        const trimmedValue = input.value.trim();
+        if (trimmedValue !== input.value) {
+          input.value = trimmedValue;
+        }
+        detectFormat(trimmedValue);
         tryConvert();
       });
 
