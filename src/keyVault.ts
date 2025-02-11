@@ -51,22 +51,29 @@ export class KeyVault {
 
   /** Check if there's any existing vault data stored (encrypted or not). */
   public async hasExistingVault(): Promise<boolean> {
-    const cipherHex = await this.storage.get(ENCRYPTED_VAULT_BLOB);
+    // Force refresh by getting a fresh secrets instance
+    const freshStorage = this.storage;
+    const cipherHex = await freshStorage.get(ENCRYPTED_VAULT_BLOB);
+    console.log('Fresh storage check - cipherHex exists?:', !!cipherHex);
+    
+    // Additional check for other keys
+    const saltExists = await freshStorage.get(SALT_KEY);
+    const hashExists = await freshStorage.get(PASSWORD_HASH_KEY);
+    console.log('Salt exists:', !!saltExists, saltExists);
+    console.log('Password hash exists:', !!hashExists, hashExists);
+    
     return !!cipherHex;
   }
 
   /** Attempt to ensure the vault is unlocked, prompting for password if needed. */
   public async checkUnlock(): Promise<void> {
-    if (this.isUnlocked) return; // already unlocked
+    if (this.isUnlocked) return;
 
     const hasVault = await this.hasExistingVault();
-    const msg = hasVault
-      ? 'Enter vault password to unlock'
-      : 'Set a password for your key vault';
     const password = await vsApi.window.showInputBox({
-      prompt: msg,
-      placeHolder: hasVault ? undefined : 'Choose a strong password',
+      prompt: hasVault ? 'Enter vault password to unlock' : 'Set a password for your key vault',
       password: true,
+      placeHolder: hasVault ? undefined : 'Choose a strong password'
     });
     if (!password) {
       throw new Error('Vault is locked. Must unlock with password first.');
@@ -91,17 +98,16 @@ export class KeyVault {
     const pbkdf2Key = crypto.pbkdf2Sync(password, Buffer.from(salt), 100000, 32, 'sha256');
     this.ephemeralKey = new SymmetricKey(toArray(pbkdf2Key));
 
-    // 2) If no vault data, create a brand-new empty vault
+    // First time setup - no vault exists yet
     if (!storedVault) {
       this.decryptedKeys = [];
-      // store password hash so we can verify next time
       const hashHex = toHex(toArray(pbkdf2Key));
       await this.storage.store(PASSWORD_HASH_KEY, hashHex);
-      await this.saveVault(); // writes empty JSON => encrypted
+      await this.saveVault();
       return;
     }
 
-    // 3) If there's data but no passwordHash, treat it as old plaintext JSON or unknown
+    // 2) If no password hash, handle migration
     if (!storedHash) {
       try {
         // Attempt to parse the data as old plaintext JSON
@@ -127,7 +133,7 @@ export class KeyVault {
         await this.saveVault();
         return;
 
-        // Option 2: If you REALLY want to preserve it, you’d have to guess
+        // Option 2: If you REALLY want to preserve it, you'd have to guess
         // how to decrypt it or prompt the user. Usually not worth it.
       }
     }

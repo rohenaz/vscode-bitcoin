@@ -45,6 +45,7 @@ import { encrypt, decrypt } from './commands/encryption';
 import { BitcoinSemanticTokensProvider } from './semanticTokens';
 import { generateHDPublicKey } from './commands/generateHDPublicKey';
 import { generateHDPrivateKey } from './commands/generateHDPrivateKey';
+import { resetExtension } from './commands/resetExtension';
 
 const { fromBase58Check, toBase64, toArray } = Utils;
 
@@ -726,6 +727,11 @@ export async function activate(context: ExtensionContext) {
         'Welcome screen has been reset. Please reload VS Code to see it.',
       );
     }),
+  );
+
+  // Register reset extension command
+  registerCommand(context, outputManager, 'bitcoin.resetExtension', () => 
+    resetExtension(outputManager, context)
   );
 
   // Register conversion tool commands

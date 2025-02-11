@@ -7,7 +7,7 @@
   "icon": "images/icon.png",
   "type": "commonjs",
   "engines": {
-    "vscode": "^1.93.1",
+    "vscode": "^1.96.0",
     "node": "^16.0.0"
   },
   "categories": [
@@ -213,6 +213,11 @@
       {
         "command": "bitcoin.decodeBase64",
         "title": "Decode Base64",
+        "category": "Bitcoin"
+      },
+      {
+        "command": "bitcoin.resetExtension",
+        "title": "Reset Extension",
         "category": "Bitcoin"
       }
     ],
@@ -439,14 +444,15 @@
     "publish": "vsce publish",
     "publish:pre": "vsce publish --pre-release",
     "clean": "rm -rf dist node_modules *.vsix out",
-    "clear-vault": "bun run scripts/clearVault.ts"
+    "clear-vault": "bun run scripts/clearVault.ts",
+    "nuke-vault": "bun run scripts/clearVault.ts --force && rm -rf node_modules && bun install"
   },
   "devDependencies": {
     "@biomejs/biome": "^1.9.4",
     "@types/glob": "^8.1.0",
     "@types/node": "^22.10.7",
     "@types/node-fetch": "^2.6.12",
-    "@types/vscode": "^1.93.1",
+    "@types/vscode": "^1.96.0",
     "@vscode/test-electron": "^2.4.1",
     "@vscode/vsce": "^3.2.1",
     "bun-types": "^1.1.45",
