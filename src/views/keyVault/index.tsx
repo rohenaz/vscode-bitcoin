@@ -1,6 +1,6 @@
 import vsApi, { type WebviewPanel, type Disposable } from '../../vsShim';
 import type { KeyVault, KeyEntry, KeyType } from '../../keyVault';
-import { PrivateKey, PublicKey, HD, Mnemonic } from '@bsv/sdk';
+import { PrivateKey, PublicKey, HD, Mnemonic, Utils } from '@bsv/sdk';
 import { keyPanelStyles } from './styles';
 import {
   buildKeyHierarchy,
@@ -27,14 +27,11 @@ function buildSearchTokens(key: KeyEntry): string[] {
   ];
 
   try {
-    if (
-      key.type === 'wif' ||
-      key.type === 'private' ||
-      key.type === 'encryption'
-    ) {
+    if (key.type === 'wif' || key.type === 'private' || key.type === 'encryption') {
       const priv = toPrivateKey(key);
       if (priv) {
         tokens.push(priv.toWif().toLowerCase());
+        tokens.push(priv.toString().toLowerCase());
         tokens.push(priv.toAddress().toString().toLowerCase());
         tokens.push(priv.toPublicKey().toString().toLowerCase());
       }
@@ -50,13 +47,8 @@ function buildSearchTokens(key: KeyEntry): string[] {
       const xpub = hd.toPublic().toString();
       tokens.push(xpub.toLowerCase());
     } else if (key.type === 'mnemonic') {
-      // The user's BIP39 phrase is stored in key.value if we store it that way
       tokens.push(key.value.toLowerCase());
-      // Possibly xprv is not stored, or is in metadata
-      // But you can parse it if you want to
-      // (We do an optional parse below)
       try {
-        // Convert mnemonic => HD => add xpub, address
         const mn = Mnemonic.fromString(key.value);
         const hd = HD.fromSeed(mn.toSeed());
         const hex = hd.privKey ? hd.privKey.toString() : '';
@@ -72,9 +64,37 @@ function buildSearchTokens(key: KeyEntry): string[] {
     } else if (key.type === 'hdpublic') {
       const hdPub = HD.fromString(key.value);
       tokens.push(hdPub.toPublic().toString().toLowerCase());
+    } else if (key.type === 'public') {
+      try {
+        const pub = PublicKey.fromString(key.value);
+        tokens.push(pub.toString().toLowerCase());
+        const addr = deriveAddress(key);
+        if (addr) {
+          tokens.push(addr.toLowerCase());
+          const { data } = Utils.fromBase58Check(addr) as { data: number[] };
+          const pubKeyHashHex = Utils.toHex(data).toLowerCase();
+          tokens.push(pubKeyHashHex);
+        }
+      } catch (e) {
+        // ignore errors
+      }
     }
   } catch {
     // ignore derivation errors
+  }
+
+  // Additionally, try to add the public key hash from the derived address if available
+  try {
+    const addr = deriveAddress(key);
+    if (addr) {
+      tokens.push(addr.toLowerCase());
+      const { data } = Utils.fromBase58Check(addr);
+      const dataArray = typeof data === 'string' ? data.split('').map(c => c.charCodeAt(0)) : data;
+      const pubKeyHashHex = Utils.toHex(dataArray).toLowerCase();
+      tokens.push(pubKeyHashHex);
+    }
+  } catch (e) {
+    // ignore errors
   }
 
   // Remove duplicates
