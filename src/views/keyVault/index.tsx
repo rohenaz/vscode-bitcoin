@@ -50,7 +50,7 @@ function buildSearchTokens(key: KeyEntry): string[] {
       const xpub = hd.toPublic().toString();
       tokens.push(xpub.toLowerCase());
     } else if (key.type === 'mnemonic') {
-      // The user’s BIP39 phrase is stored in key.value if we store it that way
+      // The user's BIP39 phrase is stored in key.value if we store it that way
       tokens.push(key.value.toLowerCase());
       // Possibly xprv is not stored, or is in metadata
       // But you can parse it if you want to
@@ -207,7 +207,14 @@ export class KeyPanel {
 
     const nonce = getNonce();
     const cspSource = this._panel.webview.cspSource;
-    const script = getPanelScript(JSON.stringify(payload));
+    
+    // Escape any special characters in the JSON string
+    const safePayload = JSON.stringify(payload).replace(/[\u007F-\uFFFF]/g, chr => {
+      const hex = chr.charCodeAt(0).toString(16);
+      return `\\u${`0000${hex}`.slice(-4)}`;
+    });
+    
+    const script = getPanelScript(safePayload);
 
     this._panel.webview.html = getPanelHtml({
       nonce,
@@ -810,18 +817,15 @@ export class KeyPanel {
         return;
       }
     }
-
-    let privHex = '';
-    if (parent.type === 'wif' || parent.type === 'encryption') {
-      const pk = PrivateKey.fromWif(parent.value);
-      privHex = pk.toString();
-    } else {
-      privHex = parent.value;
+    
+    const pubKey = derivePublicKeyString(parent)
+    if (!pubKey) {
+      vsApi.window.showErrorMessage('Cannot derive public key from this key type');
+      return;
     }
-
     await this._vault.storeKey({
       type: 'public',
-      value: privHex,
+      value: pubKey.toString(),
       label: `Public child of ${parent.label ?? parent.type}`,
       metadata: {
         parentId: parent.id,

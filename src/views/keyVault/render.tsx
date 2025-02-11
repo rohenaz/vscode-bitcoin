@@ -198,11 +198,11 @@ function renderFormatBadges(k: KeyEntry): JSX.Element[] {
     case 'wif':
     case 'encryption':
       badges.push(
+        <button class="format-badge" data-cmd="copyWif" data-id={k.id} type="button">
+        WIF
+        </button>,
         <button class="format-badge" data-cmd="copyHex" data-id={k.id} type="button">
           HEX
-        </button>,
-        <button class="format-badge" data-cmd="copyWif" data-id={k.id} type="button">
-          WIF
         </button>
       );
       if (k.type === 'wif') {

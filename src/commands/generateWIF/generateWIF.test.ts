@@ -40,24 +40,16 @@ describe('generateWIF', () => {
       name: 'wif',
     });
 
-    // Verify both WIF and public key were stored with correct relationship
-    expect(storeKeyMock).toHaveBeenCalledTimes(2);
+    // Verify only WIF is stored, no public key
+    expect(storeKeyMock).toHaveBeenCalledTimes(1);
     const calls = storeKeyMock.mock.calls;
     
-    // First call should store WIF
+    // Only call should store WIF
     expect(calls[0][0]).toEqual({
       type: 'wif',
       value: expect.stringMatching(/^[KL][1-9A-HJ-NP-Za-km-z]{51}$/),
       label: 'Generated WIF',
       metadata: {},
-    });
-
-    // Second call should store public key with parentId
-    expect(calls[1][0]).toEqual({
-      type: 'public',
-      value: expect.any(String),
-      label: 'Generated Public Key',
-      metadata: { parentId: 'test-id' },
     });
   });
 

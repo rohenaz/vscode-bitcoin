@@ -1,24 +1,17 @@
 // src/views/keyVault/script.ts
 
 export function getPanelScript(payloadJson: string): string {
-  // We'll parse { keys, searchIndex } inside the script.
-  return `
-(function() {
-  let _vscode;
-  function getVSCodeAPI() {
-    if (!_vscode && typeof window !== 'undefined' && window.acquireVsCodeApi) {
-      _vscode = window.acquireVsCodeApi();
-    }
-    return _vscode;
-  }
-  const vscode = getVSCodeAPI();
-
-  let payload;
+  // Since this will be injected into JSX, we need to handle the string carefully
+  const scriptContent = `
+(() => {
+  const vscode = acquireVsCodeApi();
+  
+  // Parse the payload safely - note that payloadJson is already stringified and escaped
+  let payload = { keys: [], searchIndex: {} };
   try {
-    payload = JSON.parse(${JSON.stringify(payloadJson)});
+    payload = JSON.parse(JSON.stringify(${payloadJson}));
   } catch(e) {
-    console.warn('[KeyVault script] Failed to parse payload JSON', e);
-    payload = { keys: [], searchIndex: {} };
+    console.warn('[KeyVault script] Failed to parse payload JSON:', e);
   }
 
   document.addEventListener('click', evt => {
@@ -37,28 +30,41 @@ export function getPanelScript(payloadJson: string): string {
     }
 
     const id = btn.getAttribute('data-id');
-    const type = btn.getAttribute('data-type');
     const currentLabel = btn.getAttribute('data-currentlabel') || '';
 
     handleCommand(cmd, id, currentLabel);
   });
 
-  document.addEventListener('input', evt => {
-    const inp = evt.target && evt.target.closest('[data-cmd="searchKeys"]');
+  // Function to perform search filtering on key cards
+  function performSearch() {
+    const inp = document.getElementById('searchInput');
     if (!inp) return;
-
-    // Local searching based on ephemeral "searchIndex" from the extension:
-    const query = inp.value.toLowerCase();
+    const query = (inp.value || '').toLowerCase().trim();
     const items = document.querySelectorAll('#keyList .key-card');
+    console.log('performSearch triggered, query:', query, ', number of key cards:', items.length);
+    if(query === "") {
+      // If search is empty, show all keys
+      for (let i = 0; i < items.length; i++) {
+        items[i].style.display = '';
+      }
+      return;
+    }
     for (let i = 0; i < items.length; i++) {
       const item = items[i];
       const keyId = item.getAttribute('data-keyid');
       if (!keyId) continue;
       const tokens = payload.searchIndex[keyId] || [];
-      const matches = tokens.some(t => t && t.toLowerCase().includes(query));
+      // All tokens are already lowercase from buildSearchTokens
+      const matches = tokens.some(t => t && t.includes(query));
+      console.log('Key', keyId, 'tokens:', tokens, 'matches:', matches);
       item.style.display = matches ? '' : 'none';
     }
-  });
+  }
+
+  // Attach the performSearch function to input, keyup, and change events
+  document.addEventListener('input', performSearch);
+  document.addEventListener('keyup', performSearch);
+  document.addEventListener('change', performSearch);
 
   function handleCommand(cmd, id, currentLabel) {
     switch (cmd) {
@@ -89,16 +95,6 @@ export function getPanelScript(payloadJson: string): string {
       case 'editLabel':
         vscode.postMessage({ command: 'requestEditLabel', id, currentLabel });
         break;
-
-      case 'copyValue': {
-        const value = btn.getAttribute('data-value');
-        if (!value) return;
-        vscode.postMessage({
-          command: 'copyToClipboard',
-          value
-        });
-        break;
-      }
 
       // Forward these directly to the extension side:
       case 'deleteKey':
@@ -168,38 +164,9 @@ export function getPanelScript(payloadJson: string): string {
       command: 'submitAddKey',
       type: t,
       value: v,
-      label: labelVal || ('Imported ' + t + ' Key'),
+      label: labelVal || \`Imported \${t} Key\`,
     });
     closeModal();
-  }
-
-  function validateKeyValue(value: string): boolean {
-    return value.length >= 10; // Basic length check only
-  }
-
-  function updateAddButtonState() {
-    const addButton = document.querySelector('[data-cmd="submitAddKey"]') as HTMLButtonElement;
-    const keyValue = (document.getElementById('keyValue') as HTMLInputElement).value;
-    
-    if (!addButton) return;
-    
-    const isValid = validateKeyValue(keyValue);
-    addButton.disabled = !isValid;
-  }
-
-  function bindEvents() {
-    const { input, fromFormat, toFormat, convertBtn, copyBtn } = elements;
-
-    // ... existing event listeners ...
-
-    // Add validation on value input
-    const keyValue = document.getElementById('keyValue');
-    if (keyValue) {
-      keyValue.addEventListener('input', updateAddButtonState);
-    }
-
-    // Initialize button state
-    updateAddButtonState();
   }
 
   // Listen for extension messages
@@ -214,6 +181,7 @@ export function getPanelScript(payloadJson: string): string {
       }
     }
   });
-})();
-`;
+})();`;
+
+  return scriptContent;
 }
