@@ -20,7 +20,6 @@ export function getPanelHtml(opts: {
           http-equiv="Content-Security-Policy"
           content={`
             default-src 'none';
-            sandbox allow-scripts allow-same-origin allow-forms allow-modals;
             style-src ${cspSource} 'unsafe-inline';
             script-src 'nonce-${nonce}';
           `}
@@ -34,6 +33,7 @@ export function getPanelHtml(opts: {
           {keyElements}
         </div>
         <Modal />
+        <SharesModal />
         <script nonce={nonce}>{script}</script>
       </body>
     </html>
@@ -50,16 +50,19 @@ export function HeaderBar(): JSX.Element {
         id="searchInput"
         type="text"
         placeholder="Search keys..."
-        data-cmd="searchKeys"
+        class="search-input"
       />
-      <button 
-        class="add-key-button" 
-        data-cmd="openModal" 
-        type="button"
-      >
-        <i class="codicon codicon-add" />
-        Add Key
-      </button>
+      <div class="header-buttons">
+        <button class="btn" data-cmd="openModal" type="button">
+          Add Key
+        </button>
+        <button class="btn" data-cmd="importBackup" type="button">
+          Import
+        </button>
+        <button class="btn" data-cmd="openSharesModal" type="button">
+          Reconstruct from Shares
+        </button>
+      </div>
     </div>
   );
 }
@@ -104,6 +107,44 @@ export function Modal(): JSX.Element {
             </button>
             <button class="primary" data-cmd="submitAddKey" type="button">
               Add Key
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export function SharesModal(): JSX.Element {
+  return (
+    <div class="modal-overlay" id="sharesModal">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h2>Reconstruct from Key Shares</h2>
+          <button class="close-modal" data-cmd="closeSharesModal" type="button">
+            ×
+          </button>
+        </div>
+
+        <div class="modal-body">
+          <div class="form-group">
+            <label for="sharesLabel">Label</label>
+            <input type="text" id="sharesLabel" placeholder="Enter a label for the reconstructed key" />
+          </div>
+          <div class="form-group">
+            <label for="sharesInput">Key Shares (one per line)</label>
+            <textarea id="sharesInput" placeholder="Paste your key shares here, one per line" />
+          </div>
+        </div>
+
+        <div class="modal-actions">
+          <div />
+          <div>
+            <button class="secondary" data-cmd="closeSharesModal" type="button">
+              Cancel
+            </button>
+            <button class="primary" data-cmd="submitReconstructShares" type="button">
+              Reconstruct Key
             </button>
           </div>
         </div>

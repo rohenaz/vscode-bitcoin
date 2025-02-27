@@ -173,10 +173,10 @@ bun test
 ## Dependencies
 
 ### Core Libraries
-- [@bsv/sdk](https://github.com/bitcoin-sv/bsv-sdk) - Modern Bitcoin SV development kit
-- [bpu-ts](https://github.com/rohenaz/bpu-ts) - Bitcoin Protocol Parser in TypeScript
-- [bmapjs](https://github.com/rohenaz/bmapjs) - Bitcoin Metadata Application Protocol
-- [bsv-bap](https://github.com/bitcoinschema/bap) - Bitcoin Attestation Profile (Identities)
+- [@bsv/sdk](https://github.com/bitcoin-sv/bsv-sdk) - Bitcoin SV development kit
+- [bpu-ts](https://github.com/rohenaz/bpu-ts) - Bitcoin transaction parser
+- [bmapjs](https://github.com/rohenaz/bmapjs) - Data protocol parser
+- [bsv-bap](https://github.com/bitcoinschema/bap) - Bitcoin Attestation Protocol (Identities)
 
 ### External Services
 - [WhatsOnChain](https://whatsonchain.com) - Bitcoin blockchain explorer
@@ -201,6 +201,73 @@ MIT License
 - WhatsOnChain
 - BMAP
 - BAP Identities
+
+## Programmatic Usage
+
+The extension provides commands that can be called programmatically from other extensions:
+
+### sendTransaction
+
+Send a Bitcoin transaction using the funding key from the Key Vault.
+
+```typescript
+interface SendTx {
+  satoshis: number;  // Amount in satoshis
+  script: string;    // Locking script in hex format
+}
+
+interface SendTxResponse {
+  txid: string;      // Transaction ID
+  hex: string;       // Raw transaction hex
+}
+
+// Call the command
+const result = await vscode.commands.executeCommand('bitcoin.sendTransaction', {
+  outputs: Output[],                                    // Array of outputs
+  scriptEncoding?: 'hex' | 'base64' | 'asm'            // Optional script encoding (default: 'base64')
+}): Promise<SendTxResponse>
+```
+
+Requirements:
+- A funding key must be set in the Key Vault
+- Sufficient funds must be available at the funding key's address
+
+The command will:
+1. Use the funding key to create inputs
+2. Add all specified outputs
+3. Calculate and add change output if needed
+4. Sign all inputs
+5. Broadcast the transaction
+
+### signOpReturnData
+
+Sign OP_RETURN data using the identity key from the Key Vault.
+
+```typescript
+interface SignOpReturnDataParams {
+  data: number[][];  // Array of byte arrays to sign
+}
+
+interface SignOpReturnDataResponse {
+  data: number[][];  // Signed data (includes BAP ID address and signature)
+  type: 'signatures';
+  name: 'signature';
+}
+
+// Call the command
+const result = await vscode.commands.executeCommand('bitcoin.signOpReturnData', {
+  data: number[][]   // Data to sign
+}): Promise<SignOpReturnDataResponse>
+```
+
+Requirements:
+- An identity key must be set in the Key Vault
+- Data must be provided as an array of number arrays
+
+The command will:
+1. Use the identity key to create a BAP ID
+2. Sign the data using AIP (Author Identity Protocol)
+3. Return the signed data as an array containing [bapIdAddress, signature]
 
 **Enjoy!**
 

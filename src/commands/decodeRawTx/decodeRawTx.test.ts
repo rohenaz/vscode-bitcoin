@@ -2,6 +2,7 @@ import { afterEach, describe, expect, mock, test } from 'bun:test';
 import { handleDecodeRawTxCommand } from '.';
 import type { OutputManager } from '../../output';
 import vscode from '../../test/setup';
+import { Transaction } from '@bsv/sdk';
 
 const mockOutput = {
   handleOutput: mock(() => Promise.resolve()),
@@ -85,23 +86,47 @@ describe('decodeRawTx', () => {
   });
 
   test('returns decoded transaction for valid input', async () => {
-    // Valid raw transaction hex (minimal tx with no inputs/outputs)
-    const rawTxHex = '01000000000000000000';
+    // Create a valid transaction with known values
+    const tx = new Transaction();
+    tx.version = 1;
+    const rawTxHex = tx.toHex();
 
     vscode.window = {
       ...originalWindow,
       showInputBox: async () => rawTxHex,
+      // @ts-expect-error mock return type
+      showQuickPick: async () => ({
+        label: 'JSON (Parsed)',
+        value: 'json',
+        description: 'Parsed transaction data'
+      })
     };
 
     const result = await handleDecodeRawTxCommand(mockOutput);
     expect(result).toBeDefined();
     expect(result?.type).toBe('transactions');
-    expect(JSON.parse(result?.data || '{}')).toEqual({
+    
+    const data = JSON.parse(result?.data || '{}');
+    expect(data).toEqual({
       version: 1,
       inputs: [],
       outputs: [],
-      lockTime: 0,
+      lockTime: 0
     });
+  });
+
+  test('returns undefined when format selection is cancelled', async () => {
+    const tx = new Transaction();
+    const rawTxHex = tx.toHex();
+
+    vscode.window = {
+      ...originalWindow,
+      showInputBox: async () => rawTxHex,
+      showQuickPick: async () => undefined
+    };
+
+    const result = await handleDecodeRawTxCommand(mockOutput);
+    expect(result).toBeUndefined();
   });
 
   test('handles invalid transaction hex', async () => {
@@ -111,6 +136,12 @@ describe('decodeRawTx', () => {
     vscode.window = {
       ...originalWindow,
       showInputBox: async () => rawTxHex,
+      // @ts-expect-error mock return type
+      showQuickPick: async () => ({
+        label: 'JSON (Parsed)',
+        value: 'json',
+        description: 'Parsed transaction data'
+      })
     };
 
     await expect(handleDecodeRawTxCommand(mockOutput)).rejects.toThrow(

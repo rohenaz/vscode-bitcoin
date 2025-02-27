@@ -228,11 +228,8 @@ export class KeyPanel {
     const nonce = getNonce();
     const cspSource = this._panel.webview.cspSource;
     
-    // Escape any special characters in the JSON string
-    const safePayload = JSON.stringify(payload).replace(/[\u007F-\uFFFF]/g, chr => {
-      const hex = chr.charCodeAt(0).toString(16);
-      return `\\u${`0000${hex}`.slice(-4)}`;
-    });
+    // Create a safe version of the payload for the script
+    const safePayload = JSON.stringify(payload);
     
     const script = getPanelScript(safePayload);
 
@@ -252,6 +249,8 @@ export class KeyPanel {
     type?: KeyType;
     value?: string;
     currentLabel?: string;
+    shares?: string[];
+    text?: string;
   }) {
     switch (msg.command) {
       case 'copyKeyValue': {
@@ -398,6 +397,202 @@ export class KeyPanel {
           await vscode.env.openExternal(vscode.Uri.parse(url));
         }
         break;
+
+      case 'importBackup': {
+        // Show file picker for JSON files
+        const result = await vsApi.window.showOpenDialog({
+          canSelectFiles: true,
+          canSelectFolders: false,
+          canSelectMany: false,
+          filters: {
+            'JSON Files': ['json']
+          },
+          title: 'Import Identity Key Backup'
+        });
+
+        if (!result || result.length === 0) return;
+
+        try {
+          const fileContent = await vsApi.workspace.fs.readFile(result[0]);
+          const backup = JSON.parse(fileContent.toString());
+
+          if (!backup.derivedPrivateKey) {
+            throw new Error('Invalid backup file: missing derivedPrivateKey');
+          }
+
+          // Store the key
+          const id = await this._vault.storeKey({
+            type: 'wif',
+            value: backup.derivedPrivateKey,
+            label: backup.name || backup.description || 'Imported Identity Key',
+            metadata: {
+              importedFrom: result[0].fsPath,
+              importedAt: new Date().toISOString()
+            }
+          });
+
+          // Set as identity key
+          await this._vault.setIdentityKey(id);
+
+          vsApi.window.showInformationMessage('Identity key imported successfully');
+          await this.updateContent();
+        } catch (error) {
+          vsApi.window.showErrorMessage(
+            `Failed to import backup: ${error instanceof Error ? error.message : String(error)}`
+          );
+        }
+        break;
+      }
+
+      case 'setFundingKey': {
+        if (!msg.id) break;
+        await this._vault.setFundingKey(msg.id);
+        await this.updateContent();
+        break;
+      }
+
+      case 'clearFundingKey': {
+        if (!msg.id) break;
+        await this._vault.clearFundingKey();
+        await this.updateContent();
+        break;
+      }
+
+      case 'generateKeyShares': {
+        if (!msg.id) break;
+        
+        const threshold = await vsApi.window.showInputBox({
+          prompt: 'Enter the minimum number of shares required to reconstruct the key (threshold)',
+          value: '2',
+          validateInput: (value) => {
+            const num = Number.parseInt(value, 10);
+            if (Number.isNaN(num) || num < 2) {
+              return 'Threshold must be at least 2';
+            }
+            return null;
+          }
+        });
+        if (!threshold) return;
+        
+        const thresholdNum = Number.parseInt(threshold, 10);
+        const defaultTotal = thresholdNum + 1; // Set default to threshold + 1
+        
+        const totalShares = await vsApi.window.showInputBox({
+          prompt: 'Enter the total number of shares to generate',
+          value: defaultTotal.toString(), // Use the calculated default
+          validateInput: (value) => {
+            const num = Number.parseInt(value, 10);
+            if (Number.isNaN(num) || num < thresholdNum) {
+              return `Total shares must be at least ${thresholdNum}`;
+            }
+            return null;
+          }
+        });
+        if (!totalShares) return;
+        
+        try {
+          const shares = await this._vault.generateKeyShares(
+            msg.id, 
+            thresholdNum, 
+            Number.parseInt(totalShares, 10)
+          );
+          
+          vsApi.window.showInformationMessage(
+            `Generated ${shares.length} key shares (threshold: ${threshold})`
+          );
+          await this.updateContent();
+        } catch (error) {
+          vsApi.window.showErrorMessage(
+            `Failed to generate key shares: ${error instanceof Error ? error.message : String(error)}`
+          );
+        }
+        break;
+      }
+
+      case 'viewKeyShares': {
+        if (!msg.id) break;
+        
+        const key = await this._vault.getKey(msg.id);
+        if (!key || !key.keyShares || key.keyShares.length === 0) {
+          vsApi.window.showErrorMessage('No key shares found for this key');
+          return;
+        }
+        
+        const options = key.keyShares.map((share, index) => ({
+          label: `Share ${index + 1}`,
+          description: `${share.substring(0, 20)}...`,
+          share
+        }));
+        
+        const selectedShare = await vsApi.window.showQuickPick(options, {
+          placeHolder: 'Select a key share to copy',
+          canPickMany: false
+        });
+        
+        if (selectedShare) {
+          await vsApi.env.clipboard.writeText(selectedShare.share);
+          vsApi.window.showInformationMessage('Key share copied to clipboard');
+        }
+        break;
+      }
+
+      case 'reconstructFromKeyShares': {
+        // Get the shares and label from the message
+        const { shares, label } = msg;
+        
+        if (!shares || shares.length < 2) {
+          vsApi.window.showErrorMessage('At least 2 key shares are required');
+          return;
+        }
+        
+        // Show a progress notification
+        vsApi.window.withProgress({
+          location: vsApi.ProgressLocation.Notification,
+          title: 'Reconstructing private key from shares...',
+          cancellable: false
+        }, async () => {
+          try {
+            const wif = await this._vault.reconstructFromKeyShares(shares);
+            
+            await this._vault.storeKey({
+              type: 'wif',
+              value: wif,
+              label: label || 'Reconstructed Key',
+              metadata: {
+                reconstructedAt: new Date().toISOString(),
+                fromShares: shares.length.toString()
+              }
+            });
+            
+            vsApi.window.showInformationMessage(
+              `Key successfully reconstructed from ${shares.length} shares and stored`
+            );
+            await this.updateContent();
+          } catch (error) {
+            vsApi.window.showErrorMessage(
+              `Failed to reconstruct key: ${error instanceof Error ? error.message : String(error)}`
+            );
+          }
+        });
+        
+        break;
+      }
+
+      case 'openSharesModal': {
+        // Send a message to the webview to open the shares modal
+        this._panel.webview.postMessage({
+          command: 'openSharesModal'
+        });
+        break;
+      }
+      
+      case 'showError': {
+        const { text } = msg;
+        if (text) {
+          vsApi.window.showErrorMessage(text);
+        }
+        break;
+      }
     }
   }
 

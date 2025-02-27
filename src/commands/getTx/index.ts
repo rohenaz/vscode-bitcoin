@@ -1,5 +1,5 @@
 import { Transaction, Utils } from '@bsv/sdk';
-import { BobTx, TransformTx } from 'bmapjs';
+import { type BobTx, TransformTx } from 'bmapjs';
 import { parse } from 'bpu-ts';
 import { JUNGLEBUS_API_HOST } from '../../constants';
 import type { OutputManager } from '../../output';

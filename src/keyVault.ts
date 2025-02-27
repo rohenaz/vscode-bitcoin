@@ -21,7 +21,10 @@ export type KeyType =
   | 'hdprivate'
   | 'hdpublic'
   | 'mnemonic'
-  | 'encryption';
+  | 'encryption'
+  | 'identity'
+  | 'funding'
+  | 'keyshare';
 
 export interface KeyEntry {
   id: string;
@@ -31,6 +34,11 @@ export interface KeyEntry {
   timestamp: number;
   metadata?: Record<string, string>;
   isEncryptionKey?: boolean;
+  isIdentityKey?: boolean;
+  isFundingKey?: boolean;
+  keyShares?: string[];
+  keyShareThreshold?: number;
+  parentKeyId?: string;
 }
 
 export class KeyVault {
@@ -291,6 +299,11 @@ export class KeyVault {
     const idx = this.decryptedKeys.findIndex((k) => k.id === id);
     if (idx < 0) throw new Error('Key not found');
 
+    // Prevent key from being both encryption and identity key
+    if (this.decryptedKeys[idx].isIdentityKey) {
+      throw new Error('A key cannot be both an encryption key and an identity key');
+    }
+
     this.decryptedKeys = this.decryptedKeys.map((k) => ({
       ...k,
       isEncryptionKey: k.id === id,
@@ -309,5 +322,160 @@ export class KeyVault {
     }));
     await this.saveVault();
     this.onKeyListChanged.fire();
+  }
+
+  public async getIdentityKey(): Promise<KeyEntry | undefined> {
+    await this.checkUnlock();
+    return this.decryptedKeys?.find((k) => k.isIdentityKey);
+  }
+
+  public async setIdentityKey(id: string): Promise<void> {
+    await this.checkUnlock();
+    if (!this.decryptedKeys) return;
+
+    const idx = this.decryptedKeys.findIndex((k) => k.id === id);
+    if (idx < 0) throw new Error('Key not found');
+
+    // Prevent key from being both encryption and identity key
+    if (this.decryptedKeys[idx].isEncryptionKey) {
+      throw new Error('A key cannot be both an encryption key and an identity key');
+    }
+
+    this.decryptedKeys = this.decryptedKeys.map((k) => ({
+      ...k,
+      isIdentityKey: k.id === id,
+    }));
+    await this.saveVault();
+    this.onKeyListChanged.fire();
+  }
+
+  public async clearIdentityKey(): Promise<void> {
+    await this.checkUnlock();
+    if (!this.decryptedKeys) return;
+
+    this.decryptedKeys = this.decryptedKeys.map((k) => ({
+      ...k,
+      isIdentityKey: false,
+    }));
+    await this.saveVault();
+    this.onKeyListChanged.fire();
+  }
+
+  public async getFundingKey(): Promise<KeyEntry | undefined> {
+    await this.checkUnlock();
+    return this.decryptedKeys?.find((k) => k.isFundingKey);
+  }
+
+  public async setFundingKey(id: string): Promise<void> {
+    await this.checkUnlock();
+    if (!this.decryptedKeys) return;
+
+    const idx = this.decryptedKeys.findIndex((k) => k.id === id);
+    if (idx < 0) throw new Error('Key not found');
+
+    // Prevent key from being both encryption/identity and funding key
+    if (this.decryptedKeys[idx].isEncryptionKey || this.decryptedKeys[idx].isIdentityKey) {
+      throw new Error('A key cannot be both a funding key and an encryption/identity key');
+    }
+
+    this.decryptedKeys = this.decryptedKeys.map((k) => ({
+      ...k,
+      isFundingKey: k.id === id,
+    }));
+    await this.saveVault();
+    this.onKeyListChanged.fire();
+  }
+
+  public async clearFundingKey(): Promise<void> {
+    await this.checkUnlock();
+    if (!this.decryptedKeys) return;
+
+    this.decryptedKeys = this.decryptedKeys.map((k) => ({
+      ...k,
+      isFundingKey: false,
+    }));
+    await this.saveVault();
+    this.onKeyListChanged.fire();
+  }
+
+  /**
+   * Generate key shares for a WIF key
+   * @param keyId The ID of the key to generate shares for
+   * @param threshold The minimum number of shares required to reconstruct the key
+   * @param totalShares The total number of shares to generate
+   * @returns The IDs of the generated key share entries
+   */
+  public async generateKeyShares(
+    keyId: string,
+    threshold: number,
+    totalShares: number
+  ): Promise<string[]> {
+    await this.checkUnlock();
+    if (!this.decryptedKeys) {
+      throw new Error('Vault is in an invalid state');
+    }
+
+    const keyEntry = this.decryptedKeys.find((k) => k.id === keyId);
+    if (!keyEntry) {
+      throw new Error('Key not found');
+    }
+
+    if (keyEntry.type !== 'wif') {
+      throw new Error('Key shares can only be generated for WIF keys');
+    }
+
+    try {
+      // Import the PrivateKey class from @bsv/sdk
+      const { PrivateKey } = await import('@bsv/sdk');
+      
+      // Create a PrivateKey instance from the WIF
+      const privKey = PrivateKey.fromWif(keyEntry.value);
+      
+      // Generate backup shares
+      const shares = privKey.toBackupShares(threshold, totalShares);
+      
+      // Store the shares in the key entry
+      const updatedKeyEntry = {
+        ...keyEntry,
+        keyShares: shares,
+        keyShareThreshold: threshold
+      };
+      
+      // Update the key entry in the vault
+      this.decryptedKeys = this.decryptedKeys.map((k) => 
+        k.id === keyId ? updatedKeyEntry : k
+      );
+      
+      await this.saveVault();
+      this.onKeyListChanged.fire();
+      
+      return shares;
+    } catch (error) {
+      throw new Error(`Failed to generate key shares: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  /**
+   * Reconstruct a private key from key shares
+   * @param shares The key shares to reconstruct from
+   * @returns The reconstructed WIF private key
+   */
+  public async reconstructFromKeyShares(shares: string[]): Promise<string> {
+    if (!shares || shares.length < 2) {
+      throw new Error('At least 2 shares are required to reconstruct the private key');
+    }
+
+    try {
+      // Import the PrivateKey class from @bsv/sdk
+      const { PrivateKey } = await import('@bsv/sdk');
+      
+      // Reconstruct the private key from the shares
+      const privKey = PrivateKey.fromBackupShares(shares);
+      
+      // Return the WIF
+      return privKey.toWif();
+    } catch (error) {
+      throw new Error(`Failed to reconstruct key from shares: ${error instanceof Error ? error.message : String(error)}`);
+    }
   }
 }

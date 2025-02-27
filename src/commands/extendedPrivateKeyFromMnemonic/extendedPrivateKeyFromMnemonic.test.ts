@@ -3,6 +3,7 @@ import { HD, Mnemonic } from '@bsv/sdk';
 import vscode from '@test/setup';
 import type { OutputManager } from '../../output';
 import { extendedPrivateKeyFromMnemonic } from './index';
+import type { KeyVault } from '../../keyVault';
 
 interface VSCodeOptions {
   placeHolder?: string;
@@ -18,6 +19,12 @@ const mockOutput = {
   handleOutput: mock(() => Promise.resolve()),
 } as unknown as OutputManager;
 
+const mockKeyVault = {
+  isAutoStoreEnabled: () => true,
+  checkUnlock: async () => {},
+  storeKey: async () => 'test-id',
+} as unknown as KeyVault;
+
 // Mock window.showInputBox
 const originalShowInputBox = vscode.window.showInputBox;
 
@@ -28,7 +35,7 @@ describe('extendedPrivateKeyFromMnemonic', () => {
       'solid drastic bone type leopard law virtual share agree way bacon noise';
     vscode.window.showInputBox = async () => validMnemonic;
 
-    const result = await extendedPrivateKeyFromMnemonic(mockOutput);
+    const result = await extendedPrivateKeyFromMnemonic(mockOutput, mockKeyVault);
 
     // Check return value format
     expect(result).toBeDefined();
@@ -48,7 +55,7 @@ describe('extendedPrivateKeyFromMnemonic', () => {
     // Mock cancelled input
     vscode.window.showInputBox = async () => '';
 
-    const result = await extendedPrivateKeyFromMnemonic(mockOutput);
+    const result = await extendedPrivateKeyFromMnemonic(mockOutput, mockKeyVault);
     expect(result).toBeUndefined();
   });
 
@@ -56,7 +63,7 @@ describe('extendedPrivateKeyFromMnemonic', () => {
     // Mock invalid mnemonic input (not 12 words)
     vscode.window.showInputBox = async () => '';
 
-    const result = await extendedPrivateKeyFromMnemonic(mockOutput);
+    const result = await extendedPrivateKeyFromMnemonic(mockOutput, mockKeyVault);
     expect(result).toBeUndefined();
   });
 

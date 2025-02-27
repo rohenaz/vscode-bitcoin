@@ -13,11 +13,13 @@ const mockOutput = {
 type KeyEntryInput = Omit<KeyEntry, 'id' | 'timestamp'>;
 const storeKeyMock = mock<(entry: KeyEntryInput) => Promise<string>>(() => Promise.resolve('test-id'));
 const isAutoStoreEnabledMock = mock<() => boolean>(() => true);
+const checkUnlockMock = mock<() => Promise<void>>(() => Promise.resolve());
 
 const mockKeyVault = {
   storeKey: storeKeyMock,
   isAutoStoreEnabled: isAutoStoreEnabledMock,
   isUnlocked: true,
+  checkUnlock: checkUnlockMock,
 } as unknown as KeyVault;
 
 // Mock window.showErrorMessage

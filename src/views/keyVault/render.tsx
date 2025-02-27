@@ -38,18 +38,26 @@ export function renderKeyRecursive(
   indent: number,
 ): JSX.Element {
   return (
-    <div class={`key-card indent-${indent}`} data-keyid={k.id}>
+    <div 
+      class={`key-card ${indent ? `indent-${indent}` : ''}`} 
+      data-keyid={k.id}
+      data-is-encryption-key={k.isEncryptionKey}
+      data-is-identity-key={k.isIdentityKey}
+      data-is-funding-key={k.isFundingKey}
+    >
       <div class="key-top">
         <div class="key-type-container">
           <div class={`key-type type-${k.type}`}>{k.type}</div>
+          {k.isEncryptionKey && <div class="key-badge encryption">Encryption Key</div>}
+          {k.isIdentityKey && <div class="key-badge identity">Identity Key</div>}
+          {k.isFundingKey && <div class="key-badge funding">Funding Key</div>}
           <div
             class="key-label"
             data-cmd="editLabel"
             data-id={k.id}
             data-currentlabel={k.label || ''}
-            safe
           >
-            {k.label || 'Untitled'}
+            {escapeHtml(k.label || '')}
           </div>
         </div>
         <div class="key-actions">{renderActions(k)}</div>
@@ -59,9 +67,6 @@ export function renderKeyRecursive(
         <div safe>{new Date(k.timestamp).toLocaleString()}</div>
         <div style="display: flex; align-items: center; gap: 8px;">
           {renderChildMetadata(k)}
-          {k.isEncryptionKey && (
-            <span class="encryption-key-badge">Default Encryption Key</span>
-          )}
         </div>
       </div>
 
@@ -106,6 +111,13 @@ function renderChildMetadata(k: KeyEntry): JSX.Element {
       <div style="font-size:0.85rem; color: var(--description-fg);" safe>
         {m.type42OtherPub && <>OtherPub: {escapeHtml(m.type42OtherPub)}</>}
         {m.type42Invoice && <> / Invoice: {escapeHtml(m.type42Invoice)}</>}
+      </div>
+    );
+  }
+  if (k.keyShares && k.keyShares.length > 0) {
+    return (
+      <div style="font-size:0.85rem; color: var(--description-fg);">
+        Key Shares: {k.keyShares.length} shares (threshold: {k.keyShareThreshold})
       </div>
     );
   }
@@ -255,7 +267,7 @@ function renderFormatBadges(k: KeyEntry): JSX.Element[] {
  * Action buttons for key management
  */
 export function renderActions(k: KeyEntry): JSX.Element[] {
-  const buttons: JSX.Element[] = [];
+  const actions: JSX.Element[] = [];
   const singlePriv =
     k.type === 'private' ||
     k.type === 'wif' ||
@@ -266,7 +278,7 @@ export function renderActions(k: KeyEntry): JSX.Element[] {
     k.type === 'mnemonic';
 
   if (singlePriv) {
-    buttons.push(
+    actions.push(
       <button
         class="key-button"
         data-cmd="publicChild"
@@ -285,21 +297,50 @@ export function renderActions(k: KeyEntry): JSX.Element[] {
       </button>,
     );
     if (!k.isEncryptionKey) {
-      buttons.push(
+      actions.push(
         <button
           class="key-button"
           data-cmd="setEncryptionKey"
           data-id={k.id}
           type="button"
         >
-          Set Default
+          + Encryption
         </button>,
       );
     }
   }
 
+  // Add key shares action for WIF keys
+  if (k.type === 'wif') {
+    if (k.keyShares && k.keyShares.length > 0) {
+      actions.push(
+        <button
+          class="key-button"
+          data-cmd="viewKeyShares"
+          data-id={k.id}
+          type="button"
+          title="View Key Shares"
+        >
+          Shares
+        </button>
+      );
+    } else {
+      actions.push(
+        <button
+          class="key-button"
+          data-cmd="generateKeyShares"
+          data-id={k.id}
+          type="button"
+          title="Generate Key Shares"
+        >
+          + Shares
+        </button>
+      );
+    }
+  }
+
   if (hdType) {
-    buttons.push(
+    actions.push(
       <button
         class="key-button"
         data-cmd="bip32Child"
@@ -312,7 +353,7 @@ export function renderActions(k: KeyEntry): JSX.Element[] {
   }
 
   if (k.type === 'public') {
-    buttons.push(
+    actions.push(
       <button 
         class="key-button" 
         data-cmd="viewOnChain" 
@@ -325,7 +366,35 @@ export function renderActions(k: KeyEntry): JSX.Element[] {
     );
   }
 
-  buttons.push(
+  // Add "Set as Funding Key" action for WIF keys
+  if (k.type === 'wif' && !k.isFundingKey) {
+    actions.push(
+      <button
+        class="key-button"
+        data-cmd="setFundingKey"
+        data-id={k.id}
+        type="button"
+      >
+        + Funding
+      </button>
+    );
+  }
+
+  // Add "Clear Funding Key" action for funding keys
+  if (k.isFundingKey) {
+    actions.push(
+      <button
+        class="key-button"
+        data-cmd="clearFundingKey"
+        data-id={k.id}
+        type="button"
+      >
+        - Funding
+      </button>
+    );
+  }
+
+  actions.push(
     <button
       class="key-button"
       data-cmd="deleteKey"
@@ -336,7 +405,7 @@ export function renderActions(k: KeyEntry): JSX.Element[] {
     </button>,
   );
 
-  return buttons;
+  return actions;
 }
 
 /**

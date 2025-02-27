@@ -16,12 +16,21 @@ interface ScriptTemplate {
 export class TemplateManager {
   private templates: ScriptTemplate[] = [];
   private templatesDir: string;
+  private initialized = false;
 
   constructor(templatesDir: string) {
     this.templatesDir = templatesDir;
   }
 
-  loadTemplates(): void {
+  private async ensureInitialized(): Promise<void> {
+    if (!this.initialized) {
+      // await this.initializeDefaultTemplates();
+      this.loadTemplates();
+      this.initialized = true;
+    }
+  }
+
+  async loadTemplates(): Promise<void> {
     // Attempt to read all .json files in the templatesDir
     if (!fs.existsSync(this.templatesDir)) {
       return;
@@ -45,12 +54,13 @@ export class TemplateManager {
     }
   }
 
-  getTemplates(): ScriptTemplate[] {
+  async getTemplates(): Promise<ScriptTemplate[]> {
+    await this.ensureInitialized();
     return this.templates;
   }
 
   // Initialize templates directory with default P2PKH template if needed
-  async initializeDefaultTemplates(): Promise<void> {
+  private async initializeDefaultTemplates(): Promise<void> {
     if (!fs.existsSync(this.templatesDir)) {
       fs.mkdirSync(this.templatesDir, { recursive: true });
       

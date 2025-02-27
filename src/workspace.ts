@@ -1,7 +1,8 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { Utils } from '@bsv/sdk';
-import vsApi, { Uri, isUri } from './vsShim';
+import vsApi, { isUri } from './vsShim';
+import type { Uri } from './vsShim';
 
 interface WorkspaceConfig {
   path: string;
@@ -15,6 +16,7 @@ export class WorkspaceManager {
   private detectContentType: boolean;
   private organizeFolders: boolean;
   private isTestMode: boolean;
+  private gitignoreChecked = false;
 
   constructor(workspacePath?: string) {
     // If workspacePath is provided, use it directly (test mode)
@@ -33,11 +35,11 @@ export class WorkspaceManager {
       if (!vsApi?.workspace?.workspaceFolders?.length) {
         // No workspace open, use a temporary directory or user's home directory
         this.workspaceRoot = process.env.HOME || process.env.USERPROFILE || '.';
-        if (vsApi?.window?.showWarningMessage) {
-          vsApi.window.showWarningMessage(
-            'No workspace open. Bitcoin files will be stored in your home directory.',
-          );
-        }
+        // if (vsApi?.window?.showWarningMessage) {
+        //   vsApi.window.showWarningMessage(
+        //     'No workspace open. Bitcoin files will be stored in your home directory.',
+        //   );
+        // }
       } else {
         this.workspaceRoot = vsApi.workspace.workspaceFolders[0].uri.fsPath;
       }
@@ -46,69 +48,29 @@ export class WorkspaceManager {
       this.detectContentType = config.detectContentType;
       this.organizeFolders = config.organizeFolders;
     }
-
-    try {
-      // Create workspace directory if it doesn't exist
-      if (!fs.existsSync(this.workspacePath)) {
-        fs.mkdirSync(this.workspacePath, { recursive: true });
-      }
-
-      // Only check gitignore if we're not in test mode and VS Code API is available
-      if (!this.isTestMode && vsApi?.workspace) {
-        this.checkGitIgnore();
-      }
-    } catch (error) {
-      if (!this.isTestMode && vsApi?.window?.showErrorMessage) {
-        vsApi.window.showErrorMessage(
-          `Failed to create Bitcoin workspace: ${
-            error instanceof Error ? error.message : String(error)
-          }`,
-        );
-      }
-      throw error; // Re-throw to prevent extension from activating in an invalid state
-    }
   }
 
   private getWorkspaceConfig(): WorkspaceConfig {
-    // Default configuration
-    const defaultConfig: WorkspaceConfig = {
-      path: '.bitcoin',
-      detectContentType: true,
-      organizeFolders: true,
+    const config = vsApi.workspace.getConfiguration('bitcoin');
+    return {
+      path: config.get('workspace.path') || '.bitcoin',
+      detectContentType: config.get('workspace.detectContentType') ?? true,
+      organizeFolders: config.get('workspace.organizeFolders') ?? true,
     };
-
-    // If VS Code API is not available or we're in test mode, return defaults
-    if (!vsApi?.workspace?.getConfiguration) {
-      return defaultConfig;
-    }
-
-    try {
-      const config = vsApi.workspace.getConfiguration('bitcoin');
-      return {
-        path: config.get('workspace.path') ?? defaultConfig.path,
-        detectContentType:
-          config.get('workspace.detectContentType') ??
-          defaultConfig.detectContentType,
-        organizeFolders:
-          config.get('workspace.organizeFolders') ??
-          defaultConfig.organizeFolders,
-      };
-    } catch (error) {
-      console.warn(
-        'Failed to get VS Code configuration, using defaults:',
-        error,
-      );
-      return defaultConfig;
-    }
   }
 
   /**
    * Check if .bitcoin is properly ignored in git
    */
-  private checkGitIgnore(): void {
+  private async ensureWorkspaceReady(): Promise<void> {
+    if (this.gitignoreChecked) {
+      return;
+    }
+
     // First check if this is a git repository
     const gitPath = path.join(this.workspaceRoot, '.git');
     if (!fs.existsSync(gitPath)) {
+      this.gitignoreChecked = true;
       return; // Not a git repository, skip gitignore check
     }
 
@@ -117,10 +79,20 @@ export class WorkspaceManager {
     try {
       // If .gitignore doesn't exist in a git repo, create it
       if (!fs.existsSync(gitignorePath)) {
+        const addToGitignore = 'Add to .gitignore';
+        const result = await vsApi.window.showWarningMessage(
+          'This is a git repository. The .bitcoin directory should be added to .gitignore to prevent committing sensitive data.',
+          addToGitignore,
+          'Cancel'
+        );
+        if (result !== addToGitignore) {
+          throw new Error('User cancelled workspace creation');
+        }
         fs.writeFileSync(gitignorePath, '.bitcoin\n');
         vsApi.window.showInformationMessage(
           'Created .gitignore with .bitcoin workspace ignored',
         );
+        this.gitignoreChecked = true;
         return;
       }
 
@@ -142,27 +114,24 @@ export class WorkspaceManager {
         const message =
           'Warning: .bitcoin workspace is not in .gitignore. This directory may contain sensitive data.';
         const addToGitignore = 'Add to .gitignore';
-
-        vsApi.window
-          .showWarningMessage(message, addToGitignore)
-          .then((selection) => {
-            if (selection === addToGitignore) {
-              try {
-                // Append .bitcoin to .gitignore
-                fs.appendFileSync(gitignorePath, '\n.bitcoin\n');
-                vsApi.window.showInformationMessage(
-                  '.bitcoin workspace added to .gitignore',
-                );
-              } catch (error) {
-                console.error('Failed to update .gitignore:', error);
-                vsApi.window.showErrorMessage('Failed to update .gitignore');
-              }
-            }
-          });
+        const result = await vsApi.window.showWarningMessage(
+          message,
+          addToGitignore,
+          'Cancel'
+        );
+        if (result !== addToGitignore) {
+          throw new Error('User cancelled workspace creation');
+        }
+        // Append .bitcoin to .gitignore
+        fs.appendFileSync(gitignorePath, '\n.bitcoin\n');
+        vsApi.window.showInformationMessage(
+          '.bitcoin workspace added to .gitignore',
+        );
       }
+      this.gitignoreChecked = true;
     } catch (error) {
       console.error('Failed to check .gitignore:', error);
-      vsApi.window.showErrorMessage('Failed to check .gitignore configuration');
+      throw error;
     }
   }
 
@@ -178,23 +147,26 @@ export class WorkspaceManager {
     type: string,
     suggestedName?: string,
   ): Promise<Uri | { fsPath: string }> {
+    // Only check workspace readiness when we're about to save
+    await this.ensureWorkspaceReady();
+
     const timestamp = Date.now();
     const name = suggestedName ?? type;
     const sanitizedName = this.sanitizeFilename(`${name}_${timestamp}`);
 
-    // Get the target directory
+    // Get the target directory path (but don't create it yet)
     const targetDir = this.organizeFolders
       ? path.join(this.workspacePath, type)
       : this.workspacePath;
 
-    // Create directory if it doesn't exist
-    if (!fs.existsSync(targetDir)) {
-      fs.mkdirSync(targetDir, { recursive: true });
-    }
-
     // Generate unique filename
     const filename = await this.ensureUniqueFilename(targetDir, sanitizedName);
     const filePath = path.join(targetDir, filename);
+
+    // Only create directories when we're actually going to write a file
+    if (!fs.existsSync(targetDir)) {
+      fs.mkdirSync(targetDir, { recursive: true });
+    }
 
     // Save the file
     fs.writeFileSync(filePath, data);

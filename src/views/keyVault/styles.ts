@@ -42,13 +42,21 @@ body {
   border: 1px solid var(--input-border);
   border-radius: 2px;
 }
-input, select, button {
+input, select, button, textarea {
   font-family: inherit;
   font-size: inherit;
 }
-input:focus, select:focus, button:focus {
+input:focus, select:focus, button:focus, textarea:focus {
   outline: 1px solid var(--focus-border);
-  border-color: var(--focus-border);
+}
+textarea {
+  background: var(--input-bg);
+  color: var(--input-fg);
+  border: 1px solid var(--input-border);
+  border-radius: 2px;
+  padding: 8px;
+  resize: vertical;
+  min-height: 100px;
 }
 .add-key-button {
   background: var(--primary-btn);
@@ -120,11 +128,22 @@ input:focus, select:focus, button:focus {
 .type-mnemonic { background: #555533; }
 .type-encryption { background: #444444; }
 .key-badge {
-  background: var(--vscode-badge-background);
-  color: var(--vscode-badge-foreground);
-  border-radius: 3px;
-  font-size: 0.7rem;
-  padding: 1px 4px;
+  font-size: 11px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  margin-left: 8px;
+}
+.key-badge.encryption {
+  background: var(--vscode-gitDecoration-addedResourceForeground);
+  color: var(--vscode-button-foreground);
+}
+.key-badge.identity {
+  background: var(--vscode-gitDecoration-modifiedResourceForeground);
+  color: var(--vscode-button-foreground);
+}
+.key-badge.funding {
+  background: var(--vscode-gitDecoration-untrackedResourceForeground);
+  color: var(--vscode-button-foreground);
 }
 .key-value {
   font-family: var(--vscode-editor-font-family, monospace);
@@ -349,5 +368,77 @@ button.secondary:hover {
 button:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+.key-card[data-is-encryption-key="true"] {
+  border: 2px solid var(--vscode-gitDecoration-addedResourceForeground);
+}
+.key-card[data-is-identity-key="true"] {
+  border: 2px solid var(--vscode-gitDecoration-modifiedResourceForeground);
+}
+.key-card[data-is-funding-key="true"] {
+  border: 2px solid var(--vscode-gitDecoration-untrackedResourceForeground);
+}
+.header-buttons {
+  display: flex;
+  gap: 8px;
+}
+.btn {
+  padding: 4px 8px;
+  background: var(--vscode-button-background);
+  color: var(--vscode-button-foreground);
+  border: none;
+  border-radius: 2px;
+  cursor: pointer;
+}
+.btn:hover {
+  background: var(--vscode-button-hoverBackground);
+}
+#sharesModal {
+  display: none;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  z-index: 1000;
+  justify-content: center;
+  align-items: center;
+}
+
+#sharesModal .modal-content {
+  background-color: var(--bg);
+  border-radius: 4px;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+  width: 90%;
+  max-width: 500px;
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+#sharesModal .modal-header {
+  padding: 16px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+#sharesModal .modal-body {
+  padding: 16px;
+}
+
+#sharesModal .modal-actions {
+  padding: 16px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  justify-content: space-between;
+}
+
+#sharesInput {
+  min-height: 150px;
+  font-family: monospace;
+  width: 100%;
+  resize: vertical;
 }
 `;

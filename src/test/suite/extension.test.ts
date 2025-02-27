@@ -340,7 +340,9 @@ describe('Bitcoin Extension Tests', () => {
       'bitcoin.decodeHex',
       'bitcoin.decodeBase64',
       'bitcoin.exploreAddress',
-      'bitcoin.resetExtension'
+      'bitcoin.resetExtension',
+      'bitcoin.signOpReturnData',
+      'bitcoin.sendTransaction',
     ];
 
     for (const cmd of expectedCommands) {

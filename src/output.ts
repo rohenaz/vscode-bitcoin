@@ -2,11 +2,7 @@ import vsApi, { OutputChannel } from './vsShim';
 import { WorkspaceManager } from './workspace';
 
 export class OutputManager {
-  private workspaceManager: WorkspaceManager;
-
-  constructor() {
-    this.workspaceManager = new WorkspaceManager();
-  }
+  private workspaceManager?: WorkspaceManager;
 
   private getOutputPreference(
     command: string,
@@ -17,11 +13,8 @@ export class OutputManager {
     }
 
     const config = vsApi.workspace.getConfiguration('bitcoin');
-    const prefs = config.get('outputPreference') as Record<string, string>;
-    return (prefs?.[command] || 'clipboard') as
-      | 'clipboard'
-      | 'file'
-      | 'workspace';
+    const preference = config.get('outputPreference') as 'clipboard' | 'file' | 'workspace';
+    return preference || 'clipboard';
   }
 
   public async handleOutput(
@@ -35,7 +28,17 @@ export class OutputManager {
     switch (preference) {
       case 'clipboard': {
         await vsApi.env.clipboard.writeText(data);
-        vsApi.window.showInformationMessage('Output copied to clipboard!');
+        const changeSettings = 'Change Output Settings';
+        const result = await vsApi.window.showInformationMessage(
+          'Output copied to clipboard!',
+          changeSettings,
+        );
+        if (result === changeSettings) {
+          await vsApi.commands.executeCommand(
+            'workbench.action.openSettings',
+            'bitcoin.outputPreference',
+          );
+        }
         break;
       }
 
@@ -53,6 +56,9 @@ export class OutputManager {
 
       case 'workspace': {
         try {
+          if (!this.workspaceManager) {
+            this.workspaceManager = new WorkspaceManager();
+          }
           const uri = await this.workspaceManager.saveFile(data, type, name);
           vsApi.window.showInformationMessage(`File saved: ${uri.fsPath}`);
           const doc = await vsApi.workspace.openTextDocument(
@@ -79,10 +85,10 @@ export class OutputManager {
     mimeType?: string,
   ): Promise<void> {
     try {
-      const uri = await this.workspaceManager.detectAndConvertContent(
-        data,
-        mimeType,
-      );
+      if (!this.workspaceManager) {
+        this.workspaceManager = new WorkspaceManager();
+      }
+      const uri = await this.workspaceManager.detectAndConvertContent(data, mimeType);
       if (uri) {
         const openFile = 'Open File';
         const result = await vsApi.window.showInformationMessage(

@@ -10,12 +10,7 @@ export async function generateWIF(output: OutputManager, keyVault: KeyVault) {
 
     // Only store in vault if auto-store is enabled
     if (keyVault.isAutoStoreEnabled()) {
-      // Check if vault is locked before attempting to store
-      if (!keyVault.isUnlocked) {
-        throw new Error('Vault is locked. Please unlock before storing keys.');
-      }
-
-      // Store WIF only
+      await keyVault.checkUnlock();
       await keyVault.storeKey({
         type: 'wif',
         value: wif,

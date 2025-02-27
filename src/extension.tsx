@@ -1,4 +1,4 @@
-import { HD, P2PKH, Utils } from '@bsv/sdk';
+import { ECIES, HD, P2PKH, PrivateKey, PublicKey, Utils } from '@bsv/sdk';
 import vsApi from 'vscode';
 import { BitcoinHoverProvider } from './hoverProvider';
 import { TemplateManager } from './scriptTemplates';
@@ -46,93 +46,41 @@ import { BitcoinSemanticTokensProvider } from './semanticTokens';
 import { generateHDPublicKey } from './commands/generateHDPublicKey';
 import { generateHDPrivateKey } from './commands/generateHDPrivateKey';
 import { resetExtension } from './commands/resetExtension';
+import { signOpReturnData } from './commands/signOpReturnData';
+import { sendTransaction } from './commands/sendTransaction';
 
 const { fromBase58Check, toBase64, toArray } = Utils;
 
-function registerCommand(
+function registerCommand<T>(
   context: ExtensionContext,
   outputManager: OutputManager,
   command: string,
-  handler: () => Promise<
+  handler: (params?: T) => Promise<
     { data: string; type: string; name?: string } | undefined
   >,
 ): void {
-  const disposable = vsApi.commands.registerCommand(command, async () => {
-    try {
-      const result = await handler();
-      if (result) {
-        await outputManager.handleOutput(
-          result.data,
-          command.replace('bitcoin.', ''),
-          result.type,
-          result.name,
+  context.subscriptions.push(
+    vsApi.commands.registerCommand(command, async (params?: T) => {
+      try {
+        const result = await handler(params);
+        if (result) {
+          await outputManager.handleOutput(
+            result.data,
+            command,
+            result.type,
+            result.name,
+          );
+        }
+      } catch (error) {
+        vsApi.window.showErrorMessage(
+          `Command failed: ${error instanceof Error ? error.message : String(error)
+          }`,
         );
+        throw error;
       }
-    } catch (error) {
-      vsApi.window.showErrorMessage(
-        `Command failed: ${
-          error instanceof Error ? error.message : 'Unknown error'
-        }`,
-      );
-    }
-  });
-  context.subscriptions.push(disposable);
-}
-
-interface Utxo {
-  txid: string;
-  vout: number;
-  satoshis: number;
-  script: string;
-}
-
-const fetchPayUtxos = async (
-  address: string,
-  scriptEncoding: 'hex' | 'base64' | 'asm' = 'base64',
-): Promise<Utxo[]> => {
-  const payUrl = `${API_HOST}/txos/address/${address}/unspent?bsv20=false`;
-  console.log({ payUrl });
-  const payRes = await fetch(payUrl);
-  if (payRes.status === 404) {
-    return []; // No UTXOs found for this address
-  }
-  if (!payRes.ok) {
-    const error = await payRes
-      .json()
-      .catch(() => ({ message: payRes.statusText }));
-    // If it's a checksum mismatch, it might be a BAP ID
-    if (error instanceof Error && error.message === 'Checksum mismatch') {
-      throw new Error(
-        'Invalid address format. If this is a BAP ID, please use the BAP lookup command instead.',
-      );
-    }
-    throw new Error(
-      `Error fetching pay utxos: ${payRes.status} ${
-        error instanceof Error ? error.message : payRes.statusText
-      }`,
-    );
-  }
-  let payUtxos = await payRes.json() as Utxo[];
-  // exclude all 1 satoshi utxos and locked utxos
-  payUtxos = payUtxos.filter(
-    (u: Utxo & { lock?: { address: string; until: number } }) =>
-      u.satoshis !== 1 && !u.lock,
+    }),
   );
-
-  // Get pubkey hash from address
-  const pubKeyHash = fromBase58Check(address);
-  const p2pkhScript = new P2PKH().lock(pubKeyHash.data);
-  payUtxos = payUtxos.map((utxo) => ({
-    txid: utxo.txid,
-    vout: utxo.vout,
-    satoshis: utxo.satoshis,
-    script:
-      scriptEncoding === 'hex' || scriptEncoding === 'base64'
-        ? Buffer.from(p2pkhScript.toBinary()).toString(scriptEncoding)
-        : p2pkhScript.toASM(),
-  }));
-  return payUtxos as Utxo[];
-};
+}
 
 export type ImageContentType =
   | 'image/png'
@@ -179,9 +127,9 @@ interface Inscription {
         type: string | ImageContentType;
       };
       json?:
-        | TokenInscription
-        | TransferBSV20Inscription
-        | TransferBSV21Inscription;
+      | TokenInscription
+      | TransferBSV20Inscription
+      | TransferBSV21Inscription;
     };
     types?: string[];
     bsv20?: {
@@ -200,9 +148,9 @@ interface Inscription {
           type: string | ImageContentType;
         };
         json?:
-          | TokenInscription
-          | TransferBSV20Inscription
-          | TransferBSV21Inscription;
+        | TokenInscription
+        | TransferBSV20Inscription
+        | TransferBSV21Inscription;
       };
     };
     num?: string;
@@ -252,9 +200,9 @@ export async function activate(context: ExtensionContext) {
   if (workspaceRoot) {
     const templatesDir = path.join(workspaceRoot, '.bitcoin', 'templates');
     const templateManager = new TemplateManager(templatesDir);
-    await templateManager.initializeDefaultTemplates();
+
     templateManager.loadTemplates();
-    
+
     // Register hover provider with template manager
     context.subscriptions.push(
       vsApi.languages.registerHoverProvider(
@@ -307,10 +255,18 @@ export async function activate(context: ExtensionContext) {
   const isTestMode = process.env.TEST_ENV === 'true';
 
   // Construct managers
-  const workspaceManager = new WorkspaceManager();
   const keyVault = new KeyVault(context);
   const encryptionService = new EncryptionService(keyVault);
   const outputManager = new OutputManager();
+
+  // Lazy workspace manager getter
+  let _workspaceManager: WorkspaceManager | undefined;
+  const getWorkspaceManager = () => {
+    if (!_workspaceManager && (vsApi.workspace.workspaceFolders?.length ?? 0) > 0) {
+      _workspaceManager = new WorkspaceManager();
+    }
+    return _workspaceManager;
+  };
 
   // Register conversion view provider
   const conversionViewProvider = new ConversionViewProvider(
@@ -389,27 +345,27 @@ export async function activate(context: ExtensionContext) {
   );
 
   // Register key generation commands with keyVault for parent-child relationships
-  registerCommand(context, outputManager, 'bitcoin.generatePublicKey', () => 
+  registerCommand(context, outputManager, 'bitcoin.generatePublicKey', () =>
     generatePublicKey(outputManager, keyVault)
   );
 
-  registerCommand(context, outputManager, 'bitcoin.generateHDPublicKey', () => 
+  registerCommand(context, outputManager, 'bitcoin.generateHDPublicKey', () =>
     generateHDPublicKey(outputManager, keyVault)
   );
 
-  registerCommand(context, outputManager, 'bitcoin.generateHDPrivateKey', () => 
+  registerCommand(context, outputManager, 'bitcoin.generateHDPrivateKey', () =>
     generateHDPrivateKey(outputManager, keyVault)
   );
 
-  registerCommand(context, outputManager, 'bitcoin.generatePrivateKey', () => 
+  registerCommand(context, outputManager, 'bitcoin.generatePrivateKey', () =>
     generatePrivateKey(outputManager, keyVault)
   );
 
-  registerCommand(context, outputManager, 'bitcoin.generateWIF', () => 
+  registerCommand(context, outputManager, 'bitcoin.generateWIF', () =>
     generateWIF(outputManager, keyVault)
   );
 
-  registerCommand(context, outputManager, 'bitcoin.generateMnemonic', () => 
+  registerCommand(context, outputManager, 'bitcoin.generateMnemonic', () =>
     generateMnemonic(outputManager, keyVault)
   );
 
@@ -496,7 +452,7 @@ export async function activate(context: ExtensionContext) {
     outputManager,
     'bitcoin.extendedPrivateKeyFromMnemonic',
     async () => {
-      return extendedPrivateKeyFromMnemonic(outputManager);
+      return extendedPrivateKeyFromMnemonic(outputManager, keyVault);
     },
   );
 
@@ -518,6 +474,84 @@ export async function activate(context: ExtensionContext) {
     },
   );
 
+  // Register signOpReturnData command
+  context.subscriptions.push(
+    vsApi.commands.registerCommand('bitcoin.encryptToFriend', async (params: { message: string, targetBapId: string, themPubKey: string }) => {
+      try {
+        const { message, targetBapId, themPubKey } = params;
+
+        const friendKey = await friendPrivateKeyFromMemberIdKey(targetBapId);
+        return encryptToFriend(friendKey, message, targetBapId, PublicKey.fromString(themPubKey));
+      } catch (error) {
+        vsApi.window.showErrorMessage(
+          `Failed to encrypt message: ${error instanceof Error ? error.message : String(error)}`
+        );
+        throw error;
+      }
+    })
+  );
+
+  const friendPrivateKeyFromMemberIdKey = async (
+    targetBapId: string
+  ) => {
+    const identityKey = await keyVault.getIdentityKey();
+    if (!identityKey) {
+      throw new Error('Identity key not found');
+    }
+    const idKey = PrivateKey.fromWif(identityKey.value);
+    return idKey.deriveChild(idKey.toPublicKey(), targetBapId);
+  };
+
+  const encryptToFriend = async (privateKey: PrivateKey, message: string, targetBapId: string, friendPubKey: PublicKey) => {
+    const seedStr = friendPubKey ? targetBapId : "notes";
+    const idPrivateKey = await friendPrivateKeyFromMemberIdKey(seedStr);
+
+    let encrypted: number[];
+    const messageBytes = new TextEncoder().encode(message);
+    const messageArray = Array.from(messageBytes);
+    if (!friendPubKey) {
+      encrypted = ECIES.electrumEncrypt(
+        messageArray,
+        idPrivateKey.toPublicKey()
+      );
+    } else {
+      encrypted = ECIES.electrumEncrypt(
+        messageArray,
+        friendPubKey,
+        idPrivateKey
+      );
+    }
+    return encrypted;
+  };
+
+  // Register signOpReturnData command
+  context.subscriptions.push(
+    vsApi.commands.registerCommand('bitcoin.signOpReturnData', async (params?: { data: number[][] }) => {
+      try {
+        return signOpReturnData(keyVault, params);
+      } catch (error) {
+        vsApi.window.showErrorMessage(
+          `Failed to sign message: ${error instanceof Error ? error.message : String(error)}`
+        );
+        throw error;
+      }
+    })
+  );
+
+  // Register sendTransaction command
+  context.subscriptions.push(
+    vsApi.commands.registerCommand('bitcoin.sendTransaction', async (params?: { outputs: { satoshis: number; script: string }[]; scriptEncoding?: 'hex' | 'base64' | 'asm' }) => {
+      try {
+        return sendTransaction(keyVault, params?.outputs || [], params?.scriptEncoding);
+      } catch (error) {
+        vsApi.window.showErrorMessage(
+          `Failed to send transaction: ${error instanceof Error ? error.message : String(error)}`
+        );
+        throw error;
+      }
+    })
+  );
+
   // Register output handler
   context.subscriptions.push(
     vsApi.commands.registerCommand(
@@ -529,14 +563,16 @@ export async function activate(context: ExtensionContext) {
         try {
           switch (preference) {
             case 'workspace': {
-              const uri = await workspaceManager.saveFile(
+              const uri = await getWorkspaceManager()?.saveFile(
                 output,
                 type,
                 suggestedName,
               );
-              vsApi.window.showInformationMessage(
-                `Output saved to ${vsApi.workspace.asRelativePath(uri.fsPath)}`,
-              );
+              if (uri) {
+                vsApi.window.showInformationMessage(
+                  `Output saved to ${vsApi.workspace.asRelativePath(uri.fsPath)}`,
+                );
+              }
               break;
             }
 
@@ -578,8 +614,7 @@ export async function activate(context: ExtensionContext) {
           }
         } catch (error) {
           vsApi.window.showErrorMessage(
-            `Error handling output: ${
-              error instanceof Error ? error.message : String(error)
+            `Error handling output: ${error instanceof Error ? error.message : String(error)
             }`,
           );
         }
@@ -609,11 +644,10 @@ export async function activate(context: ExtensionContext) {
           return;
         }
 
-        await encrypt(encryptionService, workspaceManager, text);
+        await encrypt(encryptionService, getWorkspaceManager() ?? new WorkspaceManager(), text);
       } catch (error) {
         vsApi.window.showErrorMessage(
-          `Encryption failed: ${
-            error instanceof Error ? error.message : String(error)
+          `Encryption failed: ${error instanceof Error ? error.message : String(error)
           }`,
         );
       }
@@ -642,8 +676,7 @@ export async function activate(context: ExtensionContext) {
         await decrypt(encryptionService, text);
       } catch (error) {
         vsApi.window.showErrorMessage(
-          `Decryption failed: ${
-            error instanceof Error ? error.message : String(error)
+          `Decryption failed: ${error instanceof Error ? error.message : String(error)
           }`,
         );
       }
@@ -730,7 +763,7 @@ export async function activate(context: ExtensionContext) {
   );
 
   // Register reset extension command
-  registerCommand(context, outputManager, 'bitcoin.resetExtension', () => 
+  registerCommand(context, outputManager, 'bitcoin.resetExtension', () =>
     resetExtension(outputManager, context)
   );
 
@@ -857,11 +890,11 @@ export async function activate(context: ExtensionContext) {
     { scheme: 'file', language: 'json' },
     { scheme: 'file', language: 'markdown' }
   ];
-  
+
   console.log('Registering semantic tokens provider for languages:', selector);
   console.log('Token types:', semanticTokensProvider.legend.tokenTypes);
   console.log('Token modifiers:', semanticTokensProvider.legend.tokenModifiers);
-  
+
   try {
     const registration = vsApi.languages.registerDocumentSemanticTokensProvider(
       selector,
@@ -879,4 +912,4 @@ export async function activate(context: ExtensionContext) {
 }
 
 // this method is called when your extension is deactivated
-export function deactivate() {}
+export function deactivate() { }

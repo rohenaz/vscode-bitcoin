@@ -6,10 +6,10 @@ export function getPanelScript(payloadJson: string): string {
 (() => {
   const vscode = acquireVsCodeApi();
   
-  // Parse the payload safely - note that payloadJson is already stringified and escaped
+  // Parse the payload safely
   let payload = { keys: [], searchIndex: {} };
   try {
-    payload = JSON.parse(JSON.stringify(${payloadJson}));
+    payload = ${payloadJson};
   } catch(e) {
     console.warn('[KeyVault script] Failed to parse payload JSON:', e);
   }
@@ -26,6 +26,15 @@ export function getPanelScript(payloadJson: string): string {
         return;
       case 'closeModal':
         closeModal();
+        return;
+      case 'openSharesModal':
+        openSharesModal();
+        return;
+      case 'closeSharesModal':
+        closeSharesModal();
+        return;
+      case 'importBackup':
+        vscode.postMessage({ command: 'importBackup' });
         return;
     }
 
@@ -75,6 +84,14 @@ export function getPanelScript(payloadJson: string): string {
       case 'closeModal':
         closeModal();
         break;
+        
+      case 'openSharesModal':
+        openSharesModal();
+        break;
+        
+      case 'closeSharesModal':
+        closeSharesModal();
+        break;
 
       case 'generateRandom': {
         const sel = document.getElementById('keyType');
@@ -86,6 +103,14 @@ export function getPanelScript(payloadJson: string): string {
 
       case 'submitAddKey':
         submitAddKey();
+        break;
+        
+      case 'submitReconstructShares':
+        submitReconstructShares();
+        break;
+
+      case 'importBackup':
+        vscode.postMessage({ command: 'importBackup' });
         break;
 
       // No-op so we don't see "Unknown command: searchKeys":
@@ -115,6 +140,10 @@ export function getPanelScript(payloadJson: string): string {
       case 'publicChild':
       case 'p2pkhScript':
       case 'viewOnChain':
+      case 'setFundingKey':
+      case 'clearFundingKey':
+      case 'generateKeyShares':
+      case 'viewKeyShares':
         vscode.postMessage({ command: cmd, id });
         break;
 
@@ -136,6 +165,25 @@ export function getPanelScript(payloadJson: string): string {
     if (overlay) overlay.classList.remove('show');
     clearModalFields();
   }
+  
+  function openSharesModal() {
+    const modal = document.getElementById('sharesModal');
+    if (modal) {
+      modal.style.display = 'flex';
+      // Clear previous values
+      const labelInput = document.getElementById('sharesLabel');
+      const sharesInput = document.getElementById('sharesInput');
+      if (labelInput) labelInput.value = 'Reconstructed Key';
+      if (sharesInput) sharesInput.value = '';
+    }
+  }
+  
+  function closeSharesModal() {
+    const modal = document.getElementById('sharesModal');
+    if (modal) {
+      modal.style.display = 'none';
+    }
+  }
 
   function clearModalFields() {
     const sel = document.getElementById('keyType');
@@ -145,7 +193,7 @@ export function getPanelScript(payloadJson: string): string {
     if (lbl) lbl.value = '';
     if (val) val.value = '';
   }
-
+  
   function submitAddKey() {
     const sel = document.getElementById('keyType');
     const lbl = document.getElementById('keyLabel');
@@ -167,6 +215,40 @@ export function getPanelScript(payloadJson: string): string {
       label: labelVal || \`Imported \${t} Key\`,
     });
     closeModal();
+  }
+  
+  function submitReconstructShares() {
+    const labelInput = document.getElementById('sharesLabel');
+    const sharesInput = document.getElementById('sharesInput');
+    
+    if (!sharesInput || !labelInput) return;
+    
+    const label = labelInput.value.trim() || 'Reconstructed Key';
+    
+    // Process the input to handle various formats
+    // 1. Split by any combination of newlines
+    // 2. Trim whitespace from each line
+    // 3. Filter out empty lines and comment lines
+    const shares = sharesInput.value
+      .split(/\\r?\\n|\\r/)
+      .map(s => s.trim())
+      .filter(s => s.length > 0 && !s.startsWith('#'));
+    
+    if (shares.length < 2) {
+      vscode.postMessage({
+        command: 'showError',
+        text: 'At least 2 key shares are required'
+      });
+      return;
+    }
+    
+    vscode.postMessage({
+      command: 'reconstructFromKeyShares',
+      shares,
+      label
+    });
+    
+    closeSharesModal();
   }
 
   // Listen for extension messages

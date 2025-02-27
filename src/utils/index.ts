@@ -1,6 +1,6 @@
 import { Utils } from '@bsv/sdk';
 const { toArray, toHex, toBase64 } = Utils;
-import { Buffer } from 'buffer';
+import { Buffer } from 'node:buffer';
 
 /**
  * The supported data formats we can detect and convert between.
