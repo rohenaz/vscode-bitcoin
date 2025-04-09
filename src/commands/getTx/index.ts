@@ -86,6 +86,15 @@ export async function handleGetTxCommand(
   console.log({ txData });
   const rawTx = toHex(toArray(txData.transaction, 'base64'));
 
+  // if the format is hex, return the raw transaction
+  if (format.value === 'hex') {
+    return {
+      data: rawTx,
+      type: 'transactions',
+      name: txid,
+    };
+  }
+
   try {
     // First validate it's a valid transaction
     const tx = Transaction.fromHex(rawTx);
