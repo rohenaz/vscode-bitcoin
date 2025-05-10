@@ -1,5 +1,5 @@
 import * as crypto from 'node:crypto';
-import { SymmetricKey, Utils } from '@bsv/sdk';
+import { SymmetricKey, Utils, PrivateKey } from '@bsv/sdk';
 import vsApi, {
   type SecretStorage,
   type ExtensionContext,
@@ -262,13 +262,28 @@ export class KeyVault {
     await this.checkUnlock();
     if (!this.decryptedKeys) return [];
 
-    const lower = query.toLowerCase();
+    const lowerQuery = query.toLowerCase();
     return this.decryptedKeys.filter((k) => {
-      if (k.label?.toLowerCase().includes(lower)) return true;
-      if (k.type.toLowerCase().includes(lower)) return true;
+      if (k.label?.toLowerCase().includes(lowerQuery)) return true;
+      if (k.type.toLowerCase().includes(lowerQuery)) return true;
+
+      // Check if the key is a WIF and if the query matches its address
+      if (k.type === 'wif') {
+        try {
+          const privateKey = PrivateKey.fromWif(k.value);
+          const address = privateKey.toAddress().toString();
+          if (address.toLowerCase().includes(lowerQuery)) {
+            return true;
+          }
+        } catch (e) {
+          // Ignore errors during address derivation (e.g., invalid WIF)
+          // console.warn(`Error deriving address for key ${k.id}:`, e);
+        }
+      }
+
       if (k.metadata) {
         return Object.values(k.metadata).some((v) =>
-          v.toLowerCase().includes(lower),
+          v.toLowerCase().includes(lowerQuery),
         );
       }
       return false;

@@ -888,7 +888,12 @@ export async function activate(context: ExtensionContext) {
     { scheme: 'file', language: 'javascriptreact' },
     { scheme: 'file', language: 'plaintext' },
     { scheme: 'file', language: 'json' },
-    { scheme: 'file', language: 'markdown' }
+    { scheme: 'file', language: 'jsonc' },
+    { scheme: 'file', language: 'markdown' },
+    { scheme: 'file', language: 'go' },
+    { scheme: 'file', language: 'rust' },
+    { scheme: 'file', language: 'zig' },
+    { scheme: 'file', language: 'html' }
   ];
 
   console.log('Registering semantic tokens provider for languages:', selector);

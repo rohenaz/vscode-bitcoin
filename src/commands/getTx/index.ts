@@ -84,6 +84,14 @@ export async function handleGetTxCommand(
   const tx = await fetch(url);
   const txData = await tx.json();
   console.log({ txData });
+
+  if (format.value === 'base64') {
+    return {
+      data: txData.transaction,
+      type: 'transactions',
+      name: txid,
+    };
+  }
   const rawTx = toHex(toArray(txData.transaction, 'base64'));
 
   // if the format is hex, return the raw transaction
@@ -91,7 +99,7 @@ export async function handleGetTxCommand(
     return {
       data: rawTx,
       type: 'transactions',
-      name: txid,
+      name: `${txid}.hex}`,
     };
   }
 
@@ -109,18 +117,26 @@ export async function handleGetTxCommand(
 
     if (!bob || !bob.out || !Array.isArray(bob.out)) {
       return {
-        data: JSON.stringify({ tx: { h: tx.hash().toString() } }, null, 2),
+        data: JSON.stringify({ tx: { h: tx.hash('hex') } }, null, 2),
         type: 'transactions',
-        name: `bob_${new Date().toISOString().replace(/[:.]/g, '-')}`,
+        name: `${txid}.bob`,
       };
     }
 
+    if (format.value === 'bob') {
+      return {
+        data: JSON.stringify(bob, null, 2),
+        type: 'transactions',
+        name: `${txid}.bob`,
+      }
+
+    }
     const bmapTx = await TransformTx(bob as BobTx);
     console.log({ bmapTx });
     return {
       data: JSON.stringify(bmapTx, null, 2),
       type: 'transactions',
-      name: `${txid}_bmap_${new Date().toISOString().replace(/[:.]/g, '-')}`,
+      name: `${txid}.bmap`,
     };
   } catch (error) {
     console.error('BOB parsing error:', error);

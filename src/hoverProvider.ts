@@ -269,7 +269,7 @@ export class BitcoinHoverProvider implements HoverProvider {
     this.templateManager = templateManager;
   }
 
-  provideHover(document: TextDocument, position: Position): ProviderResult<Hover> {
+  async provideHover(document: TextDocument, position: Position): Promise<Hover | null | undefined> {
     console.log('=== BitcoinHoverProvider.provideHover called ===');
     console.log('Document:', {
       uri: document.uri,
@@ -299,8 +299,8 @@ export class BitcoinHoverProvider implements HoverProvider {
     console.log('Full line:', line);
     console.log('Line index:', position.line + 1);
 
-    // Check for script templates
-    for (const template of this.templateManager.getTemplates()) {
+    const templates = await this.templateManager.getTemplates();
+    for (const template of templates) {
       const regex = new RegExp(template.pattern);
       const match = regex.exec(line);
       if (match) {

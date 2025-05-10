@@ -69,11 +69,20 @@ function buildSearchTokens(key: KeyEntry): string[] {
         const pub = PublicKey.fromString(key.value);
         tokens.push(pub.toString().toLowerCase());
         const addr = deriveAddress(key);
-        if (addr) {
+        if (addr && !addr.includes('Invalid')) {
           tokens.push(addr.toLowerCase());
-          const { data } = Utils.fromBase58Check(addr) as { data: number[] };
-          const pubKeyHashHex = Utils.toHex(data).toLowerCase();
-          tokens.push(pubKeyHashHex);
+          try {
+            const result = Utils.fromBase58Check(addr);
+            // Handle both object and array return types for backward compatibility
+            const data = Array.isArray(result) ? result : result.data;
+            if (data) {
+              const pubKeyHashHex = Utils.toHex(data).toLowerCase();
+              tokens.push(pubKeyHashHex);
+            }
+          } catch (err) {
+            // Ignore Base58Check parse errors
+            console.error('Error parsing public key address:', err);
+          }
         }
       } catch (e) {
         // ignore errors
@@ -86,12 +95,21 @@ function buildSearchTokens(key: KeyEntry): string[] {
   // Additionally, try to add the public key hash from the derived address if available
   try {
     const addr = deriveAddress(key);
-    if (addr) {
+    if (addr && !addr.includes('Invalid')) {
       tokens.push(addr.toLowerCase());
-      const { data } = Utils.fromBase58Check(addr);
-      const dataArray = typeof data === 'string' ? data.split('').map(c => c.charCodeAt(0)) : data;
-      const pubKeyHashHex = Utils.toHex(dataArray).toLowerCase();
-      tokens.push(pubKeyHashHex);
+      try {
+        const result = Utils.fromBase58Check(addr);
+        // Handle both object and array return types for backward compatibility
+        const data = Array.isArray(result) ? result : result.data;
+        if (data) {
+          const dataArray = typeof data === 'string' ? data.split('').map(c => c.charCodeAt(0)) : data;
+          const pubKeyHashHex = Utils.toHex(dataArray).toLowerCase();
+          tokens.push(pubKeyHashHex);
+        }
+      } catch (err) {
+        // Ignore Base58Check parse errors
+        console.error('Error parsing address:', err);
+      }
     }
   } catch (e) {
     // ignore errors

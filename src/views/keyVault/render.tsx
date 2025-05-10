@@ -480,7 +480,7 @@ export function deriveAddress(k: KeyEntry): string {
     const pubKey = derivePublicKey(k);
     const pkh = pubKey?.toHash() as number[] | undefined;
     if (!pkh) return 'Invalid address derivation';
-    return toBase58Check(pkh);
+    return toBase58Check(pkh, [0x00]);
   } catch {
     return 'Invalid address derivation';
   }
