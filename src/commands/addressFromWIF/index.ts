@@ -1,4 +1,4 @@
-import { PrivateKey } from '@bsv/sdk';
+import { PrivateKey, Utils } from '@bsv/sdk';
 import vscode from 'vscode';
 import type { OutputManager } from '../../output';
 
@@ -16,7 +16,20 @@ export async function addressFromWIF(output: OutputManager) {
   }
 
   const privateKey = PrivateKey.fromWif(wif);
-  const address = privateKey.toAddress();
+  let isTestnet = false;
+  try {
+    const decoded = Utils.fromBase58Check(wif);
+    const prefixBytes = Array.isArray(decoded.prefix)
+      ? decoded.prefix
+      : Utils.toArray(decoded.prefix);
+    if (prefixBytes[0] === 0xef) {
+      isTestnet = true;
+    }
+  } catch {
+    // Ignore decode issues; default to mainnet
+  }
+
+  const address = privateKey.toAddress(isTestnet ? 'testnet' : 'mainnet');
 
   return {
     data: address,

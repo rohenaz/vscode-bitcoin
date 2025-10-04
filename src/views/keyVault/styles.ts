@@ -145,6 +145,10 @@ textarea {
   background: var(--vscode-gitDecoration-untrackedResourceForeground);
   color: var(--vscode-button-foreground);
 }
+.key-badge.testnet {
+  background: var(--vscode-charts-blue);
+  color: var(--vscode-button-foreground);
+}
 .key-value {
   font-family: var(--vscode-editor-font-family, monospace);
   font-size: 0.8rem;

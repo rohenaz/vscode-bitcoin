@@ -1,11 +1,11 @@
 import { PrivateKey, Utils } from '@bsv/sdk';
 import { MemberID } from 'bsv-bap';
-import type { IdentityAttributes } from 'bsv-bap';
 import type { KeyVault } from '../../keyVault';
-import type { OutputManager } from '../../output';
+// import type { OutputManager } from '../../output';
 import vsApi from '../../vsShim';
+import type { BapMemberBackup } from 'bitcoin-backup';
 
-const { toArray, toHex } = Utils;
+// const { toArray, toHex } = Utils;
 
 interface SignOpReturnDataParams {
   data: number[][];
@@ -31,12 +31,11 @@ export async function signOpReturnData(keyVault: KeyVault, params?: SignOpReturn
 
     // Initialize MemberID with the identity key
     const memberId = MemberID.fromBackup({
-      derivedPrivateKey: privateKey.toWif(),
-      name: 'BAP ID 1',
-      description: 'BAP ID 1', 
-      address: privateKey.toAddress(),
-      identityAttributes: {} as IdentityAttributes
-    });
+      wif: privateKey.toWif(), 
+      id: identityKey.id,
+      label: identityKey.label,
+      createdAt: new Date(identityKey.timestamp).toISOString(),
+    } as BapMemberBackup);
 
     // Sign the data
     const data = memberId.signOpReturnWithAIP(params.data);

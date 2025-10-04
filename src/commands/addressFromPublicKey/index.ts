@@ -16,11 +16,34 @@ export async function addressFromPublicKey(output: OutputManager) {
   }
 
   const publicKey = PublicKey.fromString(pubKey);
-  const address = publicKey.toAddress();
+  const address = publicKey.toAddress('mainnet');
 
   return {
     data: address,
     type: 'addresses' as const,
     name: 'from_pubkey',
+  };
+}
+
+export async function addressFromPublicKeyTestnet(output: OutputManager) {
+  const pubKey = await vscode.window.showInputBox({
+    value: '',
+    placeHolder: 'Ex: 02...',
+    validateInput: (_text) => {
+      return null;
+    },
+  });
+
+  if (!pubKey) {
+    return undefined;
+  }
+
+  const publicKey = PublicKey.fromString(pubKey);
+  const address = publicKey.toAddress('testnet');
+
+  return {
+    data: address,
+    type: 'addresses' as const,
+    name: 'from_pubkey_testnet',
   };
 }

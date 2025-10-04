@@ -5,11 +5,12 @@ import { TemplateManager } from './scriptTemplates';
 import * as path from 'node:path';
 
 import fetch from 'node-fetch';
-import { handleAddressFromHDPrivateKeyCommand } from './commands/addressFromHDPrivateKey';
-import { handleAddressFromHDPublicKeyCommand } from './commands/addressFromHDPublicKey';
-import { handleAddressFromPrivateKeyCommand } from './commands/addressFromPrivateKey';
-import { addressFromPublicKey } from './commands/addressFromPublicKey';
+import { handleAddressFromHDPrivateKeyCommand, handleAddressFromHDPrivateKeyTestnetCommand } from './commands/addressFromHDPrivateKey';
+import { handleAddressFromHDPublicKeyCommand, handleAddressFromHDPublicKeyTestnetCommand } from './commands/addressFromHDPublicKey';
+import { handleAddressFromPrivateKeyCommand, handleAddressFromPrivateKeyTestnetCommand } from './commands/addressFromPrivateKey';
+import { addressFromPublicKey, addressFromPublicKeyTestnet } from './commands/addressFromPublicKey';
 import { addressFromWIF } from './commands/addressFromWIF';
+import { generateWIF, generateTestnetWIF, generateWIFVanity, generateTestnetWIFVanity } from './commands/generateWIF';
 import { asmFromScript } from './commands/asmFromScript';
 import { ConversionViewProvider } from './commands/convertData';
 import { openConversionTool } from './commands/convertData/index';
@@ -19,7 +20,6 @@ import { extendedPrivateKeyFromMnemonic } from './commands/extendedPrivateKeyFro
 import { generateMnemonic } from './commands/generateMnemonic';
 import { generatePrivateKey } from './commands/generatePrivateKey';
 import { generatePublicKey } from './commands/generatePublicKey';
-import { generateWIF } from './commands/generateWIF';
 import { handleGetTxCommand } from './commands/getTx';
 import { handleGetUtxosForAddressCommand } from './commands/getUtxosForAddress';
 import { handleLookupBapProfileCommand } from './commands/lookupBapProfile';
@@ -364,6 +364,15 @@ export async function activate(context: ExtensionContext) {
   registerCommand(context, outputManager, 'bitcoin.generateWIF', () =>
     generateWIF(outputManager, keyVault)
   );
+  registerCommand(context, outputManager, 'bitcoin.generateTestnetWIF', () =>
+    generateTestnetWIF(outputManager, keyVault)
+  );
+  registerCommand(context, outputManager, 'bitcoin.generateWIFVanity', () =>
+    generateWIFVanity(outputManager, keyVault)
+  );
+  registerCommand(context, outputManager, 'bitcoin.generateTestnetWIFVanity', () =>
+    generateTestnetWIFVanity(outputManager, keyVault)
+  );
 
   registerCommand(context, outputManager, 'bitcoin.generateMnemonic', () =>
     generateMnemonic(outputManager, keyVault)
@@ -382,6 +391,14 @@ export async function activate(context: ExtensionContext) {
       return handleAddressFromHDPublicKeyCommand(outputManager);
     },
   );
+  registerCommand(
+    context,
+    outputManager,
+    'bitcoin.addressFromHDPublicKeyTestnet',
+    async () => {
+      return handleAddressFromHDPublicKeyTestnetCommand(outputManager);
+    },
+  );
 
   registerCommand(
     context,
@@ -389,6 +406,14 @@ export async function activate(context: ExtensionContext) {
     'bitcoin.addressFromHDPrivateKey',
     async () => {
       return handleAddressFromHDPrivateKeyCommand(outputManager);
+    },
+  );
+  registerCommand(
+    context,
+    outputManager,
+    'bitcoin.addressFromHDPrivateKeyTestnet',
+    async () => {
+      return handleAddressFromHDPrivateKeyTestnetCommand(outputManager);
     },
   );
 
@@ -400,6 +425,14 @@ export async function activate(context: ExtensionContext) {
       return addressFromPublicKey(outputManager);
     },
   );
+  registerCommand(
+    context,
+    outputManager,
+    'bitcoin.addressFromPublicKeyTestnet',
+    async () => {
+      return addressFromPublicKeyTestnet(outputManager);
+    },
+  );
 
   registerCommand(
     context,
@@ -407,6 +440,14 @@ export async function activate(context: ExtensionContext) {
     'bitcoin.addressFromPrivateKey',
     async () => {
       return handleAddressFromPrivateKeyCommand(outputManager);
+    },
+  );
+  registerCommand(
+    context,
+    outputManager,
+    'bitcoin.addressFromPrivateKeyTestnet',
+    async () => {
+      return handleAddressFromPrivateKeyTestnetCommand(outputManager);
     },
   );
 

@@ -22,9 +22,11 @@ export function getPanelHtml(opts: {
             default-src 'none';
             style-src ${cspSource} 'unsafe-inline';
             script-src 'nonce-${nonce}';
+            frame-src 'none';
+            sandbox allow-scripts;
           `}
         />
-        <title>Bitcoin Key Vault</title>
+        <title>Vault</title>
         <style safe>{styles}</style>
       </head>
       <body>
@@ -82,6 +84,9 @@ export function Modal(): JSX.Element {
           <label for="keyType">Key Type</label>
           <select id="keyType">
             <option value="wif">Private Key (WIF)</option>
+            <option value="wif-testnet">Private Key (WIF - Testnet)</option>
+            <option value="vanity">Vanity Address</option>
+            <option value="vanity-testnet">Vanity Address (Testnet)</option>
             <option value="hdprivate">HD Private (xprv)</option>
             <option value="mnemonic">Mnemonic (BIP39 phrase)</option>
           </select>
@@ -97,8 +102,13 @@ export function Modal(): JSX.Element {
           <input type="password" id="keyValue" />
         </div>
 
+        <div class="form-group" id="vanityPrefixGroup" style="display:none;">
+          <label for="vanityPrefix">Desired Prefix</label>
+          <input type="text" id="vanityPrefix" maxlength="5" placeholder="Prefix (1-5 base58 chars)" />
+        </div>
+
         <div class="modal-actions">
-          <button class="secondary" data-cmd="generateRandom" type="button">
+          <button class="secondary" data-cmd="generateRandom" type="button" id="generateBtn">
             Generate
           </button>
           <div>

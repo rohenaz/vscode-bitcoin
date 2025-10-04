@@ -48,6 +48,9 @@ export function renderKeyRecursive(
       <div class="key-top">
         <div class="key-type-container">
           <div class={`key-type type-${k.type}`}>{k.type}</div>
+          {k.type === 'wif' && isTestnetKey(k) && (
+            <div class="key-badge testnet">Testnet</div>
+          )}
           {k.isEncryptionKey && <div class="key-badge encryption">Encryption Key</div>}
           {k.isIdentityKey && <div class="key-badge identity">Identity Key</div>}
           {k.isFundingKey && <div class="key-badge funding">Funding Key</div>}
@@ -218,9 +221,15 @@ function renderFormatBadges(k: KeyEntry): JSX.Element[] {
         </button>
       );
       if (k.type === 'wif') {
+        const testnet = isTestnetKey(k);
         badges.push(
-          <button class="format-badge" data-cmd="copyAddress" data-id={k.id} type="button">
-            ADDR
+          <button
+            class="format-badge"
+            data-cmd={testnet ? 'copyTAddress' : 'copyAddress'}
+            data-id={k.id}
+            type="button"
+          >
+            {testnet ? 'TADDR' : 'ADDR'}
           </button>
         );
       }
@@ -452,10 +461,14 @@ export function derivePublicKeyString(k: KeyEntry): string | null {
 export function derivePublicKey(k: KeyEntry): PublicKey | null {
   try {
     switch (k.type) {
-      case 'hdpublic':
-        return null;
-      case 'hdprivate':
-        return null;
+      case 'hdpublic': {
+        const hd = HD.fromString(k.value);
+        return hd.pubKey;
+      }
+      case 'hdprivate': {
+        const hd = HD.fromString(k.value);
+        return hd.pubKey;
+      }
       case 'public':
         return PublicKey.fromString(k.value);
       case 'private':
@@ -469,7 +482,6 @@ export function derivePublicKey(k: KeyEntry): PublicKey | null {
   } catch {
     return null;
   }
-  
 }
 
 /**
@@ -484,4 +496,35 @@ export function deriveAddress(k: KeyEntry): string {
   } catch {
     return 'Invalid address derivation';
   }
+}
+
+/**
+ * Derive testnet address from key
+ */
+export function deriveTestnetAddress(k: KeyEntry): string {
+  try {
+    const pubKey = derivePublicKey(k);
+    const pkh = pubKey?.toHash() as number[] | undefined;
+    if (!pkh) return 'Invalid address derivation';
+    return toBase58Check(pkh, [0x6f]);
+  } catch {
+    return 'Invalid address derivation';
+  }
+}
+
+/**
+ * Detect if key encodes a testnet value (only reliable for WIF)
+ */
+function isTestnetKey(k: KeyEntry): boolean {
+  try {
+    if (k.type === 'wif') {
+      const res = Utils.fromBase58Check(k.value);
+      const prefix = Array.isArray(res.prefix) ? res.prefix : [];
+      // 0xef indicates testnet WIF
+      return prefix.length > 0 && prefix[0] === 0xef;
+    }
+  } catch {
+    // ignore
+  }
+  return false;
 }

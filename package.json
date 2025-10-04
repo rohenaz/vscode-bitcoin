@@ -56,8 +56,18 @@
         "category": "Bitcoin"
       },
       {
+        "command": "bitcoin.addressFromPublicKeyTestnet",
+        "title": "Address from Public Key (Testnet)",
+        "category": "Bitcoin"
+      },
+      {
         "command": "bitcoin.addressFromPrivateKey",
         "title": "Address From Private Key",
+        "category": "Bitcoin"
+      },
+      {
+        "command": "bitcoin.addressFromPrivateKeyTestnet",
+        "title": "Address From Private Key (Testnet)",
         "category": "Bitcoin"
       },
       {
@@ -66,8 +76,18 @@
         "category": "Bitcoin"
       },
       {
+        "command": "bitcoin.addressFromHDPublicKeyTestnet",
+        "title": "Address From Extended Public Key (Testnet)",
+        "category": "Bitcoin"
+      },
+      {
         "command": "bitcoin.addressFromHDPrivateKey",
         "title": "Address From Extended Private Key",
+        "category": "Bitcoin"
+      },
+      {
+        "command": "bitcoin.addressFromHDPrivateKeyTestnet",
+        "title": "Address From Extended Private Key (Testnet)",
         "category": "Bitcoin"
       },
       {
@@ -113,6 +133,21 @@
       {
         "command": "bitcoin.generateWIF",
         "title": "Generate WIF",
+        "category": "Bitcoin"
+      },
+      {
+        "command": "bitcoin.generateWIFVanity",
+        "title": "Generate WIF (Vanity)",
+        "category": "Bitcoin"
+      },
+      {
+        "command": "bitcoin.generateTestnetWIF",
+        "title": "Generate Testnet WIF",
+        "category": "Bitcoin"
+      },
+      {
+        "command": "bitcoin.generateTestnetWIFVanity",
+        "title": "Generate Testnet WIF (Vanity)",
         "category": "Bitcoin"
       },
       {
@@ -450,26 +485,27 @@
   "devDependencies": {
     "@biomejs/biome": "^1.9.4",
     "@types/glob": "^8.1.0",
-    "@types/node": "^22.15.17",
-    "@types/node-fetch": "^2.6.12",
+    "@types/node": "^22.18.6",
+    "@types/node-fetch": "^2.6.13",
     "@types/vscode": "1.96.0",
     "@vscode/test-electron": "^2.5.2",
-    "@vscode/vsce": "^3.3.2",
-    "bun-types": "^1.2.12",
-    "glob": "^11.0.2",
+    "@vscode/vsce": "^3.6.1",
+    "bun-types": "^1.2.22",
+    "glob": "^11.0.3",
     "source-map-explorer": "^2.5.3",
-    "typescript": "^5.8.3",
-    "vite": "^6.3.5",
+    "typescript": "^5.9.2",
+    "vite": "^6.3.6",
     "vscode": "^1.1.37"
   },
   "extensionDependencies": [],
   "extensionKind": ["workspace"],
   "dependencies": {
-    "@bsv/sdk": "^1.5.0",
-    "@kitajs/html": "^4.2.9",
-    "@kitajs/ts-html-plugin": "^4.1.1",
-    "@types/bun": "^1.2.12",
-    "bsv-bap": "^0.1.8",
+    "@bsv/sdk": "^1.7.6",
+    "@kitajs/html": "^4.2.10",
+    "@kitajs/ts-html-plugin": "^4.1.3",
+    "@types/bun": "^1.2.22",
+    "bitcoin-backup": "^0.0.2",
+    "bsv-bap": "^0.1.12",
     "node-fetch": "^3.3.2"
   },
   "optionalDependencies": {

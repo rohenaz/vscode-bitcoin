@@ -9,11 +9,18 @@ const mockOutput = {
 
 describe('getUtxosForAddress', () => {
   const originalWindow = vscode.window;
-  const originalFetch = global.fetch;
+  const originalFetch = globalThis.fetch;
+
+  const setFetchMock = (impl: () => Promise<Response>) => {
+    const fetchMock = mock(impl);
+    globalThis.fetch = Object.assign(fetchMock, {
+      preconnect: mock(async () => Promise.resolve()),
+    }) as typeof fetch;
+  };
 
   afterEach(() => {
     vscode.window = originalWindow;
-    global.fetch = originalFetch;
+    globalThis.fetch = originalFetch;
   });
 
   test('returns undefined when input is cancelled', async () => {
@@ -75,13 +82,13 @@ describe('getUtxosForAddress', () => {
     };
 
     // Mock fetch to return 404
-    global.fetch = async () => {
-      return {
+    setFetchMock(async () =>
+      ({
         ok: false,
         status: 404,
         statusText: 'Not Found',
-      } as Response;
-    };
+      }) as Response,
+    );
 
     const result = await handleGetUtxosForAddressCommand(mockOutput);
     expect(result).toBeDefined();
@@ -104,14 +111,14 @@ describe('getUtxosForAddress', () => {
     };
 
     // Mock fetch to return error
-    global.fetch = async () => {
-      return {
+    setFetchMock(async () =>
+      ({
         ok: false,
         status: 500,
         statusText: 'Internal Server Error',
         json: async () => ({ message: 'Server error' }),
-      } as Response;
-    };
+      }) as Response,
+    );
 
     await expect(handleGetUtxosForAddressCommand(mockOutput)).rejects.toThrow(
       'Failed to fetch UTXOs',
@@ -127,14 +134,14 @@ describe('getUtxosForAddress', () => {
     };
 
     // Mock fetch to return checksum error
-    global.fetch = async () => {
-      return {
+    setFetchMock(async () =>
+      ({
         ok: false,
         status: 400,
         statusText: 'Bad Request',
         json: async () => ({ message: 'Checksum mismatch' }),
-      } as Response;
-    };
+      }) as Response,
+    );
 
     await expect(handleGetUtxosForAddressCommand(mockOutput)).rejects.toThrow(
       'Invalid address format. If this is a BAP ID',
@@ -164,12 +171,14 @@ describe('getUtxosForAddress', () => {
     };
 
     // Mock fetch to return UTXOs
-    global.fetch = async () => {
-      return {
+    setFetchMock(async () =>
+      ({
         ok: true,
+        status: 200,
+        statusText: 'OK',
         json: async () => mockUtxos,
-      } as Response;
-    };
+      }) as Response,
+    );
 
     const result = await handleGetUtxosForAddressCommand(mockOutput);
     expect(result).toBeDefined();

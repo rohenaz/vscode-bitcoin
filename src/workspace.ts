@@ -1,8 +1,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { Utils } from '@bsv/sdk';
-import vsApi, { isUri } from './vsShim';
-import type { Uri } from './vsShim';
+import vsApi, { type Uri, isUri } from './vsShim';
 
 interface WorkspaceConfig {
   path: string;
@@ -189,10 +188,6 @@ export class WorkspaceManager {
 
     // Remove special characters
     return sanitized.replace(/[^a-zA-Z0-9.-]/g, '_');
-  }
-
-  private generateFilename(type: string): string {
-    return `${type}_${Date.now()}`;
   }
 
   private async ensureUniqueFilename(

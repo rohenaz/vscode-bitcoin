@@ -3,7 +3,12 @@ import { PrivateKey } from '@bsv/sdk';
 import vscode from '@test/setup';
 import type { KeyVault, KeyEntry } from '../../keyVault';
 import type { OutputManager } from '../../output';
-import { generateWIF } from './index';
+import {
+  generateWIF,
+  generateTestnetWIF,
+  generateWIFVanity,
+  generateTestnetWIFVanity,
+} from './index';
 
 // Create a minimal mock that only implements what we need
 const mockOutput = {
@@ -89,5 +94,130 @@ describe('generateWIF', () => {
       PrivateKey.fromRandom = originalFromRandom;
       vscode.window.showErrorMessage = originalShowErrorMessage;
     }
+  });
+
+  test('generates testnet WIF with autoStore enabled', async () => {
+    const result = await generateTestnetWIF(mockOutput, mockKeyVault);
+
+    expect(result).toEqual({
+      data: expect.stringMatching(/^c[1-9A-HJ-NP-Za-km-z]{51}$/),
+      type: 'keys',
+      name: 'wif_testnet',
+    });
+
+    expect(storeKeyMock).toHaveBeenCalledTimes(1);
+    const calls = storeKeyMock.mock.calls;
+    expect(calls[0][0]).toEqual({
+      type: 'wif',
+      value: expect.stringMatching(/^c[1-9A-HJ-NP-Za-km-z]{51}$/),
+      label: 'Generated Testnet WIF',
+      metadata: {},
+    });
+  });
+
+  test('handles errors when generating testnet WIF', async () => {
+    const originalFromRandom = PrivateKey.fromRandom;
+    const originalShowErrorMessage = vscode.window.showErrorMessage;
+    const showErrorMock = mock(() => Promise.resolve(undefined));
+    vscode.window.showErrorMessage = showErrorMock;
+
+    PrivateKey.fromRandom = () => {
+      throw new Error('Test error');
+    };
+
+    try {
+      await expect(generateTestnetWIF(mockOutput, mockKeyVault)).rejects.toThrow(
+        'Test error',
+      );
+      expect(showErrorMock).toHaveBeenCalledWith(
+        'Error generating testnet WIF: Error: Test error',
+      );
+    } finally {
+      PrivateKey.fromRandom = originalFromRandom;
+      vscode.window.showErrorMessage = originalShowErrorMessage;
+    }
+  });
+
+  test('cancels vanity generation when prefix input is dismissed', async () => {
+    const originalShowInput = vscode.window.showInputBox;
+    vscode.window.showInputBox = async () => undefined;
+
+    try {
+      await expect(generateWIFVanity(mockOutput, mockKeyVault)).resolves.toBeUndefined();
+      expect(storeKeyMock).not.toHaveBeenCalled();
+    } finally {
+      vscode.window.showInputBox = originalShowInput;
+    }
+  });
+
+  test('generates vanity WIF and stores matching address', async () => {
+    const originalShowInput = vscode.window.showInputBox;
+    const originalFromRandom = PrivateKey.fromRandom;
+
+    const desiredPrefix = '1ab';
+    vscode.window.showInputBox = async () => desiredPrefix;
+
+    const privSequence = [
+      PrivateKey.fromHex('1'.repeat(64)),
+      PrivateKey.fromHex('2'.repeat(64)),
+    ];
+    let idx = 0;
+    PrivateKey.fromRandom = () => {
+      const key = privSequence[idx];
+      idx = Math.min(idx + 1, privSequence.length - 1);
+      return key;
+    };
+
+    const result = await generateWIFVanity(mockOutput, mockKeyVault);
+    expect(result?.data).toMatch(/^[KL][1-9A-HJ-NP-Za-km-z]{51}$/);
+    expect(storeKeyMock).toHaveBeenCalled();
+    expect(vscode.window.showInformationMessage).toHaveBeenCalled();
+
+    PrivateKey.fromRandom = originalFromRandom;
+    vscode.window.showInputBox = originalShowInput;
+  });
+
+  test('generates testnet vanity WIF', async () => {
+    const originalShowInput = vscode.window.showInputBox;
+    const originalFromRandom = PrivateKey.fromRandom;
+
+    const desiredPrefix = 'mq';
+    vscode.window.showInputBox = async () => desiredPrefix;
+
+    const privSequence = [
+      PrivateKey.fromHex('3'.repeat(64)),
+      PrivateKey.fromHex('4'.repeat(64)),
+    ];
+    let idx = 0;
+    PrivateKey.fromRandom = () => {
+      const key = privSequence[idx];
+      idx = Math.min(idx + 1, privSequence.length - 1);
+      return key;
+    };
+
+    const result = await generateTestnetWIFVanity(mockOutput, mockKeyVault);
+    expect(result?.data).toMatch(/^c[1-9A-HJ-NP-Za-km-z]{51}$/);
+    expect(storeKeyMock).toHaveBeenCalled();
+    expect(vscode.window.showInformationMessage).toHaveBeenCalled();
+
+    PrivateKey.fromRandom = originalFromRandom;
+    vscode.window.showInputBox = originalShowInput;
+  });
+
+  test('throws when vanity generation exceeds attempt limit', async () => {
+    const originalShowInput = vscode.window.showInputBox;
+    const originalFromRandom = PrivateKey.fromRandom;
+
+    vscode.window.showInputBox = async () => 'zzzzz';
+    PrivateKey.fromRandom = () => {
+      throw new Error('No match');
+    };
+
+    await expect(generateWIFVanity(mockOutput, mockKeyVault)).rejects.toThrow(
+      'Failed to generate vanity address within attempt limit. Try a shorter prefix.',
+    );
+
+    PrivateKey.fromRandom = originalFromRandom;
+    vscode.window.showInputBox = originalShowInput;
   });
 });

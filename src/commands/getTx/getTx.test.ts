@@ -81,8 +81,7 @@ describe('getTx', () => {
       showQuickPick: async () => mockFormat as unknown as string,
     };
 
-    // Mock fetch response with a valid P2PKH transaction
-    globalThis.fetch = mock(async () => {
+    const fetchMock = mock(async () => {
       const mockResponse = {
         ok: true,
         status: 200,
@@ -108,9 +107,15 @@ describe('getTx', () => {
       return mockResponse as Response;
     });
 
+    globalThis.fetch = Object.assign(fetchMock, {
+      preconnect: mock(async () => Promise.resolve()),
+    }) as typeof fetch;
+
     const result = await handleGetTxCommand(mockOutput);
     expect(result).toBeDefined();
     expect(result?.type).toBe('transactions');
     expect(result?.name).toContain(txid);
+
+    globalThis.fetch = originalFetch;
   });
 });

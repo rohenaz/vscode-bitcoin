@@ -75,6 +75,34 @@ export function getPanelScript(payloadJson: string): string {
   document.addEventListener('keyup', performSearch);
   document.addEventListener('change', performSearch);
 
+  document.getElementById('keyType')?.addEventListener('change', evt => {
+    const current = evt.target?.value;
+    const vanityGroup = document.getElementById('vanityPrefixGroup');
+    const valueInput = document.getElementById('keyValue');
+    const generateBtn = document.getElementById('generateBtn');
+
+    const isVanity = current === 'vanity' || current === 'vanity-testnet';
+    if (vanityGroup) vanityGroup.style.display = isVanity ? 'block' : 'none';
+    if (valueInput) valueInput.disabled = isVanity;
+    if (generateBtn && !generateBtn.getAttribute('data-loading')) {
+      generateBtn.textContent = isVanity ? 'Generate Vanity' : 'Generate';
+    }
+  });
+
+  function setGenerateLoading(isLoading) {
+    const btn = document.getElementById('generateBtn');
+    if (!btn) return;
+    if (isLoading) {
+      btn.setAttribute('data-loading', 'true');
+      btn.textContent = 'Generating...';
+      btn.setAttribute('disabled', 'true');
+    } else {
+      btn.removeAttribute('data-loading');
+      btn.textContent = document.getElementById('keyType')?.value.startsWith('vanity') ? 'Generate Vanity' : 'Generate';
+      btn.removeAttribute('disabled');
+    }
+  }
+
   function handleCommand(cmd, id, currentLabel) {
     switch (cmd) {
       case 'openModal':
@@ -97,6 +125,9 @@ export function getPanelScript(payloadJson: string): string {
         const sel = document.getElementById('keyType');
         if (sel) {
           vscode.postMessage({ command: 'generateRandomKey', type: sel.value });
+          if (sel.value === 'vanity' || sel.value === 'vanity-testnet') {
+            setGenerateLoading(true);
+          }
         }
         break;
       }
@@ -127,6 +158,7 @@ export function getPanelScript(payloadJson: string): string {
       case 'copyPrivate':
       case 'copyPublic':
       case 'copyAddress':
+      case 'copyTAddress':
       case 'copyEntireKey':
       case 'copyHex':
       case 'copyWif':
@@ -189,30 +221,74 @@ export function getPanelScript(payloadJson: string): string {
     const sel = document.getElementById('keyType');
     const lbl = document.getElementById('keyLabel');
     const val = document.getElementById('keyValue');
+    const vanityGroup = document.getElementById('vanityPrefixGroup');
+    const vanityInput = document.getElementById('vanityPrefix');
+    const generateBtn = document.getElementById('generateBtn');
     if (sel) sel.value = 'wif';
     if (lbl) lbl.value = '';
     if (val) val.value = '';
+    if (vanityInput) vanityInput.value = '';
+    if (vanityGroup) vanityGroup.style.display = 'none';
+    if (generateBtn) generateBtn.removeAttribute('data-loading');
   }
   
   function submitAddKey() {
     const sel = document.getElementById('keyType');
     const lbl = document.getElementById('keyLabel');
     const val = document.getElementById('keyValue');
+    const vanityPrefixInput = document.getElementById('vanityPrefix');
     if (!sel || !lbl || !val) return;
 
     const t = sel.value;
     const labelVal = lbl.value.trim() || null;
     const v = val.value.trim();
-    if (!v) {
+    const isVanity = t === 'vanity' || t === 'vanity-testnet';
+    const isTestnetWif = t === 'wif-testnet';
+    const prefixRaw = vanityPrefixInput ? vanityPrefixInput.value.trim() : '';
+    const prefix = prefixRaw.toLowerCase().replace(/[^123456789abcdefghijkmnopqrstuvwxyz]/g, '');
+
+    if (!isVanity && !v) {
       alert('Key Value is required!');
       return;
     }
 
+    if (isVanity) {
+      if (!v) {
+        alert('Generate the vanity key before adding.');
+        return;
+      }
+      if (!prefix) {
+        alert('Prefix is required for vanity keys.');
+        return;
+      }
+    }
+
+    const metadata = {} as Record<string, string> | undefined;
+    let typeToSend = t;
+
+    if (isTestnetWif) {
+      if (!v) {
+        alert('Key Value is required!');
+        return;
+      }
+      typeToSend = 'wif';
+      metadata = { network: 'testnet' };
+    }
+
+    if (isVanity) {
+      typeToSend = 'wif';
+      metadata = {
+        vanityPrefix: prefix,
+        network: t === 'vanity' ? 'mainnet' : 'testnet',
+      };
+    }
+
     vscode.postMessage({
       command: 'submitAddKey',
-      type: t,
+      type: typeToSend,
       value: v,
-      label: labelVal || \`Imported \${t} Key\`,
+      label: labelVal || `Imported ${typeToSend} Key`,
+      metadata,
     });
     closeModal();
   }
@@ -261,6 +337,13 @@ export function getPanelScript(payloadJson: string): string {
         const sel = document.getElementById('keyType');
         if (sel) sel.value = msg.finalType;
       }
+      setGenerateLoading(false);
+    }
+    if (msg.command === 'vanityGenerationStarted') {
+      setGenerateLoading(true);
+    }
+    if (msg.command === 'vanityGenerationCompleted') {
+      setGenerateLoading(false);
     }
   });
 })();`;

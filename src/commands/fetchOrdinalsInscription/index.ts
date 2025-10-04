@@ -22,16 +22,20 @@ interface Inscription {
 async function fetchInscriptionData(outpoint: string): Promise<Inscription> {
   const inscriptionRes = await fetch(`${API_HOST}/txos/${outpoint}`);
   if (!inscriptionRes.ok) {
-    const error = await inscriptionRes
-      .json()
-      .catch(() => ({ message: inscriptionRes.statusText }));
+    let message = inscriptionRes.statusText;
+    try {
+      const errorBody = (await inscriptionRes.json()) as { message?: string };
+      if (errorBody?.message) {
+        message = errorBody.message;
+      }
+    } catch {
+      // ignore
+    }
     throw new Error(
-      `Failed to fetch inscription from ${API_HOST}/txos/${outpoint}\nError: ${
-        error.message || inscriptionRes.statusText
-      }`,
+      `Failed to fetch inscription from ${API_HOST}/txos/${outpoint}\nError: ${message}`,
     );
   }
-  return inscriptionRes.json();
+  return (await inscriptionRes.json()) as Inscription;
 }
 
 async function fetchInscriptionContent(
@@ -43,13 +47,19 @@ async function fetchInscriptionContent(
 
   const contentRes = await fetch(`${API_HOST}/content/${inscription.outpoint}`);
   if (!contentRes.ok) {
-    const error = await contentRes
-      .json()
-      .catch(() => ({ message: contentRes.statusText }));
+    let message = contentRes.statusText;
+    try {
+      const errorBody = (await contentRes.json()) as { message?: string };
+      if (errorBody?.message) {
+        message = errorBody.message;
+      }
+    } catch {
+      // ignore
+    }
     throw new Error(
       `Failed to fetch inscription content from ${API_HOST}/content/${
         inscription.outpoint
-      }\nError: ${error.message || contentRes.statusText}`,
+      }\nError: ${message}`,
     );
   }
 

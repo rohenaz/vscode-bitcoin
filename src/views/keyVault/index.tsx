@@ -1,6 +1,6 @@
 import vsApi, { type WebviewPanel, type Disposable } from '../../vsShim';
 import type { KeyVault, KeyEntry, KeyType } from '../../keyVault';
-import { PrivateKey, PublicKey, HD, Mnemonic, Utils } from '@bsv/sdk';
+import { PrivateKey, PublicKey, HD, Mnemonic, Utils, P2PKH } from '@bsv/sdk';
 import { keyPanelStyles } from './styles';
 import {
   buildKeyHierarchy,
@@ -9,11 +9,13 @@ import {
   deriveAddress,
   deriveHdAddress,
   toPrivateKey,
+  derivePublicKey,
+  deriveTestnetAddress,
 } from './render';
+import { createVanityWIF, sanitizeVanityPrefix } from '../../commands/generateWIF';
 import { getPanelHtml } from './layout';
 import { getPanelScript } from './script';
 import * as vscode from 'vscode';
-import { P2PKH } from '@bsv/sdk';
 
 /**
  * Build an expanded set of "search tokens" for ephemeral indexing.
@@ -73,10 +75,12 @@ function buildSearchTokens(key: KeyEntry): string[] {
           tokens.push(addr.toLowerCase());
           try {
             const result = Utils.fromBase58Check(addr);
-            // Handle both object and array return types for backward compatibility
             const data = Array.isArray(result) ? result : result.data;
             if (data) {
-              const pubKeyHashHex = Utils.toHex(data).toLowerCase();
+              const bytes = typeof data === 'string'
+                ? data.split('').map((c) => c.charCodeAt(0))
+                : (data as number[]);
+              const pubKeyHashHex = Utils.toHex(bytes).toLowerCase();
               tokens.push(pubKeyHashHex);
             }
           } catch (err) {
@@ -269,6 +273,7 @@ export class KeyPanel {
     currentLabel?: string;
     shares?: string[];
     text?: string;
+    vanityPrefix?: string;
   }) {
     switch (msg.command) {
       case 'copyKeyValue': {
@@ -309,14 +314,45 @@ export class KeyPanel {
         break;
       }
 
-      case 'generateRandomKey': {
-        if (msg.type) this.generateRandomKey(msg.type);
+      case 'generateRandom': {
+        const sel = document.getElementById('keyType');
+        if (sel) {
+          vscode.postMessage({ command: 'generateRandomKey', type: sel.value });
+          if (sel.value === 'vanity' || sel.value === 'vanity-testnet') {
+            setGenerateLoading(true);
+          }
+        }
         break;
       }
 
       case 'submitAddKey': {
         if (msg.type && msg.value !== undefined) {
-          this.addKey(msg.type, msg.value, msg.label ?? 'Imported Key');
+          if (msg.type === 'wif-testnet') {
+            if (!msg.value) {
+              const wif = await generateTestnetKey();
+              return;
+            }
+          } else if (msg.type === 'vanity' || msg.type === 'vanity-testnet') {
+            const prefix = sanitizeVanityPrefix(msg.vanityPrefix ?? '');
+            if (!prefix) {
+              vscode.window.showErrorMessage('Prefix is required for vanity keys.');
+              return;
+            }
+            const result = await createVanityWIF(
+              prefix,
+              msg.type === 'vanity' ? 'mainnet' : 'testnet',
+            );
+            this._panel.webview.postMessage({ command: 'vanityGenerationCompleted' });
+            this._panel.webview.postMessage({
+              command: 'populateGeneratedKey',
+              value: result.wif,
+              finalType: 'wif',
+            });
+            vscode.window.showInformationMessage(
+              `Generated ${msg.type === 'vanity' ? 'mainnet' : 'testnet'} vanity address ${result.address} after ${result.attempts} attempts`,
+            );
+            return;
+          }
         }
         break;
       }
@@ -346,6 +382,9 @@ export class KeyPanel {
         break;
       case 'copyAddress':
         if (msg.id) this.copyAddress(msg.id);
+        break;
+      case 'copyTAddress':
+        if (msg.id) this.copyTAddress(msg.id);
         break;
       case 'copyEntireKey':
         if (msg.id) this.copyEntireKey(msg.id);
@@ -383,36 +422,18 @@ export class KeyPanel {
         if (msg.id) this.createPublicChild(msg.id);
         break;
 
-      case 'p2pkhScript':
-        if (msg.id) {
-          const key = await this._vault.getKey(msg.id);
-          if (!key) return;
-          
-          const address = deriveAddress(key);
-          if (!address) {
-            vsApi.window.showErrorMessage('Could not derive address');
-            return;
-          }
-
-          const script = new P2PKH().lock(address);
-          await vsApi.env.clipboard.writeText(script.toASM());
-          vsApi.window.showInformationMessage('P2PKH script copied to clipboard');
-        }
-        break;
-
       case 'viewOnChain':
         if (msg.id) {
           const key = await this._vault.getKey(msg.id);
           if (!key) return;
-
           const address = deriveAddress(key);
-          if (!address) {
-            vsApi.window.showErrorMessage('Could not derive address');
+          if (!address || address.startsWith('Invalid')) {
+            vsApi.window.showErrorMessage('Could not derive a valid address for this key.');
             return;
           }
 
           const url = `https://whatsonchain.com/address/${address}`;
-          await vscode.env.openExternal(vscode.Uri.parse(url));
+          await vsApi.env.openExternal(vsApi.Uri.parse(url));
         }
         break;
 
@@ -619,6 +640,67 @@ export class KeyPanel {
    */
   private async generateRandomKey(type: KeyType) {
     try {
+      if (type === 'vanity' || type === 'vanity-testnet') {
+        const prefix = await vsApi.window.showInputBox({
+          prompt: 'Enter desired prefix (1-5 base58 characters)',
+          validateInput: (value) => {
+            const sanitized = sanitizeVanityPrefix(value);
+            if (sanitized.length !== value.length) {
+              return 'Prefix can only contain base58 characters excluding 0, O, I, l';
+            }
+            if (!sanitized.length) {
+              return 'Prefix is required';
+            }
+            if (sanitized.length > 5) {
+              return 'Prefix must be 5 characters or fewer';
+            }
+            return null;
+          },
+        });
+
+        if (!prefix) {
+          vsApi.window.showWarningMessage('Vanity generation cancelled');
+          return;
+        }
+
+        const sanitized = sanitizeVanityPrefix(prefix);
+        if (!sanitized) {
+          vsApi.window.showErrorMessage('Invalid prefix provided.');
+          return;
+        }
+
+        this._panel.webview.postMessage({ command: 'vanityGenerationStarted' });
+        try {
+          const result = await createVanityWIF(
+            sanitized,
+            type === 'vanity' ? 'mainnet' : 'testnet',
+          );
+
+          this._panel.webview.postMessage({ command: 'vanityGenerationCompleted' });
+
+          this._panel.webview.postMessage({
+            command: 'populateGeneratedKey',
+            value: result.wif,
+            finalType: type,
+          });
+
+          vsApi.window.showInformationMessage(
+            `Generated ${type === 'vanity' ? 'mainnet' : 'testnet'} vanity address ${result.address} after ${result.attempts} attempts`,
+          );
+        } catch (err) {
+          this._panel.webview.postMessage({ command: 'vanityGenerationCompleted' });
+          this._panel.webview.postMessage({
+            command: 'populateGeneratedKey',
+            value: '',
+            finalType: type === 'vanity' ? 'vanity' : 'vanity-testnet',
+          });
+          vsApi.window.showErrorMessage(
+            `Failed to generate vanity key: ${err instanceof Error ? err.message : String(err)}`,
+          );
+        }
+        return;
+      }
+
       let val = '';
       let finalType = type;
 
@@ -792,6 +874,13 @@ export class KeyPanel {
     const addr = deriveAddress(k);
     await vsApi.env.clipboard.writeText(addr);
     vsApi.window.showInformationMessage(`Address ${addr} copied.`);
+  }
+  private async copyTAddress(id: string) {
+    const k = await this._vault.getKey(id);
+    if (!k) return;
+    const addr = deriveTestnetAddress(k);
+    await vsApi.env.clipboard.writeText(addr);
+    vsApi.window.showInformationMessage(`Testnet Address ${addr} copied.`);
   }
   private async copyEntireKey(id: string) {
     const k = await this._vault.getKey(id);
