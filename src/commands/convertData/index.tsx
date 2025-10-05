@@ -5,12 +5,14 @@ import { webviewScript } from './script';
 import { styles } from './styles';
 import { join } from 'node:path';
 
-type DataFormat = 'binary' | 'hex' | 'base64' | 'utf8';
+type DataFormat = 'binary' | 'hex' | 'base64' | 'utf8' | 'decimal';
 
 export type ConversionMessage =
   | { type: 'convert'; input: string; fromFormat: DataFormat; toFormat: DataFormat }
   | { type: 'result'; value: string }
   | { type: 'copy' }
+  | { type: 'detect'; input: string }
+  | { type: 'detected'; format: DataFormat | undefined }
   | {
     type: 'initialize';
     input?: string;
@@ -98,6 +100,12 @@ export class ConversionViewProvider implements vscode.WebviewViewProvider {
           vsApi.window.showInformationMessage('Output copied to clipboard');
           return;
         }
+        if (message.type === 'detect') {
+          // Frontend requests format detection from backend
+          const detected = detectFormat(message.input);
+          webviewView.webview.postMessage({ type: 'detected', format: detected });
+          return;
+        }
         if (message.type === 'convert' && message.input && message.fromFormat && message.toFormat) {
           const result = convertData(message.input, message.fromFormat, message.toFormat);
           webviewView.webview.postMessage({ type: 'result', value: result });
@@ -153,6 +161,12 @@ export async function openConversionTool(
     try {
       if (message.type === 'copy') {
         vsApi.window.showInformationMessage('Output copied to clipboard');
+        return;
+      }
+      if (message.type === 'detect') {
+        // Frontend requests format detection from backend
+        const detected = detectFormat(message.input);
+        panel.webview.postMessage({ type: 'detected', format: detected });
         return;
       }
       if (
@@ -230,6 +244,7 @@ function FormatSelectors() {
       <div class="format-group">
         <select id="fromFormat">
           <option value="binary">Binary</option>
+          <option value="decimal">Decimal</option>
           <option value="hex">Hex</option>
           <option value="base64">Base64</option>
           <option value="utf8">UTF-8</option>
@@ -239,6 +254,7 @@ function FormatSelectors() {
         </span>
         <select id="toFormat">
           <option value="binary">Binary</option>
+          <option value="decimal">Decimal</option>
           <option value="hex">Hex</option>
           <option value="base64">Base64</option>
           <option value="utf8">UTF-8</option>

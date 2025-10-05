@@ -13,43 +13,15 @@ export const webviewScript = js`
       statusMessage: document.getElementById('statusMessage')
     };
 
-    // Format detection
+    // Request format detection from backend (no duplicate logic!)
     function detectFormat(input) {
       if (!input) return;
 
-      // Binary array
-      if (/^\\[(\d+,)*\d+\\]$/.test(input)) {
-        elements.fromFormat.value = 'binary';
-        return;
-      }
-
-      // Text with punctuation
-      if (
-        /[a-zA-Z]/.test(input) &&
-        /[a-zA-Z][,!?.\\s]|[,!?.\\s][a-zA-Z]/.test(input) &&
-        !/^[0-9A-Fa-f]+$/.test(input) &&
-        !/^[A-Za-z0-9+/=]+$/.test(input) &&
-        !/^[0-9-]+$/.test(input) &&
-        !/^[a-zA-Z]+[0-9]+$/.test(input) &&
-        !/^[0-9]+[a-zA-Z]+$/.test(input) &&
-        !input.includes('[') &&
-        !input.includes(']')
-      ) {
-        elements.fromFormat.value = 'utf8';
-        return;
-      }
-
-      // Hex
-      if (input.length % 2 === 0 && /^[0-9A-Fa-f]+$/.test(input)) {
-        elements.fromFormat.value = 'hex';
-        return;
-      }
-
-      // Base64
-      if (/^[A-Za-z0-9+/]*={0,2}$/.test(input)) {
-        elements.fromFormat.value = 'base64';
-        return;
-      }
+      // Ask backend to detect format using probability scoring
+      vscode.postMessage({
+        type: 'detect',
+        input: input.trim()
+      });
     }
 
     // Conversion handling
@@ -116,6 +88,14 @@ export const webviewScript = js`
         case 'result':
           output.value = msg.value;
           showStatus('Conversion succeeded');
+          break;
+        case 'detected':
+          // Backend responded with detected format
+          if (msg.format) {
+            elements.fromFormat.value = msg.format;
+            selectDifferentFormat(msg.format);
+            tryConvert();
+          }
           break;
       }
     }

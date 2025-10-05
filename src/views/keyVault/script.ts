@@ -287,7 +287,7 @@ export function getPanelScript(payloadJson: string): string {
       command: 'submitAddKey',
       type: typeToSend,
       value: v,
-      label: labelVal || `Imported ${typeToSend} Key`,
+      label: labelVal || Imported Key,
       metadata,
     });
     closeModal();
