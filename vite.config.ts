@@ -5,9 +5,12 @@ import path from 'node:path';
 export default defineConfig({
   build: {
     lib: {
-      entry: './src/extension.tsx',
+      entry: {
+        extension: './src/extension.tsx',
+        'webview/webview-keyvault': './src/views/keyVault/webview.ts',
+      },
       formats: ['cjs'],
-      fileName: () => 'extension.js',
+      fileName: (format, entryName) => `${entryName}.js`,
     },
     rollupOptions: {
       external: [
@@ -23,7 +26,7 @@ export default defineConfig({
           'vendor-fetch': ['node-fetch'],
           'vendor-html': ['@kitajs/html'],
           'vendor-bmap': ['bmapjs', 'bpu-ts'],
-          // Keep webview-related code in separate chunks
+          // Keep convertData webview code in separate chunks
           webview: ['./src/commands/convertData/script.ts', './src/commands/convertData/styles.ts'],
         },
         inlineDynamicImports: false,

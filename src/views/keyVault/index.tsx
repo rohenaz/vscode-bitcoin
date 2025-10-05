@@ -14,7 +14,6 @@ import {
 } from './render';
 import { createVanityWIF, sanitizeVanityPrefix } from '../../commands/generateWIF';
 import { getPanelHtml } from './layout';
-import { getPanelScript } from './script';
 import * as vscode from 'vscode';
 
 /**
@@ -134,14 +133,16 @@ export class KeyPanel {
   public static currentPanel: KeyPanel | undefined;
   private readonly _panel: WebviewPanel;
   private readonly _vault: KeyVault;
+  private readonly _extensionUri: vscode.Uri;
   private _disposables: Disposable[] = [];
 
   private lastKeyHash?: string;
   private ephemeralIndex: Record<string, string[]> = {};
 
-  private constructor(panel: WebviewPanel, vault: KeyVault) {
+  private constructor(panel: WebviewPanel, vault: KeyVault, extensionUri: vscode.Uri) {
     this._panel = panel;
     this._vault = vault;
+    this._extensionUri = extensionUri;
 
     // Initial render
     this.updateContent();
@@ -158,7 +159,7 @@ export class KeyPanel {
     this._vault.onDidChangeKeys(() => this.updateContent());
   }
 
-  public static async show(vault: KeyVault) {
+  public static async show(vault: KeyVault, extensionUri: vscode.Uri) {
     // Check if vault is locked
     if (!vault.isUnlocked) {
       // Check if this is first-time setup
@@ -189,7 +190,7 @@ export class KeyPanel {
         1,
         { enableScripts: true, retainContextWhenHidden: true },
       );
-      KeyPanel.currentPanel = new KeyPanel(panel, vault);
+      KeyPanel.currentPanel = new KeyPanel(panel, vault, extensionUri);
     }
   }
 
@@ -218,23 +219,14 @@ export class KeyPanel {
     // Build ephemeral index if changed
     const newHash = JSON.stringify(refreshed);
     if (newHash !== this.lastKeyHash) {
-      console.log('Keys changed, rebuilding search index...');
-      console.log('Keys:', refreshed);
-      
       this.lastKeyHash = newHash;
       const idx: Record<string, string[]> = {};
       for (let i = 0; i < refreshed.length; i++) {
         const key = refreshed[i];
-        console.log(`\nBuilding search tokens for key ${key.id}:`);
-        console.log('Key:', key);
-        
         const tokens = buildSearchTokens(key);
-        console.log('Generated tokens:', tokens);
-        
         idx[key.id] = tokens;
       }
       this.ephemeralIndex = idx;
-      console.log('\nFull search index:', this.ephemeralIndex);
     }
 
     // Build hierarchy
@@ -249,17 +241,21 @@ export class KeyPanel {
 
     const nonce = getNonce();
     const cspSource = this._panel.webview.cspSource;
-    
-    // Create a safe version of the payload for the script
-    const safePayload = JSON.stringify(payload);
-    
-    const script = getPanelScript(safePayload);
+
+    // Create URI for the bundled webview script
+    const scriptUri = this._panel.webview.asWebviewUri(
+      vscode.Uri.joinPath(this._extensionUri, 'dist', 'webview', 'webview-keyvault.js')
+    ).toString();
+
+    // Serialize payload for injection
+    const payloadJson = JSON.stringify(payload);
 
     this._panel.webview.html = getPanelHtml({
       nonce,
       cspSource,
       keyElements: cards,
-      script,
+      scriptUri,
+      payload: payloadJson,
       styles: keyPanelStyles,
     });
   }

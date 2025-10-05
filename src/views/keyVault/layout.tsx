@@ -6,10 +6,11 @@ export function getPanelHtml(opts: {
   nonce: string;
   cspSource: string;
   keyElements: JSX.Element[];
-  script: string;
+  scriptUri: string;
+  payload: string;
   styles: string;
 }): string {
-  const { nonce, cspSource, keyElements, script, styles } = opts;
+  const { nonce, cspSource, keyElements, scriptUri, payload, styles } = opts;
 
   const page = (
     <html lang="en">
@@ -36,7 +37,8 @@ export function getPanelHtml(opts: {
         </div>
         <Modal />
         <SharesModal />
-        <script nonce={nonce}>{script}</script>
+        <script nonce={nonce}>{`const KEYVAULT_PAYLOAD = ${payload};`}</script>
+        <script nonce={nonce} src={scriptUri}></script>
       </body>
     </html>
   );

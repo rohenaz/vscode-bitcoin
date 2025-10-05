@@ -97,7 +97,14 @@ export async function createVanityWIF(
     const privKey = PrivateKey.fromRandom();
     const wif = privKey.toWif(prefixBytes);
     const address = privKey.toAddress(isTestnet ? 'testnet' : 'mainnet');
-    if (address.toLowerCase().startsWith(prefix)) {
+    // Check if address starts with network prefix + vanity prefix
+    // Mainnet: 1{prefix}, Testnet: m or n + {prefix}
+    const addressLower = address.toLowerCase();
+    const startsWithPrefix = isTestnet
+      ? (addressLower.startsWith('m' + prefix) || addressLower.startsWith('n' + prefix))
+      : addressLower.startsWith('1' + prefix);
+
+    if (startsWithPrefix) {
       return { wif, address, attempts: attempts + 1 };
     }
   }
@@ -110,7 +117,17 @@ export async function generateWIFVanity(output: OutputManager, keyVault: KeyVaul
   if (!prefix) {
     return undefined;
   }
-  const result = await createVanityWIF(prefix, 'mainnet');
+
+  const result = await vscode.window.withProgress(
+    {
+      location: vscode.ProgressLocation.Notification,
+      title: `Generating vanity address with prefix "1${prefix}"...`,
+      cancellable: false,
+    },
+    async () => {
+      return await createVanityWIF(prefix, 'mainnet');
+    }
+  );
   if (keyVault.isAutoStoreEnabled()) {
     await keyVault.checkUnlock();
     await keyVault.storeKey({
@@ -141,7 +158,17 @@ export async function generateTestnetWIFVanity(output: OutputManager, keyVault: 
   if (!prefix) {
     return undefined;
   }
-  const result = await createVanityWIF(prefix, 'testnet');
+
+  const result = await vscode.window.withProgress(
+    {
+      location: vscode.ProgressLocation.Notification,
+      title: `Generating testnet vanity address with prefix "m${prefix}" or "n${prefix}"...`,
+      cancellable: false,
+    },
+    async () => {
+      return await createVanityWIF(prefix, 'testnet');
+    }
+  );
   if (keyVault.isAutoStoreEnabled()) {
     await keyVault.checkUnlock();
     await keyVault.storeKey({
