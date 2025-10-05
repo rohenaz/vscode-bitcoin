@@ -314,25 +314,17 @@ export class KeyPanel {
         break;
       }
 
-      case 'generateRandom': {
-        const sel = document.getElementById('keyType');
-        if (sel) {
-          vscode.postMessage({ command: 'generateRandomKey', type: sel.value });
-          if (sel.value === 'vanity' || sel.value === 'vanity-testnet') {
-            setGenerateLoading(true);
-          }
+      case 'generateRandomKey': {
+        // Frontend sends this command with the selected key type
+        if (msg.type) {
+          await this.generateRandomKey(msg.type);
         }
         break;
       }
 
       case 'submitAddKey': {
         if (msg.type && msg.value !== undefined) {
-          if (msg.type === 'wif-testnet') {
-            if (!msg.value) {
-              const wif = await generateTestnetKey();
-              return;
-            }
-          } else if (msg.type === 'vanity' || msg.type === 'vanity-testnet') {
+          if (msg.type === 'vanity' || msg.type === 'vanity-testnet') {
             const prefix = sanitizeVanityPrefix(msg.vanityPrefix ?? '');
             if (!prefix) {
               vscode.window.showErrorMessage('Prefix is required for vanity keys.');

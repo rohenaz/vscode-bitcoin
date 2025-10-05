@@ -1,63 +1,48 @@
-# Keep only necessary images
-images/**
-!images/icon.png
-!images/b_icon.svg
-
-.vscode/**
-.vscode-test/**
+# Source files (compiled to dist/)
 src/**
-.gitignore
-vsc-extension-quickstart.md
-**/tsconfig.json
-**/*.map
-src/**/*.ts
-dist/**/*.map
-biome.json
-vite.config.ts
-bun.lockb
-.cursorrules
-bunfig.toml
-assistant_snippet_*.txt
+*.ts
+*.tsx
 
-# Make sure dist folder is included
-!dist/**/*.js
-dist/**/*.map
+# Build configuration
+vite.config.ts
+tsconfig.json
+biome.json
+bunfig.toml
 
 # Development files
+.vscode/**
+.vscode-test/**
 .github/**
 .git/**
+.gitignore
+.cursorrules
+vsc-extension-quickstart.md
+scripts/**
+assistant_snippet_*.txt
+
+# Temporary files
 .DS_Store
 *.vsix
 *.log
 *.tgz
+*.map
+bun.lockb
+bun.lock
 
-# Include only required node_modules files
+# Tests and test fixtures
+**/__tests__/**
+**/*.test.*
+**/*.spec.*
+**/test/**
+**/tests/**
+
+# Documentation (keep README.md and LICENSE.txt)
+CHANGELOG.md
+
+# Node modules (bundled by Vite, not needed in package)
 node_modules/**
 
-# @bsv/sdk - only include dist and necessary files
-!node_modules/@bsv/sdk/dist/**
-!node_modules/@bsv/sdk/package.json
-!node_modules/@bsv/sdk/LICENSE.txt
-
-# node-fetch - only lib and necessary files
-!node_modules/node-fetch/lib/**
-!node_modules/node-fetch/package.json
-!node_modules/node-fetch/LICENSE.md
-
-# bmapjs - only dist and necessary files
-!node_modules/bmapjs/dist/**
-!node_modules/bmapjs/package.json
-!node_modules/bmapjs/LICENSE
-
-# bpu-ts - only dist and necessary files
-!node_modules/bpu-ts/dist/**
-!node_modules/bpu-ts/package.json
-!node_modules/bpu-ts/LICENSE
-
-# @kitajs/html - only include dist and necessary files
-!node_modules/@kitajs/html/dist/**
-!node_modules/@kitajs/html/package.json
-!node_modules/@kitajs/html/LICENSE
-
-# scripts
-scripts/**
+# Images - keep only required
+images/**
+!images/icon.png
+!images/b_icon.svg

@@ -337,7 +337,6 @@ export function getPanelScript(payloadJson: string): string {
         const sel = document.getElementById('keyType');
         if (sel) sel.value = msg.finalType;
       }
-      setGenerateLoading(false);
     }
     if (msg.command === 'vanityGenerationStarted') {
       setGenerateLoading(true);
