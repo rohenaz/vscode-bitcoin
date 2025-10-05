@@ -145,6 +145,10 @@ textarea {
   background: var(--vscode-gitDecoration-untrackedResourceForeground);
   color: var(--vscode-button-foreground);
 }
+.key-badge.ordinals {
+  background: var(--vscode-charts-purple);
+  color: var(--vscode-button-foreground);
+}
 .key-badge.testnet {
   background: var(--vscode-charts-blue);
   color: var(--vscode-button-foreground);
@@ -354,20 +358,37 @@ button.secondary:hover {
 .mnemonic-text:hover {
   filter: none;
 }
-.hover-reveal {
+.secure-reveal {
   position: relative;
+  cursor: pointer;
+  user-select: none;
 }
-.hover-reveal .hover-show {
+
+/* Default state: show address or masked */
+.secure-reveal .state-default {
+  display: inline;
+}
+.secure-reveal .state-hover,
+.secure-reveal .state-mousedown {
   display: none;
 }
-.hover-reveal:hover .hover-hidden {
-  visibility: hidden;
+
+/* Hover state: show partial key */
+.secure-reveal:hover .state-default {
+  display: none;
 }
-.hover-reveal:hover .hover-show {
-  display: block;
-  position: absolute;
-  left: 0;
-  top: 0;
+.secure-reveal:hover .state-hover {
+  display: inline;
+}
+
+/* Mousedown state: show full key (applied via JS class) */
+.secure-reveal.revealing .state-default,
+.secure-reveal.revealing .state-hover {
+  display: none;
+}
+.secure-reveal.revealing .state-mousedown {
+  display: inline;
+}
 }
 button:disabled {
   opacity: 0.5;

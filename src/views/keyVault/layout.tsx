@@ -109,6 +109,20 @@ export function Modal(): JSX.Element {
           <input type="text" id="vanityPrefix" maxlength="5" placeholder="Prefix (1-5 base58 chars)" />
         </div>
 
+        <div class="form-group">
+          <label style="display: block; margin-bottom: 8px;">Advanced Options</label>
+          <div style="display: flex; gap: 16px;">
+            <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+              <input type="checkbox" id="setAsWallet" style="cursor: pointer;" />
+              <span>Set as Wallet Key</span>
+            </label>
+            <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+              <input type="checkbox" id="setAsOrdinals" style="cursor: pointer;" />
+              <span>Set as Ordinals Key</span>
+            </label>
+          </div>
+        </div>
+
         <div class="modal-actions">
           <button class="secondary" data-cmd="generateRandom" type="button" id="generateBtn">
             Generate

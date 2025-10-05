@@ -80,6 +80,27 @@ document.addEventListener('input', performSearch);
 document.addEventListener('keyup', performSearch);
 document.addEventListener('change', performSearch);
 
+// Secure reveal: mousedown to show full key, mouseup to hide
+document.addEventListener('mousedown', (evt) => {
+  const target = (evt.target as HTMLElement)?.closest<HTMLElement>('.secure-reveal');
+  if (target) {
+    target.classList.add('revealing');
+  }
+});
+
+document.addEventListener('mouseup', () => {
+  document.querySelectorAll('.secure-reveal.revealing').forEach(el => {
+    el.classList.remove('revealing');
+  });
+});
+
+// Also remove revealing class when mouse leaves the document
+document.addEventListener('mouseleave', () => {
+  document.querySelectorAll('.secure-reveal.revealing').forEach(el => {
+    el.classList.remove('revealing');
+  });
+});
+
 document.getElementById('keyType')?.addEventListener('change', (evt) => {
   const current = (evt.target as HTMLSelectElement)?.value;
   const vanityGroup = document.getElementById('vanityPrefixGroup');
@@ -180,6 +201,8 @@ function handleCommand(cmd: string | null, id: string | null, currentLabel: stri
     case 'viewOnChain':
     case 'setFundingKey':
     case 'clearFundingKey':
+    case 'setOrdinalsKey':
+    case 'clearOrdinalsKey':
     case 'generateKeyShares':
     case 'viewKeyShares':
       vscode.postMessage({ command: cmd, id });
@@ -243,6 +266,8 @@ function submitAddKey() {
   const lbl = document.getElementById('keyLabel') as HTMLInputElement;
   const val = document.getElementById('keyValue') as HTMLInputElement;
   const vanityPrefixInput = document.getElementById('vanityPrefix') as HTMLInputElement;
+  const setAsWalletCheckbox = document.getElementById('setAsWallet') as HTMLInputElement;
+  const setAsOrdinalsCheckbox = document.getElementById('setAsOrdinals') as HTMLInputElement;
   if (!sel || !lbl || !val) return;
 
   const t = sel.value;
@@ -295,6 +320,8 @@ function submitAddKey() {
     value: v,
     label: labelVal || 'Imported Key',
     metadata,
+    setAsWallet: setAsWalletCheckbox?.checked || false,
+    setAsOrdinals: setAsOrdinalsCheckbox?.checked || false,
   });
   closeModal();
 }

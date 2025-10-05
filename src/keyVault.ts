@@ -39,6 +39,7 @@ export interface KeyEntry {
   isEncryptionKey?: boolean;
   isIdentityKey?: boolean;
   isFundingKey?: boolean;
+  isOrdinalsKey?: boolean;
   keyShares?: string[];
   keyShareThreshold?: number;
   parentKeyId?: string;
@@ -411,6 +412,43 @@ export class KeyVault {
     this.decryptedKeys = this.decryptedKeys.map((k) => ({
       ...k,
       isFundingKey: false,
+    }));
+    await this.saveVault();
+    this.onKeyListChanged.fire();
+  }
+
+  public async getOrdinalsKey(): Promise<KeyEntry | undefined> {
+    await this.checkUnlock();
+    return this.decryptedKeys?.find((k) => k.isOrdinalsKey);
+  }
+
+  public async setOrdinalsKey(id: string): Promise<void> {
+    await this.checkUnlock();
+    if (!this.decryptedKeys) return;
+
+    const idx = this.decryptedKeys.findIndex((k) => k.id === id);
+    if (idx < 0) throw new Error('Key not found');
+
+    // Prevent key from being both encryption/identity and ordinals key
+    if (this.decryptedKeys[idx].isEncryptionKey || this.decryptedKeys[idx].isIdentityKey) {
+      throw new Error('A key cannot be both an ordinals key and an encryption/identity key');
+    }
+
+    this.decryptedKeys = this.decryptedKeys.map((k) => ({
+      ...k,
+      isOrdinalsKey: k.id === id,
+    }));
+    await this.saveVault();
+    this.onKeyListChanged.fire();
+  }
+
+  public async clearOrdinalsKey(): Promise<void> {
+    await this.checkUnlock();
+    if (!this.decryptedKeys) return;
+
+    this.decryptedKeys = this.decryptedKeys.map((k) => ({
+      ...k,
+      isOrdinalsKey: false,
     }));
     await this.saveVault();
     this.onKeyListChanged.fire();

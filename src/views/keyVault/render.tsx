@@ -44,6 +44,7 @@ export function renderKeyRecursive(
       data-is-encryption-key={k.isEncryptionKey}
       data-is-identity-key={k.isIdentityKey}
       data-is-funding-key={k.isFundingKey}
+      data-is-ordinals-key={k.isOrdinalsKey}
     >
       <div class="key-top">
         <div class="key-type-container">
@@ -53,7 +54,8 @@ export function renderKeyRecursive(
           )}
           {k.isEncryptionKey && <div class="key-badge encryption">Encryption Key</div>}
           {k.isIdentityKey && <div class="key-badge identity">Identity Key</div>}
-          {k.isFundingKey && <div class="key-badge funding">Funding Key</div>}
+          {k.isFundingKey && <div class="key-badge funding">Wallet</div>}
+          {k.isOrdinalsKey && <div class="key-badge ordinals">Ordinals</div>}
           <div
             class="key-label"
             data-cmd="editLabel"
@@ -143,20 +145,43 @@ function displayedTitle(k: KeyEntry): string {
 export function displayedKeyValue(k: KeyEntry): JSX.Element {
   if (k.type === 'mnemonic') {
     const phrase = k.metadata?.mnemonicWords || k.value;
+    const masked = '•'.repeat(phrase.length);
     return (
-      <div class="hover-reveal">
-        <span class="hover-hidden" safe>{customTruncate(phrase)}</span>
-        <span class="hover-show" safe>{phrase}</span>
+      <div class="secure-reveal">
+        <span class="state-default" safe>{masked}</span>
+        <span class="state-hover" safe>{customTruncate(phrase)}</span>
+        <span class="state-mousedown" safe>{phrase}</span>
       </div>
     );
   }
+
   const displayValue = deriveValueForDisplay(k);
+  const address = deriveAddressForKey(k);
+  const masked = '•'.repeat(displayValue.length);
+
   return (
-    <div class="hover-reveal">
-      <span class="hover-hidden" safe>{customTruncate(displayValue)}</span>
-      <span class="hover-show" safe>{displayValue}</span>
+    <div class="secure-reveal">
+      <span class="state-default" safe>{address || masked}</span>
+      <span class="state-hover" safe>{customTruncate(displayValue)}</span>
+      <span class="state-mousedown" safe>{displayValue}</span>
     </div>
   );
+}
+
+/**
+ * Derive address from key for default display (security)
+ */
+function deriveAddressForKey(k: KeyEntry): string | null {
+  try {
+    // Only derive address for WIF keys (private keys we want to protect)
+    if (k.type === 'wif') {
+      const isTestnet = k.metadata?.network === 'testnet';
+      return isTestnet ? deriveTestnetAddress(k) : deriveAddress(k);
+    }
+    return null; // Don't show address for other types, will show masked instead
+  } catch (e) {
+    return null;
+  }
 }
 
 /**
@@ -375,7 +400,7 @@ export function renderActions(k: KeyEntry): JSX.Element[] {
     );
   }
 
-  // Add "Set as Funding Key" action for WIF keys
+  // Add "Set as Wallet Key" action for WIF keys
   if (k.type === 'wif' && !k.isFundingKey) {
     actions.push(
       <button
@@ -384,12 +409,12 @@ export function renderActions(k: KeyEntry): JSX.Element[] {
         data-id={k.id}
         type="button"
       >
-        + Funding
+        + Wallet
       </button>
     );
   }
 
-  // Add "Clear Funding Key" action for funding keys
+  // Add "Clear Wallet Key" action for wallet keys
   if (k.isFundingKey) {
     actions.push(
       <button
@@ -398,7 +423,35 @@ export function renderActions(k: KeyEntry): JSX.Element[] {
         data-id={k.id}
         type="button"
       >
-        - Funding
+        - Wallet
+      </button>
+    );
+  }
+
+  // Add "Set as Ordinals Key" action for WIF keys
+  if (k.type === 'wif' && !k.isOrdinalsKey) {
+    actions.push(
+      <button
+        class="key-button"
+        data-cmd="setOrdinalsKey"
+        data-id={k.id}
+        type="button"
+      >
+        + Ord
+      </button>
+    );
+  }
+
+  // Add "Clear Ordinals Key" action for ordinals keys
+  if (k.isOrdinalsKey) {
+    actions.push(
+      <button
+        class="key-button"
+        data-cmd="clearOrdinalsKey"
+        data-id={k.id}
+        type="button"
+      >
+        - Ord
       </button>
     );
   }

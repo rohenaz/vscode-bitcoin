@@ -15,6 +15,7 @@ import {
 import { createVanityWIF, sanitizeVanityPrefix } from '../../commands/generateWIF';
 import { getPanelHtml } from './layout';
 import * as vscode from 'vscode';
+import { decryptBackup, type DecryptedBackup, type OneSatBackup } from 'bitcoin-backup';
 
 /**
  * Build an expanded set of "search tokens" for ephemeral indexing.
@@ -270,6 +271,9 @@ export class KeyPanel {
     shares?: string[];
     text?: string;
     vanityPrefix?: string;
+    metadata?: Record<string, string>;
+    setAsWallet?: boolean;
+    setAsOrdinals?: boolean;
   }) {
     switch (msg.command) {
       case 'copyKeyValue': {
@@ -341,6 +345,24 @@ export class KeyPanel {
             );
             return;
           }
+
+          // Store the key
+          const keyId = await this._vault.storeKey({
+            type: msg.type,
+            value: msg.value,
+            label: msg.label || 'Added Key',
+            metadata: msg.metadata
+          });
+
+          // Handle advanced options
+          if (msg.setAsWallet && msg.type === 'wif') {
+            await this._vault.setFundingKey(keyId);
+          }
+          if (msg.setAsOrdinals && msg.type === 'wif') {
+            await this._vault.setOrdinalsKey(keyId);
+          }
+
+          await this.updateContent();
         }
         break;
       }
@@ -426,42 +448,239 @@ export class KeyPanel {
         break;
 
       case 'importBackup': {
-        // Show file picker for JSON files
+        // Show file picker for both .bep and .json files
         const result = await vsApi.window.showOpenDialog({
           canSelectFiles: true,
           canSelectFolders: false,
           canSelectMany: false,
           filters: {
-            'JSON Files': ['json']
+            'Backup Files': ['bep', 'json']
           },
-          title: 'Import Identity Key Backup'
+          title: 'Import Key Backup'
         });
 
         if (!result || result.length === 0) return;
 
         try {
           const fileContent = await vsApi.workspace.fs.readFile(result[0]);
-          const backup = JSON.parse(fileContent.toString());
+          const contentString = fileContent.toString().trim();
 
-          if (!backup.derivedPrivateKey) {
-            throw new Error('Invalid backup file: missing derivedPrivateKey');
+          let decrypted: DecryptedBackup;
+
+          // Check if content is encrypted (base64 string without JSON structure)
+          const isEncrypted = !contentString.startsWith('{') && !contentString.startsWith('[');
+
+          if (isEncrypted) {
+            // Prompt for passphrase
+            const passphrase = await vsApi.window.showInputBox({
+              prompt: 'Enter passphrase to decrypt backup',
+              password: true,
+              placeHolder: 'Passphrase'
+            });
+
+            if (!passphrase) {
+              vsApi.window.showWarningMessage('Import cancelled: passphrase required');
+              return;
+            }
+
+            try {
+              decrypted = await decryptBackup(contentString, passphrase);
+            } catch (error) {
+              throw new Error('Failed to decrypt backup. Invalid passphrase or corrupted file.');
+            }
+          } else {
+            // Plain JSON backup
+            try {
+              decrypted = JSON.parse(contentString);
+            } catch (error) {
+              throw new Error('Invalid JSON backup file');
+            }
           }
 
-          // Store the key
-          const id = await this._vault.storeKey({
-            type: 'wif',
-            value: backup.derivedPrivateKey,
-            label: backup.name || backup.description || 'Imported Identity Key',
-            metadata: {
-              importedFrom: result[0].fsPath,
-              importedAt: new Date().toISOString()
+          // Process based on backup type
+          const importedKeys: string[] = [];
+          const importMetadata = {
+            importedFrom: result[0].fsPath,
+            importedAt: new Date().toISOString()
+          };
+
+          // Type 1: WifBackup - { wif, label?, createdAt? }
+          if ('wif' in decrypted && !('id' in decrypted) && !('ordPk' in decrypted)) {
+            const id = await this._vault.storeKey({
+              type: 'wif',
+              value: decrypted.wif,
+              label: decrypted.label || 'Imported WIF Key',
+              metadata: importMetadata
+            });
+            importedKeys.push(decrypted.label || 'WIF Key');
+          }
+          // Type 2: BapMemberBackup - { wif, id, label?, createdAt? }
+          else if ('wif' in decrypted && 'id' in decrypted) {
+            const id = await this._vault.storeKey({
+              type: 'wif',
+              value: decrypted.wif,
+              label: decrypted.label || 'Imported BAP Member Key',
+              metadata: {
+                ...importMetadata,
+                bapId: decrypted.id
+              }
+            });
+
+            // Set as identity key
+            await this._vault.setIdentityKey(id);
+            importedKeys.push(decrypted.label || 'BAP Member Identity');
+          }
+          // Type 3: BapMasterBackup (Type 42) - { ids, rootPk, label?, createdAt? }
+          else if ('ids' in decrypted && 'rootPk' in decrypted) {
+            const id = await this._vault.storeKey({
+              type: 'wif',
+              value: decrypted.rootPk,
+              label: decrypted.label || 'Imported BAP Master Key (Type 42)',
+              metadata: {
+                ...importMetadata,
+                bapIds: decrypted.ids,
+                backupType: 'type42'
+              }
+            });
+
+            // Set as identity key
+            await this._vault.setIdentityKey(id);
+            importedKeys.push(decrypted.label || 'BAP Master (Type 42)');
+          }
+          // Type 4: BapMasterBackup (Legacy) - { ids, xprv, mnemonic, label?, createdAt? }
+          else if ('ids' in decrypted && 'xprv' in decrypted && 'mnemonic' in decrypted) {
+            // Store mnemonic (which generates xprv internally)
+            const mnemonicId = await this._vault.storeKey({
+              type: 'mnemonic',
+              value: decrypted.mnemonic,
+              label: decrypted.label || 'Imported BAP Master Key (Legacy)',
+              metadata: {
+                ...importMetadata,
+                bapIds: decrypted.ids,
+                backupType: 'legacy',
+                mnemonicWords: decrypted.mnemonic
+              }
+            });
+
+            // Derive master key from mnemonic and set as identity
+            const mn = Mnemonic.fromString(decrypted.mnemonic);
+            const hd = HD.fromSeed(mn.toSeed());
+            if (hd.privKey) {
+              const masterPk = PrivateKey.fromHex(hd.privKey.toString());
+              const masterId = await this._vault.storeKey({
+                type: 'wif',
+                value: masterPk.toWif(),
+                label: `${decrypted.label || 'BAP Master'} - Root Key`,
+                metadata: {
+                  ...importMetadata,
+                  parentId: mnemonicId,
+                  derivedFrom: 'mnemonic'
+                }
+              });
+
+              await this._vault.setIdentityKey(masterId);
             }
-          });
 
-          // Set as identity key
-          await this._vault.setIdentityKey(id);
+            importedKeys.push(decrypted.label || 'BAP Master (Legacy)');
+          }
+          // Type 5: OneSatBackup - 3-field format { ordPk, payPk, identityPk, label?, createdAt? }
+          else if ('ordPk' in decrypted && 'payPk' in decrypted && 'identityPk' in decrypted) {
+            // Store ordinal key and set as ordinals key
+            const ordId = await this._vault.storeKey({
+              type: 'wif',
+              value: decrypted.ordPk,
+              label: `${decrypted.label || '1Sat'} - Ordinal Key`,
+              metadata: {
+                ...importMetadata,
+                oneSatRole: 'ordinal'
+              }
+            });
+            await this._vault.setOrdinalsKey(ordId);
 
-          vsApi.window.showInformationMessage('Identity key imported successfully');
+            // Store payment key and set as wallet key
+            const payId = await this._vault.storeKey({
+              type: 'wif',
+              value: decrypted.payPk,
+              label: `${decrypted.label || '1Sat'} - Payment Key`,
+              metadata: {
+                ...importMetadata,
+                oneSatRole: 'payment'
+              }
+            });
+            await this._vault.setFundingKey(payId);
+
+            // Store identity key and set as vault identity
+            const identityId = await this._vault.storeKey({
+              type: 'wif',
+              value: decrypted.identityPk,
+              label: `${decrypted.label || '1Sat'} - Identity Key`,
+              metadata: {
+                ...importMetadata,
+                oneSatRole: 'identity'
+              }
+            });
+            await this._vault.setIdentityKey(identityId);
+
+            importedKeys.push(
+              `${decrypted.label || '1Sat'} (3 keys: Ordinal, Payment, Identity)`
+            );
+          }
+          // Type 6: 1Sat Backup (2-field format) - { ordPk, payPk, label?, createdAt? }
+          // This is the actual format used by 1sat wallets (without identityPk)
+          else if ('ordPk' in decrypted && 'payPk' in decrypted && !('identityPk' in decrypted)) {
+            const oneSat = decrypted as Omit<OneSatBackup, 'identityPk'>;
+
+            // Store ordinal key and set as ordinals key
+            const ordId = await this._vault.storeKey({
+              type: 'wif',
+              value: oneSat.ordPk,
+              label: `${oneSat.label || '1Sat'} - Ordinal Key`,
+              metadata: {
+                ...importMetadata,
+                oneSatRole: 'ordinal'
+              }
+            });
+            await this._vault.setOrdinalsKey(ordId);
+
+            // Store payment key and set as wallet key
+            const payId = await this._vault.storeKey({
+              type: 'wif',
+              value: oneSat.payPk,
+              label: `${oneSat.label || '1Sat'} - Payment Key`,
+              metadata: {
+                ...importMetadata,
+                oneSatRole: 'payment'
+              }
+            });
+            await this._vault.setFundingKey(payId);
+
+            importedKeys.push(
+              `${oneSat.label || '1Sat'} (2 keys: Ordinal, Payment)`
+            );
+          }
+          // Legacy format fallback - { derivedPrivateKey, name?, description? }
+          else if ('derivedPrivateKey' in (decrypted as any)) {
+            const legacy = decrypted as any;
+            const id = await this._vault.storeKey({
+              type: 'wif',
+              value: legacy.derivedPrivateKey,
+              label: legacy.name || legacy.description || 'Imported Legacy Key',
+              metadata: {
+                ...importMetadata,
+                backupType: 'legacy-derivedPrivateKey'
+              }
+            });
+
+            await this._vault.setIdentityKey(id);
+            importedKeys.push(legacy.name || legacy.description || 'Legacy Key');
+          }
+          else {
+            throw new Error('Unsupported backup format. Expected WifBackup, BapMemberBackup, BapMasterBackup, OneSatBackup, or legacy format.');
+          }
+
+          vsApi.window.showInformationMessage(
+            `Successfully imported: ${importedKeys.join(', ')}`
+          );
           await this.updateContent();
         } catch (error) {
           vsApi.window.showErrorMessage(
@@ -481,6 +700,20 @@ export class KeyPanel {
       case 'clearFundingKey': {
         if (!msg.id) break;
         await this._vault.clearFundingKey();
+        await this.updateContent();
+        break;
+      }
+
+      case 'setOrdinalsKey': {
+        if (!msg.id) break;
+        await this._vault.setOrdinalsKey(msg.id);
+        await this.updateContent();
+        break;
+      }
+
+      case 'clearOrdinalsKey': {
+        if (!msg.id) break;
+        await this._vault.clearOrdinalsKey();
         await this.updateContent();
         break;
       }

@@ -12,8 +12,8 @@ import { addressFromPublicKey, addressFromPublicKeyTestnet } from './commands/ad
 import { addressFromWIF } from './commands/addressFromWIF';
 import { generateWIF, generateTestnetWIF, generateWIFVanity, generateTestnetWIFVanity } from './commands/generateWIF';
 import { asmFromScript } from './commands/asmFromScript';
-import { ConversionViewProvider } from './commands/convertData';
 import { openConversionTool } from './commands/convertData/index';
+import { BitcoinToolsViewProvider } from './views/bitcoinTools';
 import { handleDecodeFileCommand } from './commands/decodeFile';
 import { handleDecodeRawTxCommand } from './commands/decodeRawTx';
 import { extendedPrivateKeyFromMnemonic } from './commands/extendedPrivateKeyFromMnemonic';
@@ -251,8 +251,11 @@ export async function activate(context: ExtensionContext) {
     }),
   );
 
-  // We can skip the welcome screen if in test env
-  const isTestMode = process.env.TEST_ENV === 'true';
+  // Show welcome screen on first activation
+  if (!context.globalState.get('bitcoin.hasShownWelcome')) {
+    WelcomePanel.show(context.extensionUri);
+    await context.globalState.update('bitcoin.hasShownWelcome', true);
+  }
 
   // Construct managers
   const keyVault = new KeyVault(context);
@@ -268,14 +271,12 @@ export async function activate(context: ExtensionContext) {
     return _workspaceManager;
   };
 
-  // Register conversion view provider
-  const conversionViewProvider = new ConversionViewProvider(
-    context.extensionUri,
-  );
+  // Register Bitcoin Tools view provider (with tabs for Quick Actions, Data Conversion, Help)
+  const bitcoinToolsViewProvider = new BitcoinToolsViewProvider(context.extensionUri, keyVault);
   context.subscriptions.push(
     vsApi.window.registerWebviewViewProvider(
-      ConversionViewProvider.viewType,
-      conversionViewProvider,
+      BitcoinToolsViewProvider.viewType,
+      bitcoinToolsViewProvider,
     ),
   );
 
@@ -289,14 +290,7 @@ export async function activate(context: ExtensionContext) {
           ? editor.document.getText(editor.selection)
           : undefined;
 
-      try {
-        // First try to use the sidebar view
-        await vsApi.commands.executeCommand('bitcoin.conversionView.focus');
-        conversionViewProvider.initializeWithInput(selectedText);
-      } catch (error) {
-        // Fallback to panel if sidebar fails
-        await openConversionTool(selectedText);
-      }
+      await openConversionTool(selectedText);
     }),
   );
 
@@ -313,14 +307,8 @@ export async function activate(context: ExtensionContext) {
       return undefined;
     }
 
-    try {
-      // First try to use the sidebar view
-      await vsApi.commands.executeCommand('bitcoin.conversionView.focus');
-      conversionViewProvider.initializeWithInput(userInput);
-    } catch (error) {
-      // Fallback to panel if sidebar fails
-      await openConversionTool(userInput);
-    }
+    // Open conversion tool with the input
+    await openConversionTool(userInput);
   });
 
   // Register show key vault command
@@ -332,12 +320,6 @@ export async function activate(context: ExtensionContext) {
   );
   context.subscriptions.push(showKeyVaultCommand);
 
-  // Register test command
-  const testCommand = vsApi.commands.registerCommand('bitcoin.test', () => {
-    console.log('Test command executed');
-    vsApi.window.showInformationMessage('Test command works!');
-  });
-  context.subscriptions.push(testCommand);
 
   // Register detect and convert command
   registerCommand(context, outputManager, 'bitcoin.decodeFile', async () =>
@@ -819,14 +801,7 @@ export async function activate(context: ExtensionContext) {
       if (!text) return;
 
       const detected = detectFormat(text);
-      try {
-        // First try to use the sidebar view
-        await vsApi.commands.executeCommand('bitcoin.conversionView.focus');
-        conversionViewProvider.initializeWithInput(text, detected, 'hex');
-      } catch (error) {
-        // Fallback to panel if sidebar fails
-        await openConversionTool(text, detected, 'hex');
-      }
+      await openConversionTool(text, detected, 'hex');
     }),
 
     vsApi.commands.registerCommand('bitcoin.convertToBase64', async () => {
@@ -838,14 +813,7 @@ export async function activate(context: ExtensionContext) {
       if (!text) return;
 
       const detected = detectFormat(text);
-      try {
-        // First try to use the sidebar view
-        await vsApi.commands.executeCommand('bitcoin.conversionView.focus');
-        conversionViewProvider.initializeWithInput(text, detected, 'base64');
-      } catch (error) {
-        // Fallback to panel if sidebar fails
-        await openConversionTool(text, detected, 'base64');
-      }
+      await openConversionTool(text, detected, 'base64');
     }),
 
     vsApi.commands.registerCommand('bitcoin.convertToBinary', async () => {
@@ -857,14 +825,7 @@ export async function activate(context: ExtensionContext) {
       if (!text) return;
 
       const detected = detectFormat(text);
-      try {
-        // First try to use the sidebar view
-        await vsApi.commands.executeCommand('bitcoin.conversionView.focus');
-        conversionViewProvider.initializeWithInput(text, detected, 'binary');
-      } catch (error) {
-        // Fallback to panel if sidebar fails
-        await openConversionTool(text, detected, 'binary');
-      }
+      await openConversionTool(text, detected, 'binary');
     }),
 
     vsApi.commands.registerCommand('bitcoin.decodeHex', async () => {
@@ -875,14 +836,7 @@ export async function activate(context: ExtensionContext) {
       const text = editor.document.getText(selection);
       if (!text) return;
 
-      try {
-        // First try to use the sidebar view
-        await vsApi.commands.executeCommand('bitcoin.conversionView.focus');
-        conversionViewProvider.initializeWithInput(text, 'hex', 'utf8');
-      } catch (error) {
-        // Fallback to panel if sidebar fails
-        await openConversionTool(text, 'hex', 'utf8');
-      }
+      await openConversionTool(text, 'hex', 'utf8');
     }),
 
     vsApi.commands.registerCommand('bitcoin.decodeBase64', async () => {
@@ -893,14 +847,7 @@ export async function activate(context: ExtensionContext) {
       const text = editor.document.getText(selection);
       if (!text) return;
 
-      try {
-        // First try to use the sidebar view
-        await vsApi.commands.executeCommand('bitcoin.conversionView.focus');
-        conversionViewProvider.initializeWithInput(text, 'base64', 'utf8');
-      } catch (error) {
-        // Fallback to panel if sidebar fails
-        await openConversionTool(text, 'base64', 'utf8');
-      }
+      await openConversionTool(text, 'base64', 'utf8');
     }),
   );
 
@@ -908,10 +855,20 @@ export async function activate(context: ExtensionContext) {
   context.subscriptions.push(
     vsApi.commands.registerCommand('bitcoin.exploreAddress', async () => {
       const editor = vsApi.window.activeTextEditor;
-      if (!editor) return;
+      let address = '';
 
-      const selection = editor.selection;
-      const address = editor.document.getText(selection);
+      if (editor && !editor.selection.isEmpty) {
+        const selection = editor.selection;
+        address = editor.document.getText(selection);
+      }
+
+      if (!address) {
+        address = await vsApi.window.showInputBox({
+          prompt: 'Enter Bitcoin address to explore',
+          placeHolder: '1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa',
+        }) || '';
+      }
+
       if (!address) return;
 
       const url = `https://whatsonchain.com/address/${address}`;

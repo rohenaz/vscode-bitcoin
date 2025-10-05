@@ -71,9 +71,11 @@ export async function handleFetchOrdinalsInscriptionCommand(
 ) {
   const outpoint = await vsApi.window.showInputBox({
     value: '',
-    placeHolder: 'Ex: txid_vout',
-    validateInput: (_text) => {
-      return null;
+    placeHolder: 'Ex: 027cea24351db7081089108b59916e5c5e90893233a872266c013f7665c53758_1',
+    validateInput: (text) => {
+      return text.match(/^[a-fA-F0-9]{64}_[0-9]+$/)
+        ? null
+        : 'Invalid outpoint format. Expected: txid_vout';
     },
   });
 

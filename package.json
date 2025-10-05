@@ -36,11 +36,6 @@
         "category": "Bitcoin"
       },
       {
-        "command": "bitcoin.test",
-        "title": "Test Command",
-        "category": "Bitcoin"
-      },
-      {
         "command": "bitcoin.asmFromScript",
         "title": "ASM from Script",
         "category": "Bitcoin"
@@ -254,6 +249,26 @@
         "command": "bitcoin.resetExtension",
         "title": "Reset Extension",
         "category": "Bitcoin"
+      },
+      {
+        "command": "bitcoin.encryptToFriend",
+        "title": "Encrypt Message to Friend",
+        "category": "Bitcoin"
+      },
+      {
+        "command": "bitcoin.signOpReturnData",
+        "title": "Sign OP_RETURN Data",
+        "category": "Bitcoin"
+      },
+      {
+        "command": "bitcoin.sendTransaction",
+        "title": "Send Transaction",
+        "category": "Bitcoin"
+      },
+      {
+        "command": "bitcoin.handleOutput",
+        "title": "Handle Output",
+        "category": "Bitcoin"
       }
     ],
     "menus": {
@@ -400,6 +415,37 @@
           "type": "boolean",
           "default": true,
           "description": "Automatically store generated keys in the vault"
+        },
+        "bitcoin.mnee.apiKey": {
+          "type": "string",
+          "default": "",
+          "description": "MNEE API key from https://developer.mnee.net/"
+        },
+        "bitcoin.mnee.environment": {
+          "type": "string",
+          "enum": ["sandbox", "production"],
+          "default": "sandbox",
+          "description": "MNEE API environment (sandbox for testing, production for mainnet)"
+        },
+        "bitcoin.wallet.showNfts": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show NFTs/Ordinals section in wallet"
+        },
+        "bitcoin.wallet.showTokens": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show BSV-20/BSV-21 tokens section in wallet"
+        },
+        "bitcoin.wallet.autoRefresh": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically refresh wallet when funding key changes"
+        },
+        "bitcoin.wallet.refreshInterval": {
+          "type": "number",
+          "default": 60000,
+          "description": "Wallet auto-refresh interval in milliseconds (0 to disable)"
         }
       }
     },
@@ -416,8 +462,8 @@
       "bitcoin-tools": [
         {
           "type": "webview",
-          "id": "bitcoin.conversionView",
-          "name": "Data Conversion"
+          "id": "bitcoin.toolsView",
+          "name": "Bitcoin Tools"
         }
       ]
     },
@@ -466,7 +512,8 @@
     ]
   },
   "scripts": {
-    "build": "VITE_CJS_IGNORE_WARNING=true vite build",
+    "build": "bun run build:webview && VITE_CJS_IGNORE_WARNING=true vite build",
+    "build:webview": "cd src/views/bitcoinTools/webview && bun run build",
     "build:test": "tsc -p ./",
     "dev": "vite build --watch",
     "lint": "biome lint .",
@@ -487,7 +534,7 @@
     "@types/glob": "^9.0.0",
     "@types/node": "^24.6.2",
     "@types/node-fetch": "^2.6.13",
-    "@types/vscode": "1.99.3",
+    "@types/vscode": "^1.99.1",
     "@vscode/test-electron": "^2.5.2",
     "@vscode/vsce": "^3.6.2",
     "bun-types": "^1.2.23",
@@ -503,9 +550,11 @@
     "@bsv/sdk": "^1.8.2",
     "@kitajs/html": "^4.2.10",
     "@kitajs/ts-html-plugin": "^4.1.3",
+    "@mnee/ts-sdk": "^1.0.1",
     "@types/bun": "^1.2.23",
     "bitcoin-backup": "^0.0.2",
     "bsv-bap": "^0.1.12",
+    "js-1sat-ord": "^0.1.82",
     "node-fetch": "^3.3.2"
   },
   "optionalDependencies": {
