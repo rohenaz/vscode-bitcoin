@@ -48,6 +48,7 @@ export interface KeyEntry {
 export class KeyVault {
   private storage: SecretStorage;
   private onKeyListChanged: EventEmitter<void>;
+  private onVaultUnlocked: EventEmitter<void>;
 
   private ephemeralKey: SymmetricKey | null = null;
   private decryptedKeys: KeyEntry[] | null = null;
@@ -55,6 +56,7 @@ export class KeyVault {
   constructor(context: ExtensionContext) {
     this.storage = context.secrets;
     this.onKeyListChanged = new vsApi.EventEmitter<void>();
+    this.onVaultUnlocked = new vsApi.EventEmitter<void>();
   }
 
   public get isUnlocked(): boolean {
@@ -116,6 +118,7 @@ export class KeyVault {
       const hashHex = toHex(toArray(pbkdf2Key));
       await this.storage.store(PASSWORD_HASH_KEY, hashHex);
       await this.saveVault();
+      this.onVaultUnlocked.fire();
       return;
     }
 
@@ -132,6 +135,7 @@ export class KeyVault {
 
         // Re-encrypt that old data for next load
         await this.saveVault();
+        this.onVaultUnlocked.fire();
         return;
       } catch {
         // If parse fails => data is not plaintext JSON => likely old or corrupted
@@ -143,6 +147,7 @@ export class KeyVault {
         const hashHex = toHex(toArray(pbkdf2Key));
         await this.storage.store(PASSWORD_HASH_KEY, hashHex);
         await this.saveVault();
+        this.onVaultUnlocked.fire();
         return;
 
         // Option 2: If you REALLY want to preserve it, you'd have to guess
@@ -162,6 +167,7 @@ export class KeyVault {
       const plainHex = this.ephemeralKey.decrypt(storedVault, 'hex') as string;
       const json = toUTF8(toArray(plainHex, 'hex'));
       this.decryptedKeys = JSON.parse(json) as KeyEntry[];
+      this.onVaultUnlocked.fire();
     } catch (err) {
       throw new Error('Vault decryption failed. Data may be corrupted.');
     }
@@ -211,10 +217,140 @@ export class KeyVault {
     return this.onKeyListChanged.event;
   }
 
+  public get onDidUnlock(): Event<void> {
+    return this.onVaultUnlocked.event;
+  }
+
+  /**
+   * Export vault backup data (for use with bitcoin-backup library)
+   * Returns only the encrypted vault blob - NO password hash exposure
+   * The encrypted vault already contains [salt][IV][ciphertext]
+   */
+  public async exportVaultBackup(): Promise<{
+    encryptedVault: string;
+    keyCount: number;
+  } | null> {
+    try {
+      const encryptedVault = await this.storage.get(ENCRYPTED_VAULT_BLOB);
+
+      if (!encryptedVault) {
+        return null;
+      }
+
+      return {
+        encryptedVault,
+        keyCount: this.decryptedKeys?.length ?? 0,
+      };
+    } catch (error) {
+      console.error('Error exporting vault backup:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Import encrypted vault backup
+   * Restores only the encrypted vault blob
+   * Password is verified during unlock attempt (no hash needed)
+   */
+  public async importVaultBackup(encryptedVault: string): Promise<void> {
+    try {
+      await this.storage.store(ENCRYPTED_VAULT_BLOB, encryptedVault);
+
+      // Clear in-memory state to force re-unlock
+      this.ephemeralKey = null;
+      this.decryptedKeys = null;
+    } catch (error) {
+      console.error('Error importing vault backup:', error);
+      throw new Error('Failed to import vault backup');
+    }
+  }
+
+  /**
+   * Verify if a password can unlock the vault (for import preview)
+   */
+  public async verifyPassword(password: string): Promise<boolean> {
+    try {
+      const passwordHash = await this.storage.get(PASSWORD_HASH_KEY);
+      const salt = await this.storage.get(SALT_KEY);
+
+      if (!passwordHash || !salt) {
+        return false;
+      }
+
+      // Hash the provided password with the stored salt
+      const pbkdf2Key = crypto.pbkdf2Sync(password, Buffer.from(salt), 100000, 32, 'sha256');
+      const { toHex, toArray } = await import('@bsv/sdk').then(m => m.Utils);
+      const hashHex = toHex(toArray(pbkdf2Key));
+
+      return hashHex === passwordHash;
+    } catch (error) {
+      return false;
+    }
+  }
+
+  /**
+   * Get vault statistics
+   */
+  public getVaultStats(): {
+    totalKeys: number;
+    keyTypes: Record<string, number>;
+    hasEncryptionKey: boolean;
+    hasFundingKey: boolean;
+    hasOrdinalsKey: boolean;
+  } | null {
+    if (!this.isUnlocked || !this.decryptedKeys) {
+      return null;
+    }
+
+    const stats = {
+      totalKeys: this.decryptedKeys.length,
+      keyTypes: {} as Record<string, number>,
+      hasEncryptionKey: false,
+      hasFundingKey: false,
+      hasOrdinalsKey: false
+    };
+
+    for (const key of this.decryptedKeys) {
+      // Count by type
+      stats.keyTypes[key.type] = (stats.keyTypes[key.type] || 0) + 1;
+
+      // Check for special keys
+      if (key.isEncryptionKey) stats.hasEncryptionKey = true;
+      if (key.isFundingKey) stats.hasFundingKey = true;
+      if (key.isOrdinalsKey) stats.hasOrdinalsKey = true;
+    }
+
+    return stats;
+  }
+
   public async storeKey(entry: Omit<KeyEntry, 'id' | 'timestamp'>): Promise<string> {
     await this.checkUnlock();
     if (!this.decryptedKeys) {
       throw new Error('Vault is in an invalid state');
+    }
+
+    // Check for duplicate key value to prevent collisions
+    const existingKey = this.decryptedKeys.find(k => k.value === entry.value && k.type === entry.type);
+    if (existingKey) {
+      // Key already exists - update metadata if new info provided, but keep existing label
+      console.log(`Key already exists with ID ${existingKey.id}, merging metadata`);
+
+      // Merge metadata from new entry into existing key
+      if (entry.metadata) {
+        existingKey.metadata = {
+          ...existingKey.metadata,
+          ...entry.metadata,
+        };
+      }
+
+      // Update label only if the existing one is generic and new one is more specific
+      if (entry.label && (!existingKey.label || existingKey.label.includes('Imported'))) {
+        existingKey.label = entry.label;
+      }
+
+      await this.saveVault();
+      this.onKeyListChanged.fire();
+      return existingKey.id;
     }
 
     const id = crypto.randomUUID();

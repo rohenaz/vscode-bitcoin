@@ -552,7 +552,7 @@
     "@kitajs/ts-html-plugin": "^4.1.3",
     "@mnee/ts-sdk": "^1.0.1",
     "@types/bun": "^1.2.23",
-    "bitcoin-backup": "^0.0.2",
+    "bitcoin-backup": "file:../bitcoin-backup",
     "bsv-bap": "^0.1.12",
     "js-1sat-ord": "^0.1.82",
     "node-fetch": "^3.3.2"

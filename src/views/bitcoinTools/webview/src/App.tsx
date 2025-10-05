@@ -11,6 +11,19 @@ import { useEffect, useState } from 'react'
 function App() {
   const [activeTab, setActiveTab] = useState('wallet')
 
+  // Accordion state for each tab - persisted across tab switches
+  const [accordionState, setAccordionState] = useState({
+    keys: ['generate'],
+    addresses: ['from-keys'],
+    transactions: ['query'],
+    data: ['convert'],
+    blockchain: ['lookup'],
+  })
+
+  const updateAccordionState = (tab: string, items: string[]) => {
+    setAccordionState(prev => ({ ...prev, [tab]: items }))
+  }
+
   useEffect(() => {
     document.documentElement.classList.add('dark')
 
@@ -37,19 +50,34 @@ function App() {
         <WalletTab isActive={activeTab === 'wallet'} />
       </TabsContent>
       <TabsContent value="keys" className="p-2">
-        <KeysTab />
+        <KeysTab
+          openItems={accordionState.keys}
+          onOpenChange={(items) => updateAccordionState('keys', items)}
+        />
       </TabsContent>
       <TabsContent value="addresses" className="p-2">
-        <AddressesTab />
+        <AddressesTab
+          openItems={accordionState.addresses}
+          onOpenChange={(items) => updateAccordionState('addresses', items)}
+        />
       </TabsContent>
       <TabsContent value="transactions" className="p-2">
-        <TransactionsTab />
+        <TransactionsTab
+          openItems={accordionState.transactions}
+          onOpenChange={(items) => updateAccordionState('transactions', items)}
+        />
       </TabsContent>
       <TabsContent value="data" className="p-2">
-        <DataTab />
+        <DataTab
+          openItems={accordionState.data}
+          onOpenChange={(items) => updateAccordionState('data', items)}
+        />
       </TabsContent>
       <TabsContent value="blockchain" className="p-2">
-        <BlockchainTab />
+        <BlockchainTab
+          openItems={accordionState.blockchain}
+          onOpenChange={(items) => updateAccordionState('blockchain', items)}
+        />
       </TabsContent>
     </Tabs>
   )

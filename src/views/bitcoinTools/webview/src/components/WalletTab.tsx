@@ -4,14 +4,23 @@ import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion'
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/components/ui/empty'
+import { Item, ItemGroup, ItemContent, ItemTitle, ItemDescription, ItemHeader, ItemMedia, ItemActions } from '@/components/ui/item'
 import {
   Wallet, RefreshCw, Send, Download, Copy,
-  Zap, MapPin, Image, Coins
+  MapPin, Image, Coins, Flame, FolderOpen, Loader2
 } from 'lucide-react'
 import { getVscode } from '../vscode'
-import { cn } from '@/lib/utils'
 import { SendBsvDialog } from './SendBsvDialog'
 import { ReceiveDialog } from './ReceiveDialog'
+import { TransferTokenDialog } from './TransferTokenDialog'
+
+interface Collection {
+  id: string;
+  name?: string;
+  description?: string;
+  icon?: string;
+  items: any[];
+}
 
 interface WalletState {
   fundingKey: {
@@ -24,12 +33,19 @@ interface WalletState {
     total: number;
     spendable: number;
   };
-  nfts: any[];
+  nfts: any[];           // Standalone NFTs
+  collections: Collection[]; // Grouped collections
   tokens: {
     bsv20: any[];
     bsv21: any[];
   };
   isLoading: boolean;
+  loadingStates?: {
+    balance: boolean;
+    nfts: boolean;
+    bsv20: boolean;
+    bsv21: boolean;
+  };
   isVaultLocked: boolean;
   lastUpdate: number;
 }
@@ -44,6 +60,7 @@ export default function WalletTab({ isActive }: WalletTabProps) {
     fundingKey: null,
     balance: { total: 0, spendable: 0 },
     nfts: [],
+    collections: [],
     tokens: { bsv20: [], bsv21: [] },
     isLoading: true,
     isVaultLocked: true,
@@ -51,6 +68,11 @@ export default function WalletTab({ isActive }: WalletTabProps) {
   })
   const [showSendDialog, setShowSendDialog] = useState(false)
   const [showReceiveDialog, setShowReceiveDialog] = useState(false)
+  const [showTransferDialog, setShowTransferDialog] = useState(false)
+  const [showBurnDialog, setShowBurnDialog] = useState(false)
+  const [selectedToken, setSelectedToken] = useState<any>(null)
+  // Force re-render key based on vault lock state to ensure UI updates
+  const [renderKey, setRenderKey] = useState(0)
 
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
@@ -60,17 +82,26 @@ export default function WalletTab({ isActive }: WalletTabProps) {
         case 'wallet:stateUpdate':
           console.log('[WalletTab] Received stateUpdate:', {
             isVaultLocked: data.isVaultLocked,
-            hasFundingKey: !!data.fundingKey
+            hasFundingKey: !!data.fundingKey,
+            isLoading: data.isLoading
           })
-          setState(prev => ({ ...prev, ...data, isLoading: false }))
+          setState(prev => {
+            // Force re-render if vault lock state changed
+            if (prev.isVaultLocked !== data.isVaultLocked) {
+              setRenderKey(k => k + 1)
+            }
+            return { ...prev, ...data }
+          })
           break
 
         case 'wallet:fundingKeyChanged':
           console.log('[WalletTab] Received fundingKeyChanged:', {
             isVaultLocked: data.isVaultLocked,
-            hasFundingKey: !!data.fundingKey
+            hasFundingKey: !!data.fundingKey,
+            isLoading: data.isLoading
           })
           setState(data)
+          setRenderKey(k => k + 1) // Force re-render on funding key change
           break
 
         case 'wallet:error':
@@ -144,7 +175,23 @@ export default function WalletTab({ isActive }: WalletTabProps) {
         ordAddress={state.fundingKey?.ordAddress || ''}
       />
 
-      <div className="wallet-container">
+      <TransferTokenDialog
+        open={showTransferDialog}
+        onOpenChange={setShowTransferDialog}
+        token={selectedToken}
+        ordAddress={state.fundingKey?.ordAddress || ''}
+        isBurn={false}
+      />
+
+      <TransferTokenDialog
+        open={showBurnDialog}
+        onOpenChange={setShowBurnDialog}
+        token={selectedToken}
+        ordAddress={state.fundingKey?.ordAddress || ''}
+        isBurn={true}
+      />
+
+      <div key={renderKey} className="wallet-container">
       {/* Header Bar */}
       <div className="wallet-header flex items-center justify-between mb-2 pb-2 border-b">
         <Button
@@ -156,14 +203,20 @@ export default function WalletTab({ isActive }: WalletTabProps) {
           {state.fundingKey?.label || truncateAddress(state.fundingKey?.payAddress || '') || "Select Key"}
         </Button>
 
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={handleRefresh}
-          disabled={state.isLoading}
-        >
-          <RefreshCw className={cn("h-3 w-3", state.isLoading && "animate-spin")} />
-        </Button>
+        {state.isLoading ? (
+          <div className="flex items-center gap-2 px-2">
+            <RefreshCw className="h-3 w-3 animate-spin text-muted-foreground" />
+            <span className="text-xs text-muted-foreground">Loading...</span>
+          </div>
+        ) : (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleRefresh}
+          >
+            <RefreshCw className="h-3 w-3" />
+          </Button>
+        )}
       </div>
 
       {/* Empty State - Vault Locked or No Funding Key */}
@@ -213,50 +266,38 @@ export default function WalletTab({ isActive }: WalletTabProps) {
                   </div>
                 )}
               </div>
+              <div className="grid grid-cols-3 gap-2 mt-4">
+                <Button
+                  onClick={handleSend}
+                  disabled={state.balance.spendable === 0}
+                  size="sm"
+                >
+                  <Send className="h-4 w-4 mr-2" />
+                  Send
+                </Button>
+                <Button
+                  onClick={handleReceive}
+                  variant="outline"
+                  size="sm"
+                >
+                  <Download className="h-4 w-4 mr-2" />
+                  Receive
+                </Button>
+              </div>
             </CardContent>
           </Card>
 
           {/* Accordion Sections */}
           <Accordion type="multiple" className="w-full">
-            {/* Actions Section */}
-            <AccordionItem value="actions">
-              <AccordionTrigger className="text-xs">
-                <div className="flex items-center gap-2">
-                  <Zap className="h-3 w-3" />
-                  Actions
-                </div>
-              </AccordionTrigger>
-              <AccordionContent>
-                <div className="grid gap-1">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="justify-start text-xs"
-                    onClick={handleSend}
-                    disabled={state.balance.spendable === 0}
-                  >
-                    <Send className="h-3 w-3 mr-2" />
-                    Send BSV
-                  </Button>
-
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="justify-start text-xs"
-                    onClick={handleReceive}
-                  >
-                    <Download className="h-3 w-3 mr-2" />
-                    Receive
-                  </Button>
-                </div>
-              </AccordionContent>
-            </AccordionItem>
-
-            {/* NFTs/Ordinals Section */}
+            {/* Standalone NFTs Section */}
             <AccordionItem value="nfts">
               <AccordionTrigger className="text-xs">
                 <div className="flex items-center gap-2">
-                  <Image className="h-3 w-3" />
+                  {state.loadingStates?.nfts ? (
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                  ) : (
+                    <Image className="h-3 w-3" />
+                  )}
                   Ordinals & NFTs
                   <span className="ml-auto text-muted-foreground">
                     ({state.nfts.length})
@@ -277,11 +318,81 @@ export default function WalletTab({ isActive }: WalletTabProps) {
                     </EmptyHeader>
                   </Empty>
                 ) : (
-                  <div className="grid gap-1">
+                  <ItemGroup className="grid grid-cols-2 gap-2">
                     {state.nfts.map((nft, idx) => (
-                      <NftCard key={idx} nft={nft} vscode={vscode} />
+                      <NftItem key={idx} nft={nft} vscode={vscode} />
                     ))}
-                  </div>
+                  </ItemGroup>
+                )}
+              </AccordionContent>
+            </AccordionItem>
+
+            {/* Collections Section */}
+            <AccordionItem value="collections">
+              <AccordionTrigger className="text-xs">
+                <div className="flex items-center gap-2">
+                  {state.loadingStates?.nfts ? (
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                  ) : (
+                    <FolderOpen className="h-3 w-3" />
+                  )}
+                  Collections
+                  <span className="ml-auto text-muted-foreground">
+                    ({state.collections.length})
+                  </span>
+                </div>
+              </AccordionTrigger>
+              <AccordionContent>
+                {state.collections.length === 0 ? (
+                  <Empty>
+                    <EmptyHeader>
+                      <EmptyMedia variant="icon">
+                        <FolderOpen className="h-8 w-8 text-muted-foreground" />
+                      </EmptyMedia>
+                      <EmptyTitle className="text-sm">No Collections</EmptyTitle>
+                      <EmptyDescription className="text-xs">
+                        You don't have any NFT collections yet
+                      </EmptyDescription>
+                    </EmptyHeader>
+                  </Empty>
+                ) : (
+                  <Accordion type="multiple" className="w-full">
+                    {state.collections.map((collection) => (
+                      <AccordionItem key={collection.id} value={collection.id}>
+                        <AccordionTrigger className="text-xs py-2">
+                          <div className="flex items-center gap-2 w-full">
+                            {collection.icon ? (
+                              <img
+                                src={`https://ordfs.network/${collection.icon}`}
+                                className="h-6 w-6 rounded object-cover"
+                                alt={collection.name || 'Collection'}
+                              />
+                            ) : (
+                              <div className="h-6 w-6 rounded bg-muted flex items-center justify-center">
+                                <FolderOpen className="h-4 w-4 text-muted-foreground" />
+                              </div>
+                            )}
+                            <div className="flex-1 text-left">
+                              <div className="font-medium">{collection.name || collection.id.slice(0, 8) + '...'}</div>
+                              {collection.description && (
+                                <div className="text-xs text-muted-foreground">{collection.description}</div>
+                              )}
+                            </div>
+                            <Badge variant="secondary" className="text-xs">
+                              {collection.items.length}
+                            </Badge>
+                          </div>
+                        </AccordionTrigger>
+                        <AccordionContent>
+                          <ItemGroup className="grid grid-cols-2 gap-2 pl-2">
+                            {collection.items.map((nft, idx) => (
+                              <NftItem key={idx} nft={nft} vscode={vscode} />
+                            ))}
+                          </ItemGroup>
+                        </AccordionContent>
+                      </AccordionItem>
+                    ))}
+                  </Accordion>
                 )}
               </AccordionContent>
             </AccordionItem>
@@ -290,7 +401,11 @@ export default function WalletTab({ isActive }: WalletTabProps) {
             <AccordionItem value="tokens">
               <AccordionTrigger className="text-xs">
                 <div className="flex items-center gap-2">
-                  <Coins className="h-3 w-3" />
+                  {(state.loadingStates?.bsv20 || state.loadingStates?.bsv21) ? (
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                  ) : (
+                    <Coins className="h-3 w-3" />
+                  )}
                   Tokens
                   <span className="ml-auto text-muted-foreground">
                     ({state.tokens.bsv20.length + state.tokens.bsv21.length})
@@ -311,24 +426,74 @@ export default function WalletTab({ isActive }: WalletTabProps) {
                     </EmptyHeader>
                   </Empty>
                 ) : (
-                  <div className="space-y-2">
-                    {state.tokens.bsv20.length > 0 && (
-                      <div>
-                        <div className="text-xs font-medium mb-1">BSV-20</div>
-                        {state.tokens.bsv20.map((token, idx) => (
-                          <TokenCard key={idx} token={token} />
-                        ))}
-                      </div>
+                  <Accordion type="multiple" className="w-full">
+                    {(state.tokens.bsv20.length > 0 || state.loadingStates?.bsv20) && (
+                      <AccordionItem value="bsv20">
+                        <AccordionTrigger className="text-xs py-2">
+                          <div className="flex items-center gap-2">
+                            {state.loadingStates?.bsv20 ? (
+                              <Loader2 className="h-3 w-3 animate-spin" />
+                            ) : (
+                              <Coins className="h-3 w-3" />
+                            )}
+                            <Badge variant="default" className="text-xs">BSV-20</Badge>
+                            <span className="text-muted-foreground">({state.tokens.bsv20.length})</span>
+                          </div>
+                        </AccordionTrigger>
+                        <AccordionContent>
+                          <div className="space-y-1">
+                            {state.tokens.bsv20.map((token, idx) => (
+                              <TokenCard
+                                key={idx}
+                                token={token}
+                                onSend={(t) => {
+                                  setSelectedToken(t)
+                                  setShowTransferDialog(true)
+                                }}
+                                onBurn={(t) => {
+                                  setSelectedToken(t)
+                                  setShowBurnDialog(true)
+                                }}
+                              />
+                            ))}
+                          </div>
+                        </AccordionContent>
+                      </AccordionItem>
                     )}
-                    {state.tokens.bsv21.length > 0 && (
-                      <div>
-                        <div className="text-xs font-medium mb-1">BSV-21</div>
-                        {state.tokens.bsv21.map((token, idx) => (
-                          <TokenCard key={idx} token={token} />
-                        ))}
-                      </div>
+                    {(state.tokens.bsv21.length > 0 || state.loadingStates?.bsv21) && (
+                      <AccordionItem value="bsv21">
+                        <AccordionTrigger className="text-xs py-2">
+                          <div className="flex items-center gap-2">
+                            {state.loadingStates?.bsv21 ? (
+                              <Loader2 className="h-3 w-3 animate-spin" />
+                            ) : (
+                              <Coins className="h-3 w-3" />
+                            )}
+                            <Badge variant="secondary" className="text-xs">BSV-21</Badge>
+                            <span className="text-muted-foreground">({state.tokens.bsv21.length})</span>
+                          </div>
+                        </AccordionTrigger>
+                        <AccordionContent>
+                          <div className="space-y-1">
+                            {state.tokens.bsv21.map((token, idx) => (
+                              <TokenCard
+                                key={idx}
+                                token={token}
+                                onSend={(t) => {
+                                  setSelectedToken(t)
+                                  setShowTransferDialog(true)
+                                }}
+                                onBurn={(t) => {
+                                  setSelectedToken(t)
+                                  setShowBurnDialog(true)
+                                }}
+                              />
+                            ))}
+                          </div>
+                        </AccordionContent>
+                      </AccordionItem>
                     )}
-                  </div>
+                  </Accordion>
                 )}
               </AccordionContent>
             </AccordionItem>
@@ -381,91 +546,145 @@ export default function WalletTab({ isActive }: WalletTabProps) {
   )
 }
 
-// NFT Card Component
-function NftCard({ nft, vscode }: { nft: any; vscode: any }) {
-  const contentType = nft.data?.insc?.file?.type || 'unknown'
+// NFT Grid Card Component - displays name, inscription #, and content type
+function NftItem({ nft, vscode }: { nft: any; vscode: any }) {
+  const contentType = nft.contentType || 'unknown'
   const hasImage = contentType.startsWith('image/')
-  const origin = nft.origin || `${nft.txid}_${nft.vout}`
+  const origin = nft.origin
+  const displayName = nft.name || (nft.num ? `#${nft.num}` : null)
 
-  const truncateOutpoint = (outpoint: string): string => {
-    if (!outpoint) return ''
-    const [txid] = outpoint.split('_')
-    return `${txid.slice(0, 8)}...`
+  const getTypeLabel = (type: string): string => {
+    if (type.startsWith('image/')) return type.replace('image/', '').toUpperCase()
+    if (type.startsWith('video/')) return type.replace('video/', '').toUpperCase()
+    if (type.startsWith('audio/')) return type.replace('audio/', '').toUpperCase()
+    if (type.startsWith('text/')) return type.replace('text/', '').toUpperCase()
+    if (type === 'application/json') return 'JSON'
+    if (type === 'application/pdf') return 'PDF'
+    return type
+  }
+
+  const handleImageError = (e: React.SyntheticEvent<HTMLImageElement>) => {
+    e.currentTarget.classList.add('opacity-20')
+  }
+
+  const handleOpenInVscode = () => {
+    vscode.postMessage({
+      command: 'downloadOrdinal',
+      origin: origin,
+      contentType: contentType
+    })
   }
 
   return (
-    <Button
-      variant="ghost"
-      size="sm"
-      className="justify-start text-xs h-auto py-2"
-      onClick={() => {
-        vscode.postMessage({
-          command: 'openExternal',
-          url: `https://ordinals.gorillapool.io/inscription/${origin}`
-        })
-      }}
-    >
-      <div className="flex items-center gap-2 w-full">
+    <Item variant="outline" className="cursor-pointer" onClick={handleOpenInVscode}>
+      <ItemHeader>
         {hasImage ? (
           <img
-            src={`https://ordinals.gorillapool.io/content/${origin}`}
-            className="h-8 w-8 rounded object-cover"
-            alt="NFT"
+            src={`https://ordfs.network/${origin}`}
+            className="aspect-square w-full rounded-sm object-cover"
+            alt={displayName || 'NFT'}
+            onError={handleImageError}
           />
         ) : (
-          <div className="h-8 w-8 rounded bg-muted flex items-center justify-center">
-            <Image className="h-4 w-4 text-muted-foreground" />
+          <div className="aspect-square w-full rounded-sm bg-muted flex flex-col items-center justify-center gap-2">
+            <Image className="h-12 w-12 text-muted-foreground" />
+            <span className="text-xs text-muted-foreground text-center break-all px-2">
+              {getTypeLabel(contentType)}
+            </span>
           </div>
         )}
-        <div className="flex-1 text-left">
-          <div className="font-medium">{truncateOutpoint(origin)}</div>
-          <div className="flex items-center gap-2 mt-1">
-            <Badge variant="outline" className="text-xs py-0 h-5">
-              {contentType}
-            </Badge>
-          </div>
-        </div>
-      </div>
-    </Button>
+      </ItemHeader>
+      <ItemContent>
+        <ItemTitle className="text-xs">{displayName || 'Unknown'}</ItemTitle>
+        <ItemDescription className="text-xs text-muted-foreground">
+          {getTypeLabel(contentType)}
+          {nft.num && ` • #${nft.num}`}
+        </ItemDescription>
+      </ItemContent>
+    </Item>
   )
 }
 
 // Token Card Component
-function TokenCard({ token }: { token: any }) {
+interface TokenCardProps {
+  token: any
+  onSend: (token: any) => void
+  onBurn: (token: any) => void
+}
+
+function TokenCard({ token, onSend, onBurn }: TokenCardProps) {
+  const [imgError, setImgError] = useState(false)
+
   const truncateOutpoint = (outpoint: string): string => {
     if (!outpoint) return ''
     const [txid] = outpoint.split('_')
     return `${txid.slice(0, 8)}...`
   }
 
+  // Get display name based on protocol
+  const displayName = token.protocol === 'BSV20'
+    ? (token.tick || truncateOutpoint(token.tokenId))
+    : (token.sym || truncateOutpoint(token.tokenId))
+
+  const displayUnit = token.protocol === 'BSV20' ? token.tick : token.sym
+
+  // Format price display
+  const priceDisplay = token.usdPrice
+    ? `$${token.usdPrice.toFixed(2)}`
+    : token.price
+    ? `${token.price} BSV`
+    : null
+
   return (
-    <Button
-      variant="ghost"
-      size="sm"
-      className="justify-start text-xs h-auto py-2"
-    >
-      <div className="flex items-center gap-2 w-full">
-        {token.icon ? (
+    <Item size="sm" className="group">
+      <ItemMedia>
+        {token.icon && !imgError ? (
           <img
-            src={`https://ordinals.gorillapool.io/content/${token.icon}`}
-            className="h-6 w-6 rounded"
-            alt={token.tick}
+            src={`https://ordfs.network/${token.icon}`}
+            className="h-8 w-8 rounded object-cover"
+            alt={displayName}
+            onError={() => setImgError(true)}
           />
         ) : (
-          <div className="h-6 w-6 rounded bg-muted flex items-center justify-center">
+          <div className="h-8 w-8 rounded bg-muted flex items-center justify-center">
             <Coins className="h-4 w-4 text-muted-foreground" />
           </div>
         )}
-        <div className="flex-1 text-left">
-          <div className="font-medium">{token.tick || truncateOutpoint(token.tokenId)}</div>
-          <div className="text-xs text-muted-foreground">
-            {token.balance.toLocaleString()} {token.tick}
-          </div>
-        </div>
-        <Badge variant={token.protocol === 'BSV20' ? 'default' : 'secondary'} className="text-xs">
-          {token.protocol}
-        </Badge>
-      </div>
-    </Button>
+      </ItemMedia>
+      <ItemContent>
+        <ItemTitle>{displayName}</ItemTitle>
+        <ItemDescription>
+          {priceDisplay && <span className="text-muted-foreground mr-2">{priceDisplay}</span>}
+          {token.balance.toLocaleString()} {displayUnit || ''}
+          {token.contract && <span className="ml-2 text-muted-foreground">• {token.contract}</span>}
+        </ItemDescription>
+      </ItemContent>
+      <ItemActions>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-7 w-7 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
+          onClick={(e) => {
+            e.stopPropagation()
+            onSend(token)
+          }}
+          title="Send tokens"
+        >
+          <Send className="h-3 w-3" />
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-7 w-7 p-0 text-destructive opacity-0 group-hover:opacity-100 transition-opacity"
+          onClick={(e) => {
+            e.stopPropagation()
+            onBurn(token)
+          }}
+          title="Burn tokens"
+        >
+          <Flame className="h-3 w-3" />
+        </Button>
+      </ItemActions>
+    </Item>
   )
 }

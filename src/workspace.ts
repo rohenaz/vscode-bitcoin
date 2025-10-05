@@ -151,7 +151,12 @@ export class WorkspaceManager {
 
     const timestamp = Date.now();
     const name = suggestedName ?? type;
-    const sanitizedName = this.sanitizeFilename(`${name}_${timestamp}`);
+
+    // Preserve file extension when adding timestamp
+    const extMatch = name.match(/(\.[^.]+)$/);
+    const extension = extMatch ? extMatch[1] : '';
+    const nameWithoutExt = extension ? name.slice(0, -extension.length) : name;
+    const sanitizedName = this.sanitizeFilename(`${nameWithoutExt}_${timestamp}${extension}`);
 
     // Get the target directory path (but don't create it yet)
     const targetDir = this.organizeFolders
@@ -263,8 +268,9 @@ export class WorkspaceManager {
             break;
           }
           default: {
-            // Try to extract extension from MIME type
-            const match = mimeType.match(/^[^/]+\/(?:x-)?(.+)$/);
+            // Try to extract extension from MIME type (strip charset and other params)
+            const cleanMimeType = mimeType.split(';')[0]; // Remove ;charset=utf-8 etc
+            const match = cleanMimeType.match(/^[^/]+\/(?:x-)?(.+)$/);
             if (match) {
               extension = `.${match[1]}`;
             }

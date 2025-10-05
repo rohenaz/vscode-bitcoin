@@ -1,8 +1,8 @@
 import vsApi, { type Uri, type WebviewPanel, type Disposable } from './vsShim';
 
 interface WebviewMessage {
-  command: 'tryFeature' | 'openKeybindings' | 'openSettings';
-  feature?: string;
+  command: 'openBitcoinTools' | 'openKeybindings' | 'openSettings' | 'openKeyVault';
+  tab?: string;
 }
 
 export class WelcomePanel {
@@ -55,10 +55,11 @@ export class WelcomePanel {
 
   private async _handleMessage(message: WebviewMessage) {
     switch (message.command) {
-      case 'tryFeature':
-        if (message.feature) {
-          await vsApi.commands.executeCommand(`bitcoin.${message.feature}`);
-        }
+      case 'openBitcoinTools':
+        await vsApi.commands.executeCommand('bitcoin.openBitcoinTools');
+        break;
+      case 'openKeyVault':
+        await vsApi.commands.executeCommand('bitcoin.showKeyVault');
         break;
       case 'openKeybindings':
         await vsApi.commands.executeCommand(
@@ -80,37 +81,42 @@ export class WelcomePanel {
   }
 
   private _getWebviewContent(): string {
-    const features = [
+    const tabs = [
       {
-        id: 'keyManagement',
-        title: 'Key Management',
-        description:
-          'Generate and manage Bitcoin keys securely in your development environment.',
-        commands: [
-          { id: 'generatePrivateKey', label: 'Generate Private Key' },
-          { id: 'generateMnemonic', label: 'Generate Mnemonic' },
-          { id: 'showKeyVault', label: 'Open Key Vault' },
-        ],
+        id: 'wallet',
+        icon: '💰',
+        title: 'Wallet',
+        description: 'Manage your Bitcoin wallet with balance tracking, sending, and receiving capabilities. Connect to your Key Vault for seamless transactions.',
       },
       {
-        id: 'dataConversion',
-        title: 'Data Conversion',
-        description:
-          'Convert between different Bitcoin data formats with ease.',
-        commands: [
-          { id: 'convertData', label: 'Convert Data Format' },
-          { id: 'decodeRawTx', label: 'Decode Raw Transaction' },
-          { id: 'openConversionTool', label: 'Advanced Conversion Tool' },
-        ],
+        id: 'keys',
+        icon: '🔑',
+        title: 'Keys',
+        description: 'Generate private keys, WIFs, mnemonics, HD keys, and vanity addresses. Derive public keys and manage all your cryptographic needs.',
+      },
+      {
+        id: 'addresses',
+        icon: '📍',
+        title: 'Addresses',
+        description: 'Convert keys to addresses for both mainnet and testnet. Generate P2PKH addresses from various key formats.',
       },
       {
         id: 'transactions',
-        title: 'Transaction Tools',
-        description: 'Work with Bitcoin transactions directly in VS Code.',
-        commands: [
-          { id: 'getTx', label: 'Get Transaction' },
-          { id: 'rawTxToBob', label: 'Convert to BOB Format' },
-        ],
+        icon: '🔄',
+        title: 'Transactions',
+        description: 'Query transactions, fetch UTXOs, explore addresses on-chain, and decode raw transaction data.',
+      },
+      {
+        id: 'data',
+        icon: '🔧',
+        title: 'Data Tools',
+        description: 'Convert between hex, base64, UTF-8, and other formats. Encrypt and decrypt data with AES and ECIES.',
+      },
+      {
+        id: 'blockchain',
+        icon: '⛓️',
+        title: 'Blockchain',
+        description: 'Lookup BAP profiles, fetch Ordinals inscriptions, and explore blockchain data directly from VS Code.',
       },
     ];
 
@@ -123,15 +129,19 @@ export class WelcomePanel {
         <title>Welcome to Bitcoin Tools</title>
         <script>
           const vscode = acquireVsCodeApi();
-          
-          function tryFeature(feature) {
-            vscode.postMessage({ command: 'tryFeature', feature });
+
+          function openBitcoinTools(tab) {
+            vscode.postMessage({ command: 'openBitcoinTools', tab });
           }
-          
+
+          function openKeyVault() {
+            vscode.postMessage({ command: 'openKeyVault' });
+          }
+
           function openKeybindings() {
             vscode.postMessage({ command: 'openKeybindings' });
           }
-          
+
           function openSettings() {
             vscode.postMessage({ command: 'openSettings' });
           }
@@ -197,66 +207,165 @@ export class WelcomePanel {
             outline-color: var(--vscode-focusBorder);
           }
 
-          .feature-section {
-            margin: 24px 0;
-            padding: 16px;
-            background: var(--vscode-editor-inactiveSelectionBackground);
+          .hero {
+            text-align: center;
+            padding: 40px 20px;
+            margin-bottom: 32px;
+          }
+
+          .hero h1 {
+            font-size: 2.5rem;
+            margin-bottom: 16px;
+            color: var(--vscode-textLink-activeForeground);
+          }
+
+          .hero p {
+            font-size: 1.1rem;
+            opacity: 0.9;
+            margin-bottom: 24px;
+          }
+
+          .primary-cta {
+            background: var(--vscode-button-background);
+            color: var(--vscode-button-foreground);
+            border: none;
+            padding: 12px 32px;
+            font-size: 1.1rem;
+            cursor: pointer;
+            border-radius: 4px;
+            margin-right: 12px;
+          }
+
+          .primary-cta:hover {
+            background: var(--vscode-button-hoverBackground);
+          }
+
+          .secondary-cta {
+            background: var(--vscode-button-secondaryBackground);
+            color: var(--vscode-button-secondaryForeground);
+            border: none;
+            padding: 12px 24px;
+            font-size: 1rem;
+            cursor: pointer;
             border-radius: 4px;
           }
 
-          .command-list {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 8px;
-            margin-top: 12px;
+          .secondary-cta:hover {
+            background: var(--vscode-button-secondaryHoverBackground);
           }
 
-          .tip {
-            margin-top: 32px;
-            padding: 12px;
-            background: var(--vscode-textBlockQuote-background);
-            border-left: 4px solid var(--vscode-textLink-foreground);
+          .features-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 16px;
+            margin: 32px 0;
           }
 
-          .quick-actions {
-            margin: 24px 0;
+          .feature-card {
+            padding: 20px;
+            background: var(--vscode-editor-inactiveSelectionBackground);
+            border-radius: 8px;
+            border: 1px solid transparent;
+            transition: border-color 0.2s;
+          }
+
+          .feature-card:hover {
+            border-color: var(--vscode-textLink-foreground);
+          }
+
+          .feature-icon {
+            font-size: 2rem;
+            margin-bottom: 12px;
+          }
+
+          .feature-title {
+            font-size: 1.2rem;
+            font-weight: bold;
+            margin-bottom: 8px;
+            color: var(--vscode-textLink-activeForeground);
+          }
+
+          .feature-description {
+            opacity: 0.8;
+            line-height: 1.5;
+            margin-bottom: 16px;
+          }
+
+          .feature-button {
+            width: 100%;
+            background: var(--vscode-button-secondaryBackground);
+            color: var(--vscode-button-secondaryForeground);
+            border: none;
+            padding: 8px 16px;
+            cursor: pointer;
+            border-radius: 4px;
+          }
+
+          .feature-button:hover {
+            background: var(--vscode-button-secondaryHoverBackground);
+          }
+
+          .footer {
+            margin-top: 48px;
+            padding-top: 24px;
+            border-top: 1px solid var(--vscode-widget-border);
+            text-align: center;
+            opacity: 0.7;
+          }
+
+          .footer-links {
             display: flex;
-            gap: 12px;
+            justify-content: center;
+            gap: 24px;
+            margin-top: 16px;
+          }
+
+          .footer-links button {
+            background: transparent;
+            color: var(--vscode-textLink-foreground);
+            border: none;
+            text-decoration: underline;
+            cursor: pointer;
+            padding: 4px 8px;
+          }
+
+          .footer-links button:hover {
+            color: var(--vscode-textLink-activeForeground);
           }
         </style>
       </head>
       <body>
-        <div class="welcome-container">
-          <h2>Welcome to Bitcoin Tools for VS Code</h2>
-          <p>Powerful Bitcoin utilities integrated directly into your development workflow.</p>
-          
-          <div class="quick-actions">
-            <button onclick="openKeybindings()">Configure Keyboard Shortcuts</button>
-            <button onclick="openSettings()">Extension Settings</button>
+        <div class="hero">
+          <h1>⚡ Bitcoin Tools for VS Code</h1>
+          <p>Complete Bitcoin development toolkit integrated directly into your editor</p>
+          <div>
+            <button class="primary-cta" onclick="openBitcoinTools()">Open Bitcoin Tools</button>
+            <button class="secondary-cta" onclick="openKeyVault()">Open Key Vault</button>
           </div>
+        </div>
 
-          ${features
+        <div class="features-grid">
+          ${tabs
             .map(
-              (feature) => /* html */ `
-            <div class="feature-section">
-              <h3>${feature.title}</h3>
-              <p>${feature.description}</p>
-              <div class="command-list">
-                ${feature.commands
-                  .map(
-                    (cmd) => /* html */ `
-                  <button onclick="tryFeature('${cmd.id}')">Try: ${cmd.label}</button>
-                `,
-                  )
-                  .join('')}
-              </div>
+              (tab) => /* html */ `
+            <div class="feature-card">
+              <div class="feature-icon">${tab.icon}</div>
+              <div class="feature-title">${tab.title}</div>
+              <div class="feature-description">${tab.description}</div>
+              <button class="feature-button" onclick="openBitcoinTools('${tab.id}')">
+                Open ${tab.title} Tab
+              </button>
             </div>
           `,
             )
             .join('')}
+        </div>
 
-          <div class="tip">
-            <p>💡 Access all commands through the Command Palette (Cmd/Ctrl+Shift+P) by typing "Bitcoin:"</p>
+        <div class="footer">
+          <p>💡 All tools are accessible through the Command Palette (Cmd/Ctrl+Shift+P) - just type "Bitcoin"</p>
+          <div class="footer-links">
+            <button onclick="openKeybindings()">Configure Shortcuts</button>
+            <button onclick="openSettings()">Extension Settings</button>
           </div>
         </div>
       </body>
