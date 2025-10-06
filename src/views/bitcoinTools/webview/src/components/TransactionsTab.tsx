@@ -1,16 +1,29 @@
+import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion'
 import { Item, ItemActions, ItemContent, ItemTitle, ItemDescription } from '@/components/ui/item'
-import { Search, Wrench } from 'lucide-react'
+import { Search, Eye, Play, ArrowRightLeft } from 'lucide-react'
 import { getVscode } from '../vscode'
+import { DecodeTransaction } from './DecodeTransaction'
+import { ExecuteScript } from './ExecuteScript'
+import { useEffect } from 'react'
 
 interface TransactionsTabProps {
   openItems: string[]
   onOpenChange: (items: string[]) => void
+  pendingTransactionHex?: string | null
 }
 
-export default function TransactionsTab({ openItems, onOpenChange }: TransactionsTabProps) {
+export default function TransactionsTab({ openItems, onOpenChange, pendingTransactionHex }: TransactionsTabProps) {
   const vscode = getVscode()
+  const [rawTxHex, setRawTxHex] = useState('')
+
+  // Handle pending transaction hex from parent
+  useEffect(() => {
+    if (pendingTransactionHex) {
+      setRawTxHex(pendingTransactionHex)
+    }
+  }, [pendingTransactionHex])
 
   const execute = (command: string) => {
     vscode.postMessage({ command })
@@ -64,11 +77,23 @@ export default function TransactionsTab({ openItems, onOpenChange }: Transaction
         </AccordionContent>
       </AccordionItem>
 
-      <AccordionItem value="tools">
+      <AccordionItem value="decode">
         <AccordionTrigger className="text-xs">
           <div className="flex items-center gap-2">
-            <Wrench className="h-3 w-3" />
-            Tools
+            <Eye className="h-3 w-3" />
+            Decode & Inspect
+          </div>
+        </AccordionTrigger>
+        <AccordionContent>
+          <DecodeTransaction rawTxHex={rawTxHex} onRawTxHexChange={setRawTxHex} />
+        </AccordionContent>
+      </AccordionItem>
+
+      <AccordionItem value="convert">
+        <AccordionTrigger className="text-xs">
+          <div className="flex items-center gap-2">
+            <ArrowRightLeft className="h-3 w-3" />
+            Convert
           </div>
         </AccordionTrigger>
         <AccordionContent>
@@ -107,6 +132,18 @@ export default function TransactionsTab({ openItems, onOpenChange }: Transaction
               </ItemActions>
             </Item>
           </div>
+        </AccordionContent>
+      </AccordionItem>
+
+      <AccordionItem value="execute">
+        <AccordionTrigger className="text-xs">
+          <div className="flex items-center gap-2">
+            <Play className="h-3 w-3" />
+            Execute Script
+          </div>
+        </AccordionTrigger>
+        <AccordionContent>
+          <ExecuteScript />
         </AccordionContent>
       </AccordionItem>
     </Accordion>

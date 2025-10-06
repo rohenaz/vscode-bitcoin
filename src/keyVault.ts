@@ -297,6 +297,7 @@ export class KeyVault {
     hasEncryptionKey: boolean;
     hasFundingKey: boolean;
     hasOrdinalsKey: boolean;
+    hasIdentityKey: boolean;
   } | null {
     if (!this.isUnlocked || !this.decryptedKeys) {
       return null;
@@ -307,7 +308,8 @@ export class KeyVault {
       keyTypes: {} as Record<string, number>,
       hasEncryptionKey: false,
       hasFundingKey: false,
-      hasOrdinalsKey: false
+      hasOrdinalsKey: false,
+      hasIdentityKey: false
     };
 
     for (const key of this.decryptedKeys) {
@@ -318,6 +320,7 @@ export class KeyVault {
       if (key.isEncryptionKey) stats.hasEncryptionKey = true;
       if (key.isFundingKey) stats.hasFundingKey = true;
       if (key.isOrdinalsKey) stats.hasOrdinalsKey = true;
+      if (key.isIdentityKey) stats.hasIdentityKey = true;
     }
 
     return stats;
@@ -378,6 +381,25 @@ export class KeyVault {
   public async getAllKeys(): Promise<KeyEntry[]> {
     await this.checkUnlock();
     return this.decryptedKeys ? [...this.decryptedKeys] : [];
+  }
+
+  public async updateKeyMetadata(id: string, metadata: Record<string, string>): Promise<void> {
+    await this.checkUnlock();
+    if (!this.decryptedKeys) return;
+
+    const idx = this.decryptedKeys.findIndex((k) => k.id === id);
+    if (idx < 0) throw new Error('Key not found');
+
+    this.decryptedKeys[idx] = {
+      ...this.decryptedKeys[idx],
+      metadata: {
+        ...this.decryptedKeys[idx].metadata,
+        ...metadata
+      }
+    };
+
+    await this.saveVault();
+    this.onKeyListChanged.fire();
   }
 
   public async deleteKey(id: string): Promise<void> {
@@ -454,15 +476,14 @@ export class KeyVault {
     const idx = this.decryptedKeys.findIndex((k) => k.id === id);
     if (idx < 0) throw new Error('Key not found');
 
-    // Prevent key from being both encryption and identity key
-    if (this.decryptedKeys[idx].isIdentityKey) {
-      throw new Error('A key cannot be both an encryption key and an identity key');
+    // Clear encryption flag from all keys
+    for (const key of this.decryptedKeys) {
+      key.isEncryptionKey = false;
     }
 
-    this.decryptedKeys = this.decryptedKeys.map((k) => ({
-      ...k,
-      isEncryptionKey: k.id === id,
-    }));
+    // Set encryption flag on the target key
+    this.decryptedKeys[idx].isEncryptionKey = true;
+
     await this.saveVault();
     this.onKeyListChanged.fire();
   }
@@ -491,15 +512,14 @@ export class KeyVault {
     const idx = this.decryptedKeys.findIndex((k) => k.id === id);
     if (idx < 0) throw new Error('Key not found');
 
-    // Prevent key from being both encryption and identity key
-    if (this.decryptedKeys[idx].isEncryptionKey) {
-      throw new Error('A key cannot be both an encryption key and an identity key');
+    // Clear identity flag from all keys
+    for (const key of this.decryptedKeys) {
+      key.isIdentityKey = false;
     }
 
-    this.decryptedKeys = this.decryptedKeys.map((k) => ({
-      ...k,
-      isIdentityKey: k.id === id,
-    }));
+    // Set identity flag on the target key
+    this.decryptedKeys[idx].isIdentityKey = true;
+
     await this.saveVault();
     this.onKeyListChanged.fire();
   }
@@ -528,15 +548,14 @@ export class KeyVault {
     const idx = this.decryptedKeys.findIndex((k) => k.id === id);
     if (idx < 0) throw new Error('Key not found');
 
-    // Prevent key from being both encryption/identity and funding key
-    if (this.decryptedKeys[idx].isEncryptionKey || this.decryptedKeys[idx].isIdentityKey) {
-      throw new Error('A key cannot be both a funding key and an encryption/identity key');
+    // Clear funding flag from all keys
+    for (const key of this.decryptedKeys) {
+      key.isFundingKey = false;
     }
 
-    this.decryptedKeys = this.decryptedKeys.map((k) => ({
-      ...k,
-      isFundingKey: k.id === id,
-    }));
+    // Set funding flag on the target key
+    this.decryptedKeys[idx].isFundingKey = true;
+
     await this.saveVault();
     this.onKeyListChanged.fire();
   }
@@ -565,15 +584,14 @@ export class KeyVault {
     const idx = this.decryptedKeys.findIndex((k) => k.id === id);
     if (idx < 0) throw new Error('Key not found');
 
-    // Prevent key from being both encryption/identity and ordinals key
-    if (this.decryptedKeys[idx].isEncryptionKey || this.decryptedKeys[idx].isIdentityKey) {
-      throw new Error('A key cannot be both an ordinals key and an encryption/identity key');
+    // Clear ordinals flag from all keys
+    for (const key of this.decryptedKeys) {
+      key.isOrdinalsKey = false;
     }
 
-    this.decryptedKeys = this.decryptedKeys.map((k) => ({
-      ...k,
-      isOrdinalsKey: k.id === id,
-    }));
+    // Set ordinals flag on the target key
+    this.decryptedKeys[idx].isOrdinalsKey = true;
+
     await this.saveVault();
     this.onKeyListChanged.fire();
   }

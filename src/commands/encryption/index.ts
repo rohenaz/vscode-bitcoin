@@ -14,7 +14,7 @@ export async function encrypt(
     if (!text) {
       const editor = vsApi.window.activeTextEditor;
       if (!editor) {
-        vsApi.window.showErrorMessage('No active text editor');
+        vsApi.window.showErrorMessage('Please open a text file and select the text you want to encrypt');
         return;
       }
 
@@ -25,7 +25,7 @@ export async function encrypt(
         : editor.document.getText(selection);
 
       if (!text) {
-        vsApi.window.showErrorMessage('No text to encrypt');
+        vsApi.window.showErrorMessage('No text to encrypt. Please select text in the editor first.');
         return;
       }
     }
@@ -99,7 +99,7 @@ export async function decrypt(
     if (!text) {
       const editor = vsApi.window.activeTextEditor;
       if (!editor) {
-        vsApi.window.showErrorMessage('No active text editor');
+        vsApi.window.showErrorMessage('Please open an encrypted file and select the encrypted text to decrypt');
         return;
       }
 
@@ -110,7 +110,7 @@ export async function decrypt(
         : editor.document.getText(selection);
 
       if (!text) {
-        vsApi.window.showErrorMessage('No text to decrypt');
+        vsApi.window.showErrorMessage('No text to decrypt. Please select encrypted text in the editor first.');
         return;
       }
     }

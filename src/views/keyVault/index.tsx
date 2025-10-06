@@ -1,10 +1,8 @@
 import vsApi, { type WebviewPanel, type Disposable } from '../../vsShim';
 import type { KeyVault, KeyEntry, KeyType } from '../../keyVault';
 import { PrivateKey, PublicKey, HD, Mnemonic, Utils, P2PKH } from '@bsv/sdk';
-import { keyPanelStyles } from './styles';
 import {
   buildKeyHierarchy,
-  renderKeyRecursive,
   derivePublicKeyString,
   deriveAddress,
   deriveHdAddress,
@@ -13,7 +11,6 @@ import {
   deriveTestnetAddress,
 } from './render';
 import { createVanityWIF, sanitizeVanityPrefix } from '../../commands/generateWIF';
-import { getPanelHtml } from './layout';
 import * as vscode from 'vscode';
 import { decryptBackup, type DecryptedBackup, type OneSatBackup } from 'bitcoin-backup';
 
@@ -230,35 +227,85 @@ export class KeyPanel {
       this.ephemeralIndex = idx;
     }
 
-    // Build hierarchy
+    // Build hierarchy for payload
     const hierarchy = buildKeyHierarchy(refreshed);
-    const cards = hierarchy.map((node) => renderKeyRecursive(node, 0));
 
-    // Prepare for webview
+    // If panel HTML not yet set, initialize it
+    if (!this._panel.webview.html || this._panel.webview.html === '') {
+      this._panel.webview.html = this._getHtmlForWebview(this._panel.webview);
+    }
+
+    // Send update to webview
     const payload = {
-      keys: refreshed,
+      keys: hierarchy, // Send hierarchical structure
       searchIndex: this.ephemeralIndex,
     };
 
-    const nonce = getNonce();
-    const cspSource = this._panel.webview.cspSource;
-
-    // Create URI for the bundled webview script
-    const scriptUri = this._panel.webview.asWebviewUri(
-      vscode.Uri.joinPath(this._extensionUri, 'dist', 'webview', 'webview-keyvault.js')
-    ).toString();
-
-    // Serialize payload for injection
-    const payloadJson = JSON.stringify(payload);
-
-    this._panel.webview.html = getPanelHtml({
-      nonce,
-      cspSource,
-      keyElements: cards,
-      scriptUri,
-      payload: payloadJson,
-      styles: keyPanelStyles,
+    this._panel.webview.postMessage({
+      command: 'refreshKeys',
+      keys: hierarchy,
+      searchIndex: this.ephemeralIndex,
     });
+  }
+
+  private _getHtmlForWebview(webview: vscode.Webview) {
+    // Get URIs for the React app build artifacts
+    const scriptUri = webview.asWebviewUri(
+      vscode.Uri.joinPath(this._extensionUri, 'src', 'views', 'keyVault', 'webview', 'dist', 'assets', 'index.js')
+    );
+    const styleUri = webview.asWebviewUri(
+      vscode.Uri.joinPath(this._extensionUri, 'src', 'views', 'keyVault', 'webview', 'dist', 'assets', 'index.css')
+    );
+
+    // Build initial payload
+    const payload = {
+      keys: [],
+      searchIndex: {},
+    };
+
+    const nonce = getNonce();
+
+    return `<!DOCTYPE html>
+      <html lang="en">
+      <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}'; img-src https://ordfs.network data:;">
+        <link href="${styleUri}" rel="stylesheet">
+        <title>Bitcoin Key Vault</title>
+        <style>
+          .loader-container {
+            position: fixed;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background-color: var(--vscode-editor-background);
+          }
+          .loader {
+            border: 3px solid transparent;
+            border-top-color: var(--vscode-progressBar-background);
+            border-radius: 50%;
+            width: 32px;
+            height: 32px;
+            animation: spin 0.8s linear infinite;
+          }
+          @keyframes spin {
+            to { transform: rotate(360deg); }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="loader-container" id="initial-loader">
+          <div class="loader"></div>
+        </div>
+        <div id="root"></div>
+        <script nonce="${nonce}">
+          window.KEYVAULT_PAYLOAD = ${JSON.stringify(payload)};
+        </script>
+        <script type="module" nonce="${nonce}" src="${scriptUri}"></script>
+      </body>
+      </html>`;
   }
 
   private async handleMessage(msg: {
@@ -714,6 +761,20 @@ export class KeyPanel {
       case 'clearOrdinalsKey': {
         if (!msg.id) break;
         await this._vault.clearOrdinalsKey();
+        await this.updateContent();
+        break;
+      }
+
+      case 'setIdentityKey': {
+        if (!msg.id) break;
+        await this._vault.setIdentityKey(msg.id);
+        await this.updateContent();
+        break;
+      }
+
+      case 'clearIdentityKey': {
+        if (!msg.id) break;
+        await this._vault.clearIdentityKey();
         await this.updateContent();
         break;
       }

@@ -203,6 +203,8 @@ function handleCommand(cmd: string | null, id: string | null, currentLabel: stri
     case 'clearFundingKey':
     case 'setOrdinalsKey':
     case 'clearOrdinalsKey':
+    case 'setIdentityKey':
+    case 'clearIdentityKey':
     case 'generateKeyShares':
     case 'viewKeyShares':
       vscode.postMessage({ command: cmd, id });

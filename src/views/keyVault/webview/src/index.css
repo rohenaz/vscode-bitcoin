@@ -1,0 +1,168 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --font-sans: 'Source Code Pro', 'Geist', 'Geist Fallback', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Noto Sans', sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
+  --font-serif: 'Source Serif 4', 'Geist', 'Geist Fallback', ui-serif, Georgia, Cambria, 'Times New Roman', Times, serif;
+  --font-mono: 'Source Code Pro', 'Geist Mono', 'Geist Mono Fallback', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+  --radius: 0rem;
+  --tracking-tighter: calc(var(--tracking-normal) - 0.05em);
+  --tracking-tight: calc(var(--tracking-normal) - 0.025em);
+  --tracking-wide: calc(var(--tracking-normal) + 0.025em);
+  --tracking-wider: calc(var(--tracking-normal) + 0.05em);
+  --tracking-widest: calc(var(--tracking-normal) + 0.1em);
+  --tracking-normal: var(--tracking-normal);
+  --shadow-2xl: var(--shadow-2xl);
+  --shadow-xl: var(--shadow-xl);
+  --shadow-lg: var(--shadow-lg);
+  --shadow-md: var(--shadow-md);
+  --shadow: var(--shadow);
+  --shadow-sm: var(--shadow-sm);
+  --shadow-xs: var(--shadow-xs);
+  --shadow-2xs: var(--shadow-2xs);
+  --shadow-offset-y: var(--shadow-offset-y);
+  --shadow-offset-x: var(--shadow-offset-x);
+  --shadow-spread: var(--shadow-spread);
+  --shadow-blur: var(--shadow-blur);
+  --shadow-opacity: var(--shadow-opacity);
+  --color-shadow-color: var(--shadow-color);
+  --color-destructive-foreground: var(--destructive-foreground);
+}
+
+:root {
+  /* Map shadcn theme to VSCode CSS variables */
+  --radius: 0.25rem;
+
+  /* Core colors from VSCode theme */
+  --background: var(--vscode-editor-background);
+  --foreground: var(--vscode-editor-foreground);
+
+  /* Cards and surfaces */
+  --card: var(--vscode-sideBar-background);
+  --card-foreground: var(--vscode-sideBar-foreground);
+  --popover: var(--vscode-editorWidget-background);
+  --popover-foreground: var(--vscode-editorWidget-foreground);
+
+  /* Primary accent color */
+  --primary: var(--vscode-button-background);
+  --primary-foreground: var(--vscode-button-foreground);
+
+  /* Secondary elements */
+  --secondary: var(--vscode-button-secondaryBackground);
+  --secondary-foreground: var(--vscode-button-secondaryForeground);
+
+  /* Muted backgrounds and text */
+  --muted: var(--vscode-input-background);
+  --muted-foreground: var(--vscode-descriptionForeground);
+
+  /* Accent elements */
+  --accent: var(--vscode-list-hoverBackground);
+  --accent-foreground: var(--vscode-list-hoverForeground);
+
+  /* Destructive/error states */
+  --destructive: var(--vscode-errorForeground);
+  --destructive-foreground: var(--vscode-errorForeground);
+
+  /* Borders and inputs */
+  --border: var(--vscode-panel-border);
+  --input: var(--vscode-input-border);
+  --ring: var(--vscode-focusBorder);
+
+  /* Charts - using various VSCode colors */
+  --chart-1: var(--vscode-charts-blue);
+  --chart-2: var(--vscode-charts-purple);
+  --chart-3: var(--vscode-charts-green);
+  --chart-4: var(--vscode-charts-yellow);
+  --chart-5: var(--vscode-charts-orange);
+
+  /* Key badge colors */
+  --badge-encryption: var(--vscode-charts-orange);
+  --badge-identity: var(--vscode-charts-purple);
+  --badge-funding: var(--vscode-charts-green);
+  --badge-ordinals: var(--vscode-charts-blue);
+
+  /* Sidebar - using VSCode sidebar variables */
+  --sidebar: var(--vscode-sideBar-background);
+  --sidebar-foreground: var(--vscode-sideBar-foreground);
+  --sidebar-primary: var(--vscode-sideBarSectionHeader-background);
+  --sidebar-primary-foreground: var(--vscode-sideBarSectionHeader-foreground);
+  --sidebar-accent: var(--vscode-list-activeSelectionBackground);
+  --sidebar-accent-foreground: var(--vscode-list-activeSelectionForeground);
+  --sidebar-border: var(--vscode-sideBar-border);
+  --sidebar-ring: var(--vscode-focusBorder);
+
+  /* Fonts from VSCode */
+  --font-sans: var(--vscode-font-family);
+  --font-serif: var(--vscode-font-family);
+  --font-mono: var(--vscode-editor-font-family);
+
+  /* Shadows - minimal for VSCode aesthetic */
+  --shadow-color: rgba(0, 0, 0, 0.1);
+  --shadow-opacity: 0.05;
+  --shadow-blur: 2px;
+  --shadow-spread: 0px;
+  --shadow-offset-x: 0px;
+  --shadow-offset-y: 1px;
+  --shadow-2xs: 0px 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow-xs: 0px 1px 3px rgba(0, 0, 0, 0.05);
+  --shadow-sm: 0px 2px 4px rgba(0, 0, 0, 0.05);
+  --shadow: 0px 2px 6px rgba(0, 0, 0, 0.07);
+  --shadow-md: 0px 4px 8px rgba(0, 0, 0, 0.08);
+  --shadow-lg: 0px 6px 12px rgba(0, 0, 0, 0.10);
+  --shadow-xl: 0px 8px 16px rgba(0, 0, 0, 0.12);
+  --shadow-2xl: 0px 12px 24px rgba(0, 0, 0, 0.15);
+  --tracking-normal: 0em;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+    letter-spacing: var(--tracking-normal);
+    margin: 0;
+    padding: 0 !important;
+  }
+  #root {
+    padding: 0;
+    margin: 0;
+  }
+}

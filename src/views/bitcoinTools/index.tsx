@@ -4,17 +4,26 @@ import { walletState } from '../../services/walletState';
 import { transactionService, TransactionError } from '../../services/transactionService';
 import { ordinalsService } from '../../services/ordinalsService';
 import { tokenTransferService } from '../../services/tokenTransferService';
+import { ordinalTransferService } from '../../services/ordinalTransferService';
 import { PrivateKey } from '@bsv/sdk';
 import type { VaultBackup } from 'bitcoin-backup';
 
 export class BitcoinToolsViewProvider implements vscode.WebviewViewProvider {
   public static readonly viewType = 'bitcoin.toolsView';
   private _view?: vscode.WebviewView;
+  private scriptExecutors: Map<string, any> = new Map(); // Will hold ScriptExecutor instances
 
   constructor(
     private readonly _extensionUri: vscode.Uri,
     private readonly _vault: KeyVault
-  ) {}
+  ) {
+    // Listen for vault unlock events to update vault stats
+    this._vault.onDidUnlock(() => {
+      if (this._view) {
+        this.handleGetVaultStats(this._view);
+      }
+    });
+  }
 
   public resolveWebviewView(
     webviewView: vscode.WebviewView,
@@ -54,6 +63,18 @@ export class BitcoinToolsViewProvider implements vscode.WebviewViewProvider {
             case 'wallet:checkVaultStatus':
               await walletState.checkVaultStatus();
               break;
+            case 'wallet:enableBsv20':
+              await this.handleToggleBsv20(webviewView, true);
+              break;
+            case 'wallet:disableBsv20':
+              await this.handleToggleBsv20(webviewView, false);
+              break;
+            case 'wallet:enableBsv21':
+              await this.handleToggleBsv21(webviewView, true);
+              break;
+            case 'wallet:disableBsv21':
+              await this.handleToggleBsv21(webviewView, false);
+              break;
             case 'wallet:getNfts':
             case 'wallet:getTokens':
               // State already loaded, just push current state
@@ -75,6 +96,19 @@ export class BitcoinToolsViewProvider implements vscode.WebviewViewProvider {
           return;
         }
 
+        // Handle ordinal transfer messages
+        if (message.type.startsWith('ordinal:transfer:')) {
+          switch (message.type) {
+            case 'ordinal:transfer:estimate':
+              await this.handleTransferOrdinalEstimate(webviewView, message.data);
+              break;
+            case 'ordinal:transfer:send':
+              await this.handleTransferOrdinal(webviewView, message.data);
+              break;
+          }
+          return;
+        }
+
         // Handle vault messages
         if (message.type.startsWith('vault:')) {
           switch (message.type) {
@@ -82,12 +116,58 @@ export class BitcoinToolsViewProvider implements vscode.WebviewViewProvider {
               await this.handleGetVaultStats(webviewView);
               break;
             case 'vault:export':
-              await this.handleExportVault(webviewView);
+              await this.handleExportVault(webviewView, message.data);
               break;
             case 'vault:import':
               await this.handleImportVault(webviewView);
               break;
           }
+          return;
+        }
+
+        // Handle BAP identity messages
+        if (message.type === 'getIdentities') {
+          await this.handleGetIdentities(webviewView);
+          return;
+        }
+        if (message.type === 'discoverIdentities') {
+          await this.handleDiscoverIdentities(webviewView);
+          return;
+        }
+        if (message.type === 'createIdentity') {
+          await this.handleCreateIdentity(webviewView, message.name);
+          return;
+        }
+        if (message.type === 'viewProfile') {
+          await this.handleViewProfile(webviewView, message.idKey);
+          return;
+        }
+        if (message.type === 'setIdentityKey') {
+          vscode.commands.executeCommand('bitcoin.openKeyVault');
+          return;
+        }
+
+        // Handle transaction decode messages
+        if (message.type === 'transaction:decode') {
+          await this.handleTransactionDecode(webviewView, message.data);
+          return;
+        }
+
+        // Handle transaction broadcast messages
+        if (message.type === 'transaction:broadcast') {
+          await this.handleTransactionBroadcast(webviewView, message.data);
+          return;
+        }
+
+        // Handle script execution messages
+        if (message.type === 'transaction:executeScript') {
+          await this.handleExecuteScript(webviewView, message.data);
+          return;
+        }
+
+        // Handle script executor lifecycle messages
+        if (message.type.startsWith('scriptExecutor:')) {
+          await this.handleScriptExecutorMessage(webviewView, message);
           return;
         }
 
@@ -116,6 +196,11 @@ export class BitcoinToolsViewProvider implements vscode.WebviewViewProvider {
             break;
         }
       } else if (message.command) {
+        // Handle openSettings command
+        if (message.command === 'openSettings') {
+          await vscode.commands.executeCommand('workbench.action.openSettings', message.setting);
+          return;
+        }
         // Handle command messages
         if (message.command === 'openExternal' && message.url) {
           vscode.env.openExternal(vscode.Uri.parse(message.url));
@@ -142,6 +227,38 @@ export class BitcoinToolsViewProvider implements vscode.WebviewViewProvider {
   public setConversionResult(value: string) {
     if (this._view) {
       this._view.webview.postMessage({ command: 'setConversionResult', value });
+    }
+  }
+
+  /**
+   * Handle toggling BSV-20 tokens
+   */
+  private async handleToggleBsv20(webviewView: vscode.WebviewView, enable: boolean) {
+    try {
+      // Update configuration
+      await vscode.workspace.getConfiguration('bitcoin.wallet').update('showBsv20', enable, vscode.ConfigurationTarget.Global);
+
+      // Refresh wallet data to fetch/clear BSV-20 tokens
+      await walletState.refreshAllData();
+    } catch (error) {
+      console.error('Error toggling BSV-20:', error);
+      vscode.window.showErrorMessage(`Failed to ${enable ? 'enable' : 'disable'} BSV-20 tokens`);
+    }
+  }
+
+  /**
+   * Handle toggling BSV-21 tokens
+   */
+  private async handleToggleBsv21(webviewView: vscode.WebviewView, enable: boolean) {
+    try {
+      // Update configuration
+      await vscode.workspace.getConfiguration('bitcoin.wallet').update('showBsv21', enable, vscode.ConfigurationTarget.Global);
+
+      // Refresh wallet data to fetch/clear BSV-21 tokens
+      await walletState.refreshAllData();
+    } catch (error) {
+      console.error('Error toggling BSV-21:', error);
+      vscode.window.showErrorMessage(`Failed to ${enable ? 'enable' : 'disable'} BSV-21 tokens`);
     }
   }
 
@@ -233,6 +350,32 @@ export class BitcoinToolsViewProvider implements vscode.WebviewViewProvider {
 
       // Get raw transaction hex
       const rawTx = result.tx.toHex();
+
+      // Check autoBroadcast setting
+      const autoBroadcast = vscode.workspace.getConfiguration('bitcoin.wallet').get('autoBroadcast', false);
+
+      if (!autoBroadcast) {
+        // Open in transaction decoder instead of broadcasting
+        webviewView.webview.postMessage({
+          type: 'transaction:populate',
+          data: { rawTxHex: rawTx },
+        });
+
+        vscode.window.showInformationMessage(
+          'Transaction created. Review in the Transactions tab and broadcast when ready.'
+        );
+
+        // Return success to close dialog
+        webviewView.webview.postMessage({
+          type: 'wallet:sendBsv:result',
+          data: {
+            success: true,
+            fee: result.fee,
+            message: 'Transaction ready for review',
+          },
+        });
+        return;
+      }
 
       // Broadcast transaction
       const broadcastResult = await transactionService.broadcastTransaction(rawTx);
@@ -454,6 +597,493 @@ export class BitcoinToolsViewProvider implements vscode.WebviewViewProvider {
   }
 
   /**
+   * Handle ordinal transfer estimate request
+   */
+  private async handleTransferOrdinalEstimate(
+    webviewView: vscode.WebviewView,
+    data: { nfts: any[]; recipientAddress: string }
+  ) {
+    try {
+      // Get both funding and ordinals keys
+      const fundingKey = await this._vault.getFundingKey();
+      const ordinalsKey = await this._vault.getOrdinalsKey();
+
+      if (!fundingKey || fundingKey.type !== 'wif') {
+        throw new Error('No funding key available');
+      }
+      if (!ordinalsKey || ordinalsKey.type !== 'wif') {
+        throw new Error('No ordinals key available');
+      }
+
+      // Get addresses
+      const payAddress = ordinalsService.deriveOrdAddress(fundingKey.value);
+
+      // Fetch payment UTXOs
+      const paymentUtxos = await ordinalsService.getPaymentUtxos(payAddress);
+      if (paymentUtxos.length === 0) {
+        throw new Error('No payment UTXOs available');
+      }
+
+      // Convert NFTs to Utxo format
+      const ordinals = data.nfts.map(nft => ordinalTransferService.nftToUtxo(nft));
+
+      // Estimate fee
+      const estimate = await ordinalTransferService.estimateTransferFee({
+        ordinals,
+        paymentUtxos,
+        paymentPk: PrivateKey.fromWif(fundingKey.value),
+        ordPk: PrivateKey.fromWif(ordinalsKey.value),
+        recipientAddress: data.recipientAddress,
+        changeAddress: payAddress,
+      });
+
+      // Send estimate back to webview
+      webviewView.webview.postMessage({
+        type: 'ordinal:transfer:estimateResult',
+        data: estimate,
+      });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      webviewView.webview.postMessage({
+        type: 'ordinal:transfer:estimateResult',
+        data: {
+          success: false,
+          error: errorMessage,
+        },
+      });
+    }
+  }
+
+  /**
+   * Handle ordinal transfer transaction
+   */
+  private async handleTransferOrdinal(
+    webviewView: vscode.WebviewView,
+    data: { nfts: any[]; recipientAddress: string }
+  ) {
+    try {
+      // Get both funding and ordinals keys
+      const fundingKey = await this._vault.getFundingKey();
+      const ordinalsKey = await this._vault.getOrdinalsKey();
+
+      if (!fundingKey || fundingKey.type !== 'wif') {
+        throw new Error('No funding key available');
+      }
+      if (!ordinalsKey || ordinalsKey.type !== 'wif') {
+        throw new Error('No ordinals key available');
+      }
+
+      // Get addresses
+      const payAddress = ordinalsService.deriveOrdAddress(fundingKey.value);
+
+      // Fetch fresh payment UTXOs
+      const paymentUtxos = await ordinalsService.getPaymentUtxos(payAddress);
+      if (paymentUtxos.length === 0) {
+        throw new Error('No payment UTXOs available');
+      }
+
+      // Convert NFTs to Utxo format
+      const ordinals = data.nfts.map(nft => ordinalTransferService.nftToUtxo(nft));
+
+      // Execute transfer
+      const result = await ordinalTransferService.transferOrdinals({
+        ordinals,
+        paymentUtxos,
+        paymentPk: PrivateKey.fromWif(fundingKey.value),
+        ordPk: PrivateKey.fromWif(ordinalsKey.value),
+        recipientAddress: data.recipientAddress,
+        changeAddress: payAddress,
+      });
+
+      // Get raw transaction hex
+      const rawTx = result.tx.toHex();
+
+      // Broadcast transaction
+      const broadcastResult = await transactionService.broadcastTransaction(rawTx);
+
+      if (broadcastResult.status === 'success') {
+        // Success
+        webviewView.webview.postMessage({
+          type: 'ordinal:transfer:result',
+          data: {
+            success: true,
+            txid: broadcastResult.txid,
+            fee: result.fee,
+          },
+        });
+
+        // Show success notification
+        vscode.window.showInformationMessage(
+          `${data.nfts.length} ordinal${data.nfts.length > 1 ? 's' : ''} sent successfully! ${broadcastResult.txid?.slice(0, 8)}...`
+        );
+
+        // Refresh wallet data
+        await walletState.refreshAllData();
+      } else {
+        throw new Error(broadcastResult.message || 'Broadcast failed');
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+
+      webviewView.webview.postMessage({
+        type: 'ordinal:transfer:result',
+        data: {
+          success: false,
+          error: errorMessage,
+        },
+      });
+
+      // Show error notification
+      vscode.window.showErrorMessage(`Ordinal transfer failed: ${errorMessage}`);
+    }
+  }
+
+  /**
+   * Handle transaction decode request
+   */
+  private async handleTransactionDecode(
+    webviewView: vscode.WebviewView,
+    data: { rawTx: string }
+  ) {
+    try {
+      const { Transaction } = await import('@bsv/sdk');
+      const tx = Transaction.fromHex(data.rawTx);
+
+      const decodedTx = {
+        txid: tx.id('hex') as string,
+        version: tx.version,
+        lockTime: tx.lockTime,
+        size: data.rawTx.length / 2,
+        inputs: tx.inputs.map((input, index) => ({
+          index,
+          sourceTXID: input.sourceTXID?.toString() || '',
+          sourceOutputIndex: input.sourceOutputIndex,
+          unlockingScript: input.unlockingScript?.toHex() || '',
+          unlockingScriptAsm: input.unlockingScript?.toASM() || '',
+          sequence: input.sequence
+        })),
+        outputs: tx.outputs.map((output, index) => ({
+          index,
+          satoshis: output.satoshis || 0,
+          lockingScript: output.lockingScript.toHex(),
+          lockingScriptAsm: output.lockingScript.toASM()
+        }))
+      };
+
+      webviewView.webview.postMessage({
+        type: 'transaction:decoded',
+        data: decodedTx
+      });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      webviewView.webview.postMessage({
+        type: 'transaction:decode:error',
+        data: { error: `Failed to decode transaction: ${errorMessage}` }
+      });
+    }
+  }
+
+  /**
+   * Handle transaction broadcast request
+   */
+  private async handleTransactionBroadcast(
+    webviewView: vscode.WebviewView,
+    data: { rawTx: string }
+  ) {
+    try {
+      const broadcastResult = await transactionService.broadcastTransaction(data.rawTx);
+
+      if (broadcastResult.status === 'success') {
+        webviewView.webview.postMessage({
+          type: 'transaction:broadcast:result',
+          data: {
+            success: true,
+            txid: broadcastResult.txid,
+            message: broadcastResult.message,
+          },
+        });
+
+        vscode.window.showInformationMessage(
+          `Transaction broadcast successfully! ${broadcastResult.txid?.slice(0, 8)}...`
+        );
+      } else {
+        throw new Error(broadcastResult.message || 'Broadcast failed');
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      webviewView.webview.postMessage({
+        type: 'transaction:broadcast:result',
+        data: {
+          success: false,
+          error: errorMessage,
+        },
+      });
+
+      vscode.window.showErrorMessage(`Broadcast failed: ${errorMessage}`);
+    }
+  }
+
+  /**
+   * Handle script execution request
+   */
+  private async handleExecuteScript(
+    webviewView: vscode.WebviewView,
+    data: {
+      inputIndex: number;
+      unlockingScript: string;
+      sourceTXID: string;
+      sourceOutputIndex: number;
+    }
+  ) {
+    try {
+      vscode.window.showInformationMessage(
+        `Fetching source transaction ${data.sourceTXID.slice(0, 8)}... to execute script`
+      );
+
+      // Fetch the source transaction to get the locking script
+      const response = await fetch(`https://api.whatsonchain.com/v1/bsv/main/tx/${data.sourceTXID}/hex`);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch transaction: ${response.statusText}`);
+      }
+
+      const sourceRawTx = await response.text();
+      const { Transaction } = await import('@bsv/sdk');
+      const sourceTx = Transaction.fromHex(sourceRawTx);
+
+      // Get the locking script from the source output
+      const sourceOutput = sourceTx.outputs[data.sourceOutputIndex];
+      if (!sourceOutput) {
+        throw new Error(`Source output ${data.sourceOutputIndex} not found in transaction`);
+      }
+
+      const lockingScript = sourceOutput.lockingScript.toHex();
+      const lockingScriptAsm = sourceOutput.lockingScript.toASM();
+      const satoshis = sourceOutput.satoshis || 0;
+
+      // Send script execution data to webview
+      webviewView.webview.postMessage({
+        type: 'scriptExecutor:show',
+        data: {
+          inputIndex: data.inputIndex,
+          unlockingScript: data.unlockingScript,
+          lockingScript: lockingScript,
+          lockingScriptAsm: lockingScriptAsm,
+          sourceTXID: data.sourceTXID,
+          sourceOutputIndex: data.sourceOutputIndex,
+          satoshis: satoshis
+        }
+      });
+
+      vscode.window.showInformationMessage(
+        `Script executor ready for input #${data.inputIndex}`
+      );
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      vscode.window.showErrorMessage(`Failed to execute script: ${errorMessage}`);
+
+      webviewView.webview.postMessage({
+        type: 'scriptExecutor:error',
+        data: { error: errorMessage }
+      });
+    }
+  }
+
+  /**
+   * Handle script executor lifecycle messages
+   */
+  private async handleScriptExecutorMessage(
+    webviewView: vscode.WebviewView,
+    message: any
+  ) {
+    try {
+      const { type, data } = message;
+      const { id } = data;
+
+      switch (type) {
+        case 'scriptExecutor:init':
+          await this.initScriptExecutor(webviewView, id, data.spendParams);
+          break;
+
+        case 'scriptExecutor:stepForward':
+          await this.stepExecutorForward(webviewView, id);
+          break;
+
+        case 'scriptExecutor:stepBackward':
+          await this.stepExecutorBackward(webviewView, id);
+          break;
+
+        case 'scriptExecutor:runToEnd':
+          await this.runExecutorToEnd(webviewView, id);
+          break;
+
+        case 'scriptExecutor:reset':
+          await this.resetExecutor(webviewView, id);
+          break;
+
+        case 'scriptExecutor:destroy':
+          this.scriptExecutors.delete(id);
+          break;
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      vscode.window.showErrorMessage(`Script executor error: ${errorMessage}`);
+    }
+  }
+
+  /**
+   * Initialize a new script executor instance
+   */
+  private async initScriptExecutor(
+    webviewView: vscode.WebviewView,
+    id: string,
+    spendParams: any
+  ) {
+    try {
+      // Import ScriptExecutor class
+      const { ScriptExecutor } = await import('../../utils/scriptExecutor');
+      const { LockingScript, UnlockingScript } = await import('@bsv/sdk');
+
+      // Create new executor instance
+      const executor = new ScriptExecutor(spendParams);
+      this.scriptExecutors.set(id, executor);
+
+      // Parse scripts to get chunks for display
+      const unlockingScript = UnlockingScript.fromHex(spendParams.unlockingScript);
+      const lockingScript = LockingScript.fromHex(spendParams.lockingScript);
+
+      const unlockingChunks = unlockingScript.chunks.map((chunk: any) => ({
+        op: chunk.op,
+        data: chunk.data ? Array.from(chunk.data) : undefined
+      }));
+
+      const lockingChunks = lockingScript.chunks.map((chunk: any) => ({
+        op: chunk.op,
+        data: chunk.data ? Array.from(chunk.data) : undefined
+      }));
+
+      // Send back initialization success with script chunks
+      webviewView.webview.postMessage({
+        type: 'scriptExecutor:initialized',
+        data: {
+          id,
+          unlockingScript: { chunks: unlockingChunks },
+          lockingScript: { chunks: lockingChunks }
+        }
+      });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      webviewView.webview.postMessage({
+        type: 'scriptExecutor:error',
+        data: { id, error: errorMessage }
+      });
+    }
+  }
+
+  /**
+   * Step executor forward one opcode
+   */
+  private async stepExecutorForward(webviewView: vscode.WebviewView, id: string) {
+    const executor = this.scriptExecutors.get(id);
+    if (!executor) {
+      return;
+    }
+
+    try {
+      const step = executor.stepForward();
+
+      if (step) {
+        webviewView.webview.postMessage({
+          type: 'scriptExecutor:step',
+          data: { id, step }
+        });
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      webviewView.webview.postMessage({
+        type: 'scriptExecutor:error',
+        data: { id, error: errorMessage }
+      });
+    }
+  }
+
+  /**
+   * Step executor backward one opcode
+   */
+  private async stepExecutorBackward(webviewView: vscode.WebviewView, id: string) {
+    const executor = this.scriptExecutors.get(id);
+    if (!executor) {
+      return;
+    }
+
+    try {
+      const step = executor.stepBackward();
+
+      if (step) {
+        webviewView.webview.postMessage({
+          type: 'scriptExecutor:step',
+          data: { id, step }
+        });
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      webviewView.webview.postMessage({
+        type: 'scriptExecutor:error',
+        data: { id, error: errorMessage }
+      });
+    }
+  }
+
+  /**
+   * Run executor to completion
+   */
+  private async runExecutorToEnd(webviewView: vscode.WebviewView, id: string) {
+    const executor = this.scriptExecutors.get(id);
+    if (!executor) {
+      return;
+    }
+
+    try {
+      const steps = executor.runToEnd();
+
+      webviewView.webview.postMessage({
+        type: 'scriptExecutor:runComplete',
+        data: { id, steps }
+      });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      webviewView.webview.postMessage({
+        type: 'scriptExecutor:error',
+        data: { id, error: errorMessage }
+      });
+    }
+  }
+
+  /**
+   * Reset executor to initial state
+   */
+  private async resetExecutor(webviewView: vscode.WebviewView, id: string) {
+    const executor = this.scriptExecutors.get(id);
+    if (!executor) {
+      return;
+    }
+
+    try {
+      executor.reset();
+
+      webviewView.webview.postMessage({
+        type: 'scriptExecutor:reset',
+        data: { id }
+      });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      webviewView.webview.postMessage({
+        type: 'scriptExecutor:error',
+        data: { id, error: errorMessage }
+      });
+    }
+  }
+
+  /**
    * Handle downloading an ordinal file from ordfs.network
    */
   private async handleDownloadOrdinal(
@@ -526,7 +1156,7 @@ export class BitcoinToolsViewProvider implements vscode.WebviewViewProvider {
    */
   private async handleGetVaultStats(webviewView: vscode.WebviewView) {
     const stats = this._vault.getVaultStats();
-    const isLocked = !this._vault.isUnlocked();
+    const isLocked = !this._vault.isUnlocked;
 
     webviewView.webview.postMessage({
       type: 'vault:stats',
@@ -537,9 +1167,24 @@ export class BitcoinToolsViewProvider implements vscode.WebviewViewProvider {
   /**
    * Handle exporting vault backup using bitcoin-backup library
    */
-  private async handleExportVault(webviewView: vscode.WebviewView) {
+  private async handleExportVault(webviewView: vscode.WebviewView, data?: { password?: string }) {
     try {
       const { encryptBackup } = await import('bitcoin-backup');
+
+      // If password provided from dialog, verify it first
+      if (data?.password) {
+        try {
+          // Try to export vault with the provided password to verify it's correct
+          await this._vault.exportVaultBackup();
+        } catch (error) {
+          webviewView.webview.postMessage({
+            type: 'vault:export:error',
+            data: { error: 'Incorrect vault password' }
+          });
+          vscode.window.showErrorMessage('Export failed: Incorrect vault password');
+          return;
+        }
+      }
 
       const vaultData = await this._vault.exportVaultBackup();
 
@@ -548,21 +1193,25 @@ export class BitcoinToolsViewProvider implements vscode.WebviewViewProvider {
         return;
       }
 
-      // Prompt for backup passphrase (different from vault password)
-      const backupPassphrase = await vscode.window.showInputBox({
-        prompt: 'Enter backup passphrase (protects backup file)',
-        password: true,
-        placeHolder: 'Minimum 8 characters',
-        validateInput: (value) => {
-          if (value.length < 8) {
-            return 'Passphrase must be at least 8 characters';
-          }
-          return null;
-        }
-      });
+      // Use provided password as backup passphrase, or prompt if not provided
+      let backupPassphrase = data?.password;
 
       if (!backupPassphrase) {
-        return; // User cancelled
+        backupPassphrase = await vscode.window.showInputBox({
+          prompt: 'Enter backup passphrase (protects backup file)',
+          password: true,
+          placeHolder: 'Minimum 8 characters',
+          validateInput: (value) => {
+            if (value.length < 8) {
+              return 'Passphrase must be at least 8 characters';
+            }
+            return null;
+          }
+        });
+
+        if (!backupPassphrase) {
+          return; // User cancelled
+        }
       }
 
       // Create VaultBackup object
@@ -588,10 +1237,21 @@ export class BitcoinToolsViewProvider implements vscode.WebviewViewProvider {
         // Write encrypted backup to file
         await vscode.workspace.fs.writeFile(uri, Buffer.from(encrypted, 'utf-8'));
         vscode.window.showInformationMessage(`Vault backup saved to ${uri.fsPath}`);
+
+        // Notify webview of success
+        webviewView.webview.postMessage({
+          type: 'vault:export:success'
+        });
       }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       vscode.window.showErrorMessage(`Failed to export vault: ${errorMessage}`);
+
+      // Notify webview of error
+      webviewView.webview.postMessage({
+        type: 'vault:export:error',
+        data: { error: errorMessage }
+      });
     }
   }
 
@@ -707,6 +1367,186 @@ export class BitcoinToolsViewProvider implements vscode.WebviewViewProvider {
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       vscode.window.showErrorMessage(`Failed to import vault: ${errorMessage}`);
+    }
+  }
+
+  /**
+   * Handle getting identities
+   */
+  private async handleGetIdentities(webviewView: vscode.WebviewView) {
+    try {
+      const { BapService } = await import('../../bapService');
+      const bapService = new BapService();
+
+      // Get identity key from vault
+      const identityKey = await this._vault.getIdentityKey();
+      if (!identityKey) {
+        // No identity key set, return empty list with flag
+        webviewView.webview.postMessage({
+          type: 'identitiesUpdated',
+          identities: [],
+          hasIdentityKey: false,
+          isMasterKey: false
+        });
+        return;
+      }
+
+      // Initialize BAP with identity key
+      bapService.initializeWithKey(identityKey);
+
+      // Get local identities
+      const identities = bapService.getLocalIdentities();
+      const isMasterKey = bapService.isMaster();
+
+      webviewView.webview.postMessage({
+        type: 'identitiesUpdated',
+        identities,
+        hasIdentityKey: true,
+        isMasterKey
+      });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      vscode.window.showErrorMessage(`Failed to load identities: ${errorMessage}`);
+    }
+  }
+
+  /**
+   * Handle discovering identities on-chain
+   */
+  private async handleDiscoverIdentities(webviewView: vscode.WebviewView) {
+    try {
+      const { BapService } = await import('../../bapService');
+      const bapService = new BapService();
+
+      // Get identity key from vault
+      const identityKey = await this._vault.getIdentityKey();
+      if (!identityKey) {
+        vscode.window.showErrorMessage('No identity key set. Please designate an identity key in Key Vault first.');
+        webviewView.webview.postMessage({
+          type: 'discoveryComplete'
+        });
+        return;
+      }
+
+      // Initialize BAP with identity key
+      bapService.initializeWithKey(identityKey);
+
+      // Discover identities (checks counters 0-9 by default)
+      const discovered = await vscode.window.withProgress(
+        {
+          location: vscode.ProgressLocation.Notification,
+          title: 'Discovering BAP identities on-chain...',
+          cancellable: false
+        },
+        () => bapService.discoverIdentities(10)
+      );
+
+      // Get all identities after discovery
+      const allIdentities = bapService.getLocalIdentities();
+      const isMasterKey = bapService.isMaster();
+
+      webviewView.webview.postMessage({
+        type: 'identitiesUpdated',
+        identities: allIdentities,
+        hasIdentityKey: true,
+        isMasterKey
+      });
+
+      webviewView.webview.postMessage({
+        type: 'discoveryComplete'
+      });
+
+      if (discovered.length > 0) {
+        vscode.window.showInformationMessage(`Found ${discovered.length} identity/identities on-chain`);
+      } else {
+        vscode.window.showInformationMessage('No existing identities found');
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      vscode.window.showErrorMessage(`Discovery failed: ${errorMessage}`);
+      webviewView.webview.postMessage({
+        type: 'discoveryComplete'
+      });
+    }
+  }
+
+  /**
+   * Handle creating a new identity
+   */
+  private async handleCreateIdentity(webviewView: vscode.WebviewView, name: string) {
+    try {
+      const { BapService } = await import('../../bapService');
+      const bapService = new BapService();
+
+      // Get identity key from vault
+      const identityKey = await this._vault.getIdentityKey();
+      if (!identityKey) {
+        vscode.window.showErrorMessage('No identity key set. Please designate an identity key in Key Vault first.');
+        return;
+      }
+
+      // Initialize BAP with identity key
+      bapService.initializeWithKey(identityKey);
+
+      // Create identity (master key only)
+      const result = bapService.createIdentity(name);
+      if (!result) {
+        throw new Error('Failed to create identity');
+      }
+
+      const { localIdentity, updatedIds } = result;
+
+      // Update the identity key's metadata with new bapIds
+      await this._vault.updateKeyMetadata(identityKey.id, { bapIds: updatedIds });
+
+      // Get updated list
+      const identities = bapService.getLocalIdentities();
+      const isMasterKey = bapService.isMaster();
+
+      webviewView.webview.postMessage({
+        type: 'identitiesUpdated',
+        identities,
+        hasIdentityKey: true,
+        isMasterKey
+      });
+
+      vscode.window.showInformationMessage(`Created identity: ${name}`);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      vscode.window.showErrorMessage(`Failed to create identity: ${errorMessage}`);
+    }
+  }
+
+  /**
+   * Handle viewing a profile
+   */
+  private async handleViewProfile(webviewView: vscode.WebviewView, idKey: string) {
+    try {
+      const { BapService } = await import('../../bapService');
+      const { BapPanel } = await import('../../bapPanel');
+      const bapService = new BapService();
+
+      // Fetch profile from indexer
+      const profile = await vscode.window.withProgress(
+        {
+          location: vscode.ProgressLocation.Notification,
+          title: 'Loading BAP profile...',
+          cancellable: false
+        },
+        () => bapService.getProfile(idKey)
+      );
+
+      // Show profile in webview within the tools view
+      webviewView.webview.postMessage({
+        type: 'profileLoaded',
+        profile
+      });
+
+      // Also open in separate panel for detailed view
+      BapPanel.show(profile);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      vscode.window.showErrorMessage(`Failed to load profile: ${errorMessage}`);
     }
   }
 

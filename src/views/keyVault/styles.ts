@@ -466,4 +466,66 @@ button:disabled {
   width: 100%;
   resize: vertical;
 }
+
+/* Tooltip styles */
+[data-tooltip] {
+  position: relative;
+  cursor: help;
+}
+
+[data-tooltip]::before {
+  content: attr(data-tooltip);
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%) translateY(-4px);
+  padding: 4px 8px;
+  background: var(--vscode-editorHoverWidget-background);
+  color: var(--vscode-editorHoverWidget-foreground);
+  border: 1px solid var(--vscode-editorHoverWidget-border);
+  border-radius: 3px;
+  font-size: 11px;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s;
+  z-index: 1000;
+}
+
+[data-tooltip]:hover::before {
+  opacity: 1;
+}
+
+/* Badge styles */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-size: 10px;
+  font-weight: 500;
+  background: var(--vscode-badge-background);
+  color: var(--vscode-badge-foreground);
+  margin-left: 6px;
+}
+
+.badge-identity {
+  background: var(--vscode-charts-purple);
+  color: var(--vscode-editor-foreground);
+}
+
+.badge-funding {
+  background: var(--vscode-charts-green);
+  color: var(--vscode-editor-foreground);
+}
+
+.badge-ordinals {
+  background: var(--vscode-charts-blue);
+  color: var(--vscode-editor-foreground);
+}
+
+.badge-encryption {
+  background: var(--vscode-charts-orange);
+  color: var(--vscode-editor-foreground);
+}
 `;

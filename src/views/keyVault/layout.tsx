@@ -64,7 +64,7 @@ export function HeaderBar(): JSX.Element {
           Import
         </button>
         <button class="btn" data-cmd="openSharesModal" type="button">
-          Reconstruct from Shares
+          Combine Shares
         </button>
       </div>
     </div>
@@ -146,7 +146,7 @@ export function SharesModal(): JSX.Element {
     <div class="modal-overlay" id="sharesModal">
       <div class="modal-content">
         <div class="modal-header">
-          <h2>Reconstruct from Key Shares</h2>
+          <h2>Combine Key Shares</h2>
           <button class="close-modal" data-cmd="closeSharesModal" type="button">
             ×
           </button>
@@ -155,7 +155,7 @@ export function SharesModal(): JSX.Element {
         <div class="modal-body">
           <div class="form-group">
             <label for="sharesLabel">Label</label>
-            <input type="text" id="sharesLabel" placeholder="Enter a label for the reconstructed key" />
+            <input type="text" id="sharesLabel" placeholder="Enter a label for the combined key" />
           </div>
           <div class="form-group">
             <label for="sharesInput">Key Shares (one per line)</label>
@@ -170,7 +170,7 @@ export function SharesModal(): JSX.Element {
               Cancel
             </button>
             <button class="primary" data-cmd="submitReconstructShares" type="button">
-              Reconstruct Key
+              Combine
             </button>
           </div>
         </div>

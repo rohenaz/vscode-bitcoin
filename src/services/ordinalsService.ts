@@ -78,7 +78,7 @@ class OrdinalsService {
           // Extract data from OrdUtxo structure
           const contentType = item.data?.insc?.file?.type || item.origin?.data?.insc?.file?.type || 'unknown';
           const collId = item.data?.map?.subTypeData?.collectionId || item.origin?.data?.map?.subTypeData?.collectionId;
-          const origin = item.origin?.outpoint || `${item.txid}_${item.vout}`;
+          const originOutpoint = item.origin?.outpoint || `${item.txid}_${item.vout}`;
 
           // Extract metadata for display name (following 1sat-website artifact utility)
           const name = item.origin?.data?.map?.name ||
@@ -97,7 +97,8 @@ class OrdinalsService {
             script: item.script,
             contentType,
             collectionId: collId,
-            origin,
+            origin: originOutpoint,
+            originData: item.origin, // Store full origin object for collection metadata
             name,
             num
           } as NftUtxo;
@@ -137,28 +138,29 @@ class OrdinalsService {
 
     console.log('[OrdinalsService] ⏱️ Grouped into', collectionMap.size, 'collections and', standalone.length, 'standalone NFTs in', Date.now() - startTime, 'ms');
 
-    // Convert to Collection objects with metadata (parallel fetch)
+    // Convert to Collection objects, extracting metadata from first item's origin
     const metadataStart = Date.now();
-    console.log('[OrdinalsService] ⏱️ Fetching metadata for', collectionMap.size, 'collections in parallel...');
+    console.log('[OrdinalsService] ⏱️ Extracting collection metadata from first items...');
 
     const collectionEntries = Array.from(collectionMap.entries());
-    const collections = await Promise.all(
-      collectionEntries.map(async ([collectionId, items]) => {
-        const fetchStart = Date.now();
-        const metadata = await this.fetchCollectionMetadata(collectionId);
-        console.log('[OrdinalsService] ⏱️ Fetched metadata for collection', collectionId, 'in', Date.now() - fetchStart, 'ms');
+    const collections = collectionEntries.map(([collectionId, items]) => {
+      // Extract collection name and metadata from first item's origin.data.map
+      // This follows the 1sat collection spec
+      const firstItem = items[0] as any;
+      const collectionName = firstItem?.originData?.data?.map?.name;
+      const collectionDescription = firstItem?.originData?.data?.map?.description;
+      const collectionIcon = firstItem?.originData?.outpoint || firstItem?.origin;
 
-        return {
-          id: collectionId,
-          name: metadata?.name,
-          description: metadata?.description,
-          icon: metadata?.icon || items[0]?.origin,
-          items
-        };
-      })
-    );
+      return {
+        id: collectionId,
+        name: collectionName || collectionId.slice(0, 8) + '...',
+        description: collectionDescription,
+        icon: collectionIcon,
+        items
+      };
+    });
 
-    console.log('[OrdinalsService] ⏱️ All', collectionMap.size, 'collection metadata fetched in parallel in', Date.now() - metadataStart, 'ms');
+    console.log('[OrdinalsService] ⏱️ Collection metadata extracted in', Date.now() - metadataStart, 'ms');
     console.log('[OrdinalsService] ⏱️ groupNftsByCollection COMPLETE - Total time:', Date.now() - startTime, 'ms');
 
     return {
@@ -167,22 +169,6 @@ class OrdinalsService {
     };
   }
 
-  /**
-   * Fetch collection metadata from API
-   */
-  private async fetchCollectionMetadata(collectionId: string): Promise<any> {
-    try {
-      const url = `${this.apiHost}/collection/${collectionId}`;
-      const response = await fetch(url);
-
-      if (!response.ok) return null;
-
-      return await response.json();
-    } catch (error) {
-      console.error(`Error fetching collection metadata for ${collectionId}:`, error);
-      return null;
-    }
-  }
 
   /**
    * Get all BSV-20 tokens for an address

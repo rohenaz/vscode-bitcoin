@@ -42,33 +42,33 @@ export default function DataTab({ openItems, onOpenChange }: DataTabProps) {
           <div className="space-y-2">
             <Item size="sm">
               <ItemContent>
-                <ItemTitle>Encrypt Data</ItemTitle>
-                <ItemDescription>Encrypt data with ECIES encryption</ItemDescription>
+                <ItemTitle className="text-xs">Encrypt Data</ItemTitle>
+                <ItemDescription className="text-xs">Select text in editor to encrypt with ECIES</ItemDescription>
               </ItemContent>
               <ItemActions>
-                <Button variant="outline" size="sm" onClick={() => execute('bitcoin.encrypt')}>
+                <Button variant="outline" size="xs" onClick={() => execute('bitcoin.encrypt')}>
                   Encrypt
                 </Button>
               </ItemActions>
             </Item>
             <Item size="sm">
               <ItemContent>
-                <ItemTitle>Decrypt Data</ItemTitle>
-                <ItemDescription>Decrypt ECIES encrypted data</ItemDescription>
+                <ItemTitle className="text-xs">Decrypt Data</ItemTitle>
+                <ItemDescription className="text-xs">Select encrypted text in editor to decrypt</ItemDescription>
               </ItemContent>
               <ItemActions>
-                <Button variant="outline" size="sm" onClick={() => execute('bitcoin.decrypt')}>
+                <Button variant="outline" size="xs" onClick={() => execute('bitcoin.decrypt')}>
                   Decrypt
                 </Button>
               </ItemActions>
             </Item>
             <Item size="sm">
               <ItemContent>
-                <ItemTitle>Decode File</ItemTitle>
-                <ItemDescription>Decode and display file contents</ItemDescription>
+                <ItemTitle className="text-xs">Decode File</ItemTitle>
+                <ItemDescription className="text-xs">Decode and display file contents</ItemDescription>
               </ItemContent>
               <ItemActions>
-                <Button variant="outline" size="sm" onClick={() => execute('bitcoin.decodeFile')}>
+                <Button variant="outline" size="xs" onClick={() => execute('bitcoin.decodeFile')}>
                   Decode
                 </Button>
               </ItemActions>

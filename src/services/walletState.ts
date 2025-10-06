@@ -22,6 +22,10 @@ export interface WalletState {
     bsv20: TokenBalance[];
     bsv21: TokenBalance[];
   };
+  settings: {
+    showBsv20: boolean;
+    showBsv21: boolean;
+  };
   isLoading: boolean;
   loadingStates: {
     balance: boolean;
@@ -40,6 +44,10 @@ class WalletStateManager {
     nfts: [],
     collections: [],
     tokens: { bsv20: [], bsv21: [] },
+    settings: {
+      showBsv20: false,
+      showBsv21: true
+    },
     isLoading: false,
     loadingStates: {
       balance: false,
@@ -65,8 +73,8 @@ class WalletStateManager {
     this.state.isVaultLocked = !vault.isUnlocked;
     this.pushState();
 
-    // Load initial state
-    await this.loadFundingKey();
+    // Don't load funding key automatically - wait for explicit request from wallet tab
+    // await this.loadFundingKey();
 
     // Listen to vault changes (keys added/removed/modified)
     this.vaultDisposable = vault.onDidChangeKeys(() => this.onFundingKeyChanged());
@@ -76,7 +84,8 @@ class WalletStateManager {
       console.log('[WalletState] Vault unlocked event - checking vault.isUnlocked:', vault.isUnlocked);
       this.state.isVaultLocked = !vault.isUnlocked;
       this.pushState();
-      this.onVaultUnlocked();
+      // Don't automatically load funding key on unlock - wait for user to switch to wallet tab
+      // this.onVaultUnlocked();
     });
 
     // Setup auto-refresh if enabled
@@ -145,7 +154,10 @@ class WalletStateManager {
       console.log('[WalletState] setFundingKey - ordAddress:', ordAddress);
       console.log('[WalletState] setFundingKey - using separate ordinals key:', !!ordinalsKey);
 
-      // Set loading state and push before fetching
+      // Push funding key immediately so UI shows it right away
+      this.pushState();
+
+      // Set loading state and fetch wallet data
       this.state.isLoading = true;
       this.pushState();
 
@@ -163,12 +175,16 @@ class WalletStateManager {
   }
 
   private clearFundingKey(): void {
+    const isVaultLocked = this.state.isVaultLocked;
+    const currentSettings = this.state.settings;
+
     this.state = {
       fundingKey: null,
       balance: { total: 0, spendable: 0 },
       nfts: [],
       collections: [],
       tokens: { bsv20: [], bsv21: [] },
+      settings: currentSettings,
       isLoading: false,
       loadingStates: {
         balance: false,
@@ -176,7 +192,7 @@ class WalletStateManager {
         bsv20: false,
         bsv21: false
       },
-      isVaultLocked: this.state.isVaultLocked,
+      isVaultLocked: isVaultLocked,
       lastUpdate: Date.now()
     };
     this.pushState();
@@ -253,8 +269,11 @@ class WalletStateManager {
         this.state.collections = [];
       }
 
-      // Fetch BSV-20 tokens and update UI as soon as they arrive
-      if (showTokens) {
+      // Fetch BSV-20 tokens if enabled
+      const showBsv20 = config.get('wallet.showBsv20', false);
+      const showBsv21 = config.get('wallet.showBsv21', true);
+
+      if (showTokens && showBsv20) {
         this.state.loadingStates.bsv20 = true;
         this.pushState();
         const bsv20Start = Date.now();
@@ -271,8 +290,13 @@ class WalletStateManager {
           this.state.loadingStates.bsv20 = false;
           this.pushState();
         });
+      } else {
+        this.state.tokens.bsv20 = [];
+        this.state.loadingStates.bsv20 = false;
+      }
 
-        // Fetch BSV-21 tokens and update UI as soon as they arrive
+      // Fetch BSV-21 tokens if enabled
+      if (showTokens && showBsv21) {
         this.state.loadingStates.bsv21 = true;
         this.pushState();
         const bsv21Start = Date.now();
@@ -290,7 +314,8 @@ class WalletStateManager {
           this.pushState();
         });
       } else {
-        this.state.tokens = { bsv20: [], bsv21: [] };
+        this.state.tokens.bsv21 = [];
+        this.state.loadingStates.bsv21 = false;
       }
 
       // Wait for all fetches to complete before clearing loading state
@@ -304,8 +329,11 @@ class WalletStateManager {
         ));
       }
 
-      if (showTokens) {
+      if (showTokens && showBsv20) {
         promises.push(ordinalsService.getBsv20Tokens(ordAddress));
+      }
+
+      if (showTokens && showBsv21) {
         promises.push(ordinalsService.getBsv21Tokens(ordAddress));
       }
 
@@ -326,9 +354,19 @@ class WalletStateManager {
 
   private async onFundingKeyChanged(): Promise<void> {
     console.log('[WalletState] onFundingKeyChanged triggered');
+
+    // Immediately show loading state for instant feedback
+    this.state.isLoading = true;
+    this.pushState();
+    this.webview?.webview.postMessage({
+      type: 'wallet:fundingKeyChanged',
+      data: this.state
+    });
+
+    // Now reload to check for the current funding key
     await this.loadFundingKey();
 
-    // Send specific notification about funding key change
+    // Send notification about the final state
     this.webview?.webview.postMessage({
       type: 'wallet:fundingKeyChanged',
       data: this.state
@@ -357,14 +395,25 @@ class WalletStateManager {
     if (wasLocked !== isNowLocked) {
       this.pushState(); // Push status change immediately
       await this.loadFundingKey();
+    } else {
+      // Even if status didn't change, push current state to update UI
+      this.pushState();
     }
   }
 
   pushState(): void {
+    // Read settings before pushing
+    const config = vsApi.workspace.getConfiguration('bitcoin');
+    this.state.settings = {
+      showBsv20: config.get('wallet.showBsv20', false),
+      showBsv21: config.get('wallet.showBsv21', true)
+    };
+
     console.log('[WalletState] pushState:', {
       isVaultLocked: this.state.isVaultLocked,
       hasFundingKey: !!this.state.fundingKey,
-      fundingKeyId: this.state.fundingKey?.id
+      fundingKeyId: this.state.fundingKey?.id,
+      settings: this.state.settings
     });
     this.webview?.webview.postMessage({
       type: 'wallet:stateUpdate',

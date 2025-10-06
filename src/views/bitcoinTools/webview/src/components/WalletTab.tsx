@@ -6,13 +6,22 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/components/ui/empty'
 import { Item, ItemGroup, ItemContent, ItemTitle, ItemDescription, ItemHeader, ItemMedia, ItemActions } from '@/components/ui/item'
 import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuTrigger,
+  ContextMenuSeparator,
+} from '@/components/ui/context-menu'
+import {
   Wallet, RefreshCw, Send, Download, Copy,
-  MapPin, Image, Coins, Flame, FolderOpen, Loader2
+  MapPin, Image, Coins, Flame, FolderOpen, Loader2, X, ExternalLink, Check, FileText, Play
 } from 'lucide-react'
 import { getVscode } from '../vscode'
+import { useVault } from '../contexts/VaultContext'
 import { SendBsvDialog } from './SendBsvDialog'
 import { ReceiveDialog } from './ReceiveDialog'
 import { TransferTokenDialog } from './TransferTokenDialog'
+import { TransferOrdinalDialog } from './TransferOrdinalDialog'
 
 interface Collection {
   id: string;
@@ -39,6 +48,10 @@ interface WalletState {
     bsv20: any[];
     bsv21: any[];
   };
+  settings: {
+    showBsv20: boolean;
+    showBsv21: boolean;
+  };
   isLoading: boolean;
   loadingStates?: {
     balance: boolean;
@@ -56,12 +69,14 @@ interface WalletTabProps {
 
 export default function WalletTab({ isActive }: WalletTabProps) {
   const vscode = getVscode()
+  const { vaultState } = useVault()
   const [state, setState] = useState<WalletState>({
     fundingKey: null,
     balance: { total: 0, spendable: 0 },
     nfts: [],
     collections: [],
     tokens: { bsv20: [], bsv21: [] },
+    settings: { showBsv20: false, showBsv21: true },
     isLoading: true,
     isVaultLocked: true,
     lastUpdate: 0
@@ -71,8 +86,9 @@ export default function WalletTab({ isActive }: WalletTabProps) {
   const [showTransferDialog, setShowTransferDialog] = useState(false)
   const [showBurnDialog, setShowBurnDialog] = useState(false)
   const [selectedToken, setSelectedToken] = useState<any>(null)
-  // Force re-render key based on vault lock state to ensure UI updates
-  const [renderKey, setRenderKey] = useState(0)
+  // Ordinal selection state
+  const [selectedNfts, setSelectedNfts] = useState<Set<string>>(new Set())
+  const [showTransferOrdinalDialog, setShowTransferOrdinalDialog] = useState(false)
 
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
@@ -81,27 +97,18 @@ export default function WalletTab({ isActive }: WalletTabProps) {
       switch (type) {
         case 'wallet:stateUpdate':
           console.log('[WalletTab] Received stateUpdate:', {
-            isVaultLocked: data.isVaultLocked,
             hasFundingKey: !!data.fundingKey,
             isLoading: data.isLoading
           })
-          setState(prev => {
-            // Force re-render if vault lock state changed
-            if (prev.isVaultLocked !== data.isVaultLocked) {
-              setRenderKey(k => k + 1)
-            }
-            return { ...prev, ...data }
-          })
+          setState(prev => ({ ...prev, ...data }))
           break
 
         case 'wallet:fundingKeyChanged':
           console.log('[WalletTab] Received fundingKeyChanged:', {
-            isVaultLocked: data.isVaultLocked,
             hasFundingKey: !!data.fundingKey,
             isLoading: data.isLoading
           })
           setState(data)
-          setRenderKey(k => k + 1) // Force re-render on funding key change
           break
 
         case 'wallet:error':
@@ -113,16 +120,14 @@ export default function WalletTab({ isActive }: WalletTabProps) {
 
     window.addEventListener('message', handleMessage)
 
-    // Request initial state
-    vscode.postMessage({ type: 'wallet:getFundingKey' })
-
     return () => window.removeEventListener('message', handleMessage)
   }, [])
 
-  // Check vault status when tab becomes active
+  // Check vault status and load funding key when tab becomes active
   useEffect(() => {
     if (isActive) {
       vscode.postMessage({ type: 'wallet:checkVaultStatus' })
+      vscode.postMessage({ type: 'wallet:getFundingKey' })
     }
   }, [isActive])
 
@@ -159,6 +164,81 @@ export default function WalletTab({ isActive }: WalletTabProps) {
     vscode.postMessage({ command: 'bitcoin.showKeyVault' })
   }
 
+  // NFT selection handlers
+  const toggleNftSelection = (nftId: string) => {
+    setSelectedNfts(prev => {
+      const next = new Set(prev)
+      if (next.has(nftId)) {
+        next.delete(nftId)
+      } else {
+        next.add(nftId)
+      }
+      return next
+    })
+  }
+
+  const clearSelection = () => {
+    setSelectedNfts(new Set())
+  }
+
+  const handleSendSelected = () => {
+    setShowTransferOrdinalDialog(true)
+  }
+
+  const handleSendSingle = (nft: any) => {
+    // Select this NFT and open dialog
+    const nftId = `${nft.txid}_${nft.vout}`
+    setSelectedNfts(new Set([nftId]))
+    setShowTransferOrdinalDialog(true)
+  }
+
+  const handleOpenSelected = () => {
+    const selected = getSelectedNftsArray()
+    selected.forEach(nft => {
+      vscode.postMessage({
+        command: 'downloadOrdinal',
+        origin: nft.origin,
+        contentType: nft.contentType
+      })
+    })
+  }
+
+  const handleDecodeSelected = () => {
+    const selected = getSelectedNftsArray()
+    if (selected.length > 0) {
+      // Use the first selected NFT's txid to decode
+      vscode.postMessage({
+        type: 'wallet:decodeTransaction',
+        data: { txid: selected[0].txid }
+      })
+    }
+  }
+
+  const handleEvalSelected = () => {
+    const selected = getSelectedNftsArray()
+    if (selected.length > 0) {
+      // Use the first selected NFT to evaluate its script
+      vscode.postMessage({
+        type: 'wallet:evaluateScript',
+        data: {
+          txid: selected[0].txid,
+          vout: selected[0].vout
+        }
+      })
+    }
+  }
+
+  const getSelectedNftsArray = () => {
+    const allNfts = [
+      ...state.nfts,
+      ...state.collections.flatMap(c => c.items)
+    ]
+    return allNfts.filter(nft => {
+      const nftId = `${nft.txid}_${nft.vout}`
+      return selectedNfts.has(nftId)
+    })
+  }
+
   return (
     <>
       <SendBsvDialog
@@ -191,7 +271,17 @@ export default function WalletTab({ isActive }: WalletTabProps) {
         isBurn={true}
       />
 
-      <div key={renderKey} className="wallet-container">
+      <TransferOrdinalDialog
+        open={showTransferOrdinalDialog}
+        onOpenChange={(open) => {
+          setShowTransferOrdinalDialog(open)
+          if (!open) clearSelection()
+        }}
+        selectedNfts={getSelectedNftsArray()}
+        vscode={vscode}
+      />
+
+      <div className="wallet-container relative">
       {/* Header Bar */}
       <div className="wallet-header flex items-center justify-between mb-2 pb-2 border-b">
         <Button
@@ -227,10 +317,10 @@ export default function WalletTab({ isActive }: WalletTabProps) {
               <Wallet className="h-12 w-12 text-muted-foreground" />
             </EmptyMedia>
             <EmptyTitle>
-              {state.isVaultLocked ? 'Vault Locked' : 'No Funding Key Selected'}
+              {vaultState.isLocked ? 'Vault Locked' : 'No Funding Key Selected'}
             </EmptyTitle>
             <EmptyDescription>
-              {state.isVaultLocked
+              {vaultState.isLocked
                 ? 'Unlock your Key Vault to access your wallet, ordinals, and tokens'
                 : 'Set a funding key in the Key Vault to view your wallet, ordinals, and tokens'
               }
@@ -238,7 +328,7 @@ export default function WalletTab({ isActive }: WalletTabProps) {
           </EmptyHeader>
           <EmptyContent>
             <Button onClick={openKeyVault}>
-              {state.isVaultLocked ? 'Unlock Vault' : 'Open Key Vault'}
+              {vaultState.isLocked ? 'Unlock Vault' : 'Open Key Vault'}
             </Button>
           </EmptyContent>
         </Empty>
@@ -320,7 +410,16 @@ export default function WalletTab({ isActive }: WalletTabProps) {
                 ) : (
                   <ItemGroup className="grid grid-cols-2 gap-2">
                     {state.nfts.map((nft, idx) => (
-                      <NftItem key={idx} nft={nft} vscode={vscode} />
+                      <NftItem
+                        key={idx}
+                        nft={nft}
+                        vscode={vscode}
+                        isSelected={selectedNfts.has(`${nft.txid}_${nft.vout}`)}
+                        onToggleSelect={toggleNftSelection}
+                        onSend={handleSendSingle}
+                        onSendSelected={handleSendSelected}
+                        hasSelection={selectedNfts.size > 0}
+                      />
                     ))}
                   </ItemGroup>
                 )}
@@ -366,6 +465,14 @@ export default function WalletTab({ isActive }: WalletTabProps) {
                                 src={`https://ordfs.network/${collection.icon}`}
                                 className="h-6 w-6 rounded object-cover"
                                 alt={collection.name || 'Collection'}
+                                onError={(e) => {
+                                  e.currentTarget.style.display = 'none';
+                                  // Show fallback icon by replacing with div
+                                  const fallback = document.createElement('div');
+                                  fallback.className = 'h-6 w-6 rounded bg-muted flex items-center justify-center';
+                                  fallback.innerHTML = '<svg class="h-4 w-4 text-muted-foreground" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"></path></svg>';
+                                  e.currentTarget.parentElement?.insertBefore(fallback, e.currentTarget);
+                                }}
                               />
                             ) : (
                               <div className="h-6 w-6 rounded bg-muted flex items-center justify-center">
@@ -386,7 +493,16 @@ export default function WalletTab({ isActive }: WalletTabProps) {
                         <AccordionContent>
                           <ItemGroup className="grid grid-cols-2 gap-2 pl-2">
                             {collection.items.map((nft, idx) => (
-                              <NftItem key={idx} nft={nft} vscode={vscode} />
+                              <NftItem
+                                key={idx}
+                                nft={nft}
+                                vscode={vscode}
+                                isSelected={selectedNfts.has(`${nft.txid}_${nft.vout}`)}
+                                onToggleSelect={toggleNftSelection}
+                                onSend={handleSendSingle}
+                                onSendSelected={handleSendSelected}
+                                hasSelection={selectedNfts.size > 0}
+                              />
                             ))}
                           </ItemGroup>
                         </AccordionContent>
@@ -427,20 +543,48 @@ export default function WalletTab({ isActive }: WalletTabProps) {
                   </Empty>
                 ) : (
                   <Accordion type="multiple" className="w-full">
-                    {(state.tokens.bsv20.length > 0 || state.loadingStates?.bsv20) && (
-                      <AccordionItem value="bsv20">
-                        <AccordionTrigger className="text-xs py-2">
-                          <div className="flex items-center gap-2">
-                            {state.loadingStates?.bsv20 ? (
-                              <Loader2 className="h-3 w-3 animate-spin" />
-                            ) : (
-                              <Coins className="h-3 w-3" />
-                            )}
-                            <Badge variant="default" className="text-xs">BSV-20</Badge>
+                    <AccordionItem value="bsv20">
+                      <AccordionTrigger className="text-xs py-2">
+                        <div className="flex items-center gap-2">
+                          {state.settings.showBsv20 && state.loadingStates?.bsv20 ? (
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                          ) : (
+                            <Coins className="h-3 w-3" />
+                          )}
+                          <Badge variant="default" className="text-xs">BSV-20</Badge>
+                          {state.settings.showBsv20 && (
                             <span className="text-muted-foreground">({state.tokens.bsv20.length})</span>
+                          )}
+                        </div>
+                      </AccordionTrigger>
+                      <AccordionContent>
+                        {!state.settings.showBsv20 ? (
+                          <div className="text-center py-4 text-muted-foreground text-xs">
+                            <p className="mb-2">BSV-20 tokens are disabled</p>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => {
+                                // Optimistically update UI
+                                setState(prev => ({
+                                  ...prev,
+                                  settings: { ...prev.settings, showBsv20: true },
+                                  loadingStates: {
+                                    balance: prev.loadingStates?.balance ?? false,
+                                    nfts: prev.loadingStates?.nfts ?? false,
+                                    bsv20: true,
+                                    bsv21: prev.loadingStates?.bsv21 ?? false
+                                  }
+                                }))
+                                // Tell backend to enable and refresh
+                                vscode.postMessage({ type: 'wallet:enableBsv20' })
+                              }}
+                              className="h-7 text-xs"
+                            >
+                              Enable in Settings
+                            </Button>
                           </div>
-                        </AccordionTrigger>
-                        <AccordionContent>
+                        ) : (
                           <div className="space-y-1">
                             {state.tokens.bsv20.map((token, idx) => (
                               <TokenCard
@@ -457,23 +601,51 @@ export default function WalletTab({ isActive }: WalletTabProps) {
                               />
                             ))}
                           </div>
-                        </AccordionContent>
-                      </AccordionItem>
-                    )}
-                    {(state.tokens.bsv21.length > 0 || state.loadingStates?.bsv21) && (
-                      <AccordionItem value="bsv21">
-                        <AccordionTrigger className="text-xs py-2">
-                          <div className="flex items-center gap-2">
-                            {state.loadingStates?.bsv21 ? (
-                              <Loader2 className="h-3 w-3 animate-spin" />
-                            ) : (
-                              <Coins className="h-3 w-3" />
-                            )}
-                            <Badge variant="secondary" className="text-xs">BSV-21</Badge>
+                        )}
+                      </AccordionContent>
+                    </AccordionItem>
+                    <AccordionItem value="bsv21">
+                      <AccordionTrigger className="text-xs py-2">
+                        <div className="flex items-center gap-2">
+                          {state.loadingStates?.bsv21 ? (
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                          ) : (
+                            <Coins className="h-3 w-3" />
+                          )}
+                          <Badge variant="secondary" className="text-xs">BSV-21</Badge>
+                          {state.settings.showBsv21 && (
                             <span className="text-muted-foreground">({state.tokens.bsv21.length})</span>
+                          )}
+                        </div>
+                      </AccordionTrigger>
+                      <AccordionContent>
+                        {!state.settings.showBsv21 ? (
+                          <div className="text-center py-4 text-muted-foreground text-xs">
+                            <p className="mb-2">BSV-21 tokens are disabled</p>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => {
+                                // Optimistically update UI
+                                setState(prev => ({
+                                  ...prev,
+                                  settings: { ...prev.settings, showBsv21: true },
+                                  loadingStates: {
+                                    balance: prev.loadingStates?.balance ?? false,
+                                    nfts: prev.loadingStates?.nfts ?? false,
+                                    bsv20: prev.loadingStates?.bsv20 ?? false,
+                                    bsv21: true
+                                  }
+                                }))
+                                // Tell backend to enable and refresh
+                                vscode.postMessage({ type: 'wallet:enableBsv21' })
+                              }}
+                              className="h-7 text-xs"
+                            >
+                              Enable in Settings
+                            </Button>
                           </div>
-                        </AccordionTrigger>
-                        <AccordionContent>
+                        ) : (
                           <div className="space-y-1">
                             {state.tokens.bsv21.map((token, idx) => (
                               <TokenCard
@@ -490,9 +662,9 @@ export default function WalletTab({ isActive }: WalletTabProps) {
                               />
                             ))}
                           </div>
-                        </AccordionContent>
-                      </AccordionItem>
-                    )}
+                        )}
+                      </AccordionContent>
+                    </AccordionItem>
                   </Accordion>
                 )}
               </AccordionContent>
@@ -541,17 +713,87 @@ export default function WalletTab({ isActive }: WalletTabProps) {
           </Accordion>
         </>
       )}
+
+      {/* Floating Action Bar for Selected NFTs */}
+      {selectedNfts.size > 0 && (
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 bg-background border rounded-lg shadow-lg p-1.5 flex items-center gap-1 z-50">
+          <Badge variant="secondary" className="h-5 px-1.5 text-[10px] font-mono">
+            {selectedNfts.size}
+          </Badge>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={handleOpenSelected}
+            className="h-6 w-6 p-0"
+            title="Open selected"
+          >
+            <ExternalLink className="h-3 w-3" />
+          </Button>
+          <Button
+            size="sm"
+            onClick={handleSendSelected}
+            className="h-6 w-6 p-0"
+            title="Send selected"
+          >
+            <Send className="h-3 w-3" />
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={handleDecodeSelected}
+            className="h-6 w-6 p-0"
+            title="Decode transaction"
+          >
+            <FileText className="h-3 w-3" />
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={handleEvalSelected}
+            className="h-6 w-6 p-0"
+            title="Evaluate script"
+          >
+            <Play className="h-3 w-3" />
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={clearSelection}
+            className="h-6 w-6 p-0"
+            title="Clear selection"
+          >
+            <X className="h-3 w-3" />
+          </Button>
+        </div>
+      )}
     </div>
     </>
   )
 }
 
 // NFT Grid Card Component - displays name, inscription #, and content type
-function NftItem({ nft, vscode }: { nft: any; vscode: any }) {
+function NftItem({
+  nft,
+  vscode,
+  isSelected = false,
+  onToggleSelect,
+  onSend,
+  onSendSelected,
+  hasSelection
+}: {
+  nft: any
+  vscode: any
+  isSelected?: boolean
+  onToggleSelect?: (nftId: string) => void
+  onSend?: (nft: any) => void
+  onSendSelected?: () => void
+  hasSelection?: boolean
+}) {
   const contentType = nft.contentType || 'unknown'
   const hasImage = contentType.startsWith('image/')
   const origin = nft.origin
   const displayName = nft.name || (nft.num ? `#${nft.num}` : null)
+  const nftId = `${nft.txid}_${nft.vout}`
 
   const getTypeLabel = (type: string): string => {
     if (type.startsWith('image/')) return type.replace('image/', '').toUpperCase()
@@ -567,7 +809,12 @@ function NftItem({ nft, vscode }: { nft: any; vscode: any }) {
     e.currentTarget.classList.add('opacity-20')
   }
 
-  const handleOpenInVscode = () => {
+  const handleClick = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    onToggleSelect?.(nftId)
+  }
+
+  const handleOpen = () => {
     vscode.postMessage({
       command: 'downloadOrdinal',
       origin: origin,
@@ -575,33 +822,80 @@ function NftItem({ nft, vscode }: { nft: any; vscode: any }) {
     })
   }
 
+  const handleSend = () => {
+    // If there's a selection (including this item or others), send all selected
+    if (hasSelection) {
+      onSendSelected?.()
+    } else {
+      // Otherwise just send this one item
+      onSend?.(nft)
+    }
+  }
+
   return (
-    <Item variant="outline" className="cursor-pointer" onClick={handleOpenInVscode}>
-      <ItemHeader>
-        {hasImage ? (
-          <img
-            src={`https://ordfs.network/${origin}`}
-            className="aspect-square w-full rounded-sm object-cover"
-            alt={displayName || 'NFT'}
-            onError={handleImageError}
-          />
-        ) : (
-          <div className="aspect-square w-full rounded-sm bg-muted flex flex-col items-center justify-center gap-2">
-            <Image className="h-12 w-12 text-muted-foreground" />
-            <span className="text-xs text-muted-foreground text-center break-all px-2">
+    <ContextMenu>
+      <ContextMenuTrigger>
+        <Item
+          variant="outline"
+          className={`cursor-pointer relative group ${isSelected ? 'ring-2 ring-primary bg-accent/50' : ''}`}
+          onClick={handleClick}
+        >
+          {isSelected && (
+            <div className="absolute top-2 right-2 z-10 bg-primary rounded-full p-0.5">
+              <Check className="h-3 w-3 text-primary-foreground" />
+            </div>
+          )}
+          <ItemHeader>
+            {hasImage ? (
+              <img
+                src={`https://ordfs.network/${origin}`}
+                className="aspect-square w-full rounded-sm object-cover"
+                alt={displayName || 'NFT'}
+                onError={handleImageError}
+              />
+            ) : (
+              <div className="aspect-square w-full rounded-sm bg-muted flex flex-col items-center justify-center gap-2">
+                <Image className="h-12 w-12 text-muted-foreground" />
+                <span className="text-xs text-muted-foreground text-center break-all px-2">
+                  {getTypeLabel(contentType)}
+                </span>
+              </div>
+            )}
+          </ItemHeader>
+          <ItemContent>
+            <ItemTitle className="text-xs">{displayName || 'Unknown'}</ItemTitle>
+            <ItemDescription className="text-xs text-muted-foreground">
               {getTypeLabel(contentType)}
-            </span>
-          </div>
-        )}
-      </ItemHeader>
-      <ItemContent>
-        <ItemTitle className="text-xs">{displayName || 'Unknown'}</ItemTitle>
-        <ItemDescription className="text-xs text-muted-foreground">
-          {getTypeLabel(contentType)}
-          {nft.num && ` • #${nft.num}`}
-        </ItemDescription>
-      </ItemContent>
-    </Item>
+              {nft.num && ` • #${nft.num}`}
+            </ItemDescription>
+          </ItemContent>
+        </Item>
+      </ContextMenuTrigger>
+      <ContextMenuContent>
+        <ContextMenuItem onClick={handleOpen}>
+          <ExternalLink className="mr-2 h-4 w-4" />
+          Open
+        </ContextMenuItem>
+        <ContextMenuItem onClick={handleSend}>
+          <Send className="mr-2 h-4 w-4" />
+          {hasSelection ? `Send Selected` : 'Send'}
+        </ContextMenuItem>
+        <ContextMenuSeparator />
+        <ContextMenuItem onClick={handleClick}>
+          {isSelected ? (
+            <>
+              <X className="mr-2 h-4 w-4" />
+              Deselect
+            </>
+          ) : (
+            <>
+              <Check className="mr-2 h-4 w-4" />
+              Select
+            </>
+          )}
+        </ContextMenuItem>
+      </ContextMenuContent>
+    </ContextMenu>
   )
 }
 
@@ -635,8 +929,18 @@ function TokenCard({ token, onSend, onBurn }: TokenCardProps) {
     ? `${token.price} BSV`
     : null
 
+  const handleTokenClick = () => {
+    // Open token on 1sat.market
+    const origin = token.tokenId || token.id
+    if (origin) {
+      const protocol = token.protocol === 'BSV20' ? 'bsv20' : 'bsv21'
+      const url = `https://1sat.market/market/${protocol}/${origin}`
+      window.open(url, '_blank')
+    }
+  }
+
   return (
-    <Item size="sm" className="group">
+    <Item size="sm" className="group cursor-pointer hover:bg-accent/50" onClick={handleTokenClick}>
       <ItemMedia>
         {token.icon && !imgError ? (
           <img

@@ -246,6 +246,12 @@
         "category": "Bitcoin"
       },
       {
+        "command": "bitcoin.openBitcoinSettings",
+        "title": "Open Bitcoin Settings",
+        "category": "Bitcoin",
+        "icon": "$(settings-gear)"
+      },
+      {
         "command": "bitcoin.resetExtension",
         "title": "Reset Extension",
         "category": "Bitcoin"
@@ -272,6 +278,13 @@
       }
     ],
     "menus": {
+      "view/title": [
+        {
+          "command": "bitcoin.openBitcoinSettings",
+          "when": "view == bitcoin.toolsView",
+          "group": "navigation"
+        }
+      ],
       "commandPalette": [
         {
           "command": "bitcoin.convertToHex",
@@ -437,6 +450,21 @@
           "default": true,
           "description": "Show BSV-20/BSV-21 tokens section in wallet"
         },
+        "bitcoin.wallet.showBsv20": {
+          "type": "boolean",
+          "default": false,
+          "description": "Show BSV-20 tokens in wallet"
+        },
+        "bitcoin.wallet.showBsv21": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show BSV-21 tokens in wallet"
+        },
+        "bitcoin.wallet.autoBroadcast": {
+          "type": "boolean",
+          "default": false,
+          "description": "Automatically broadcast transactions (if false, shows preview first)"
+        },
         "bitcoin.wallet.autoRefresh": {
           "type": "boolean",
           "default": true,
@@ -446,6 +474,16 @@
           "type": "number",
           "default": 60000,
           "description": "Wallet auto-refresh interval in milliseconds (0 to disable)"
+        },
+        "bitcoin.script.enableOpcodeHighlighting": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable syntax highlighting for Bitcoin Script opcodes (OP_DUP, OP_HASH160, etc.) in code files"
+        },
+        "bitcoin.script.templatesDirectory": {
+          "type": "string",
+          "default": ".bitcoin/script-templates",
+          "description": "Directory containing script template JSON files with regex patterns for detecting script types (relative to workspace root)"
         }
       }
     },
@@ -513,7 +551,9 @@
   },
   "scripts": {
     "build": "bun run build:webview && VITE_CJS_IGNORE_WARNING=true vite build",
-    "build:webview": "cd src/views/bitcoinTools/webview && bun run build",
+    "build:webview": "bun run build:bitcointools-webview && bun run build:keyvault-webview",
+    "build:bitcointools-webview": "cd src/views/bitcoinTools/webview && bun run build",
+    "build:keyvault-webview": "cd src/views/keyVault/webview && bun run build",
     "build:test": "tsc -p ./",
     "dev": "vite build --watch",
     "lint": "biome lint .",

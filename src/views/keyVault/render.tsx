@@ -1,6 +1,7 @@
 import { escapeHtml } from '@kitajs/html';
 import type { KeyEntry } from '../../keyVault';
 import { HD, PrivateKey, PublicKey, Utils } from '@bsv/sdk';
+import { BAP, MemberID } from 'bsv-bap';
 
 const { toArray, toHex, toBase58Check } = Utils;
 
@@ -169,10 +170,51 @@ export function displayedKeyValue(k: KeyEntry): JSX.Element {
 }
 
 /**
- * Derive address from key for default display (security)
+ * Derive address or identity identifier for default display (security)
  */
 function deriveAddressForKey(k: KeyEntry): string | null {
   try {
+    // For identity keys, show the BAP idKey if available
+    if (k.isIdentityKey) {
+      // Check for BAP master key (has bapIds with multiple identities)
+      if (k.metadata?.bapIds) {
+        try {
+          const idsObj = JSON.parse(k.metadata.bapIds);
+          const idsList = idsObj.ids || [];
+          if (idsList.length > 0) {
+            // Show first identity's idKey
+            return idsList[0].idKey || null;
+          }
+        } catch (e) {
+          // Fall through to derive from key
+        }
+      }
+
+      // Check for BAP member key (has single bapId)
+      if (k.metadata?.bapId) {
+        try {
+          const member = MemberID.fromBackup({
+            wif: k.value,
+            id: k.metadata.bapId
+          });
+          return member.getIdentityKey() || null;
+        } catch (e) {
+          // Fall through to derive from key
+        }
+      }
+
+      // Fallback: derive idKey from WIF for new identity keys
+      if (k.type === 'wif') {
+        try {
+          const bap = new BAP({ rootPk: k.value });
+          const identity = bap.newId('temp');
+          return identity.getIdentityKey() || null;
+        } catch (e) {
+          // Fall through to address
+        }
+      }
+    }
+
     // Only derive address for WIF keys (private keys we want to protect)
     if (k.type === 'wif') {
       const isTestnet = k.metadata?.network === 'testnet';
@@ -222,13 +264,13 @@ function renderFormatBadges(k: KeyEntry): JSX.Element[] {
   switch (k.type) {
     case 'mnemonic':
       badges.push(
-        <button class="format-badge" data-cmd="copyWords" data-id={k.id} type="button">
+        <button class="format-badge" data-cmd="copyWords" data-id={k.id} type="button" data-tooltip="Copy mnemonic words">
           WORDS
         </button>,
-        <button class="format-badge" data-cmd="copyXprv" data-id={k.id} type="button">
+        <button class="format-badge" data-cmd="copyXprv" data-id={k.id} type="button" data-tooltip="Copy extended private key">
           XPRIV
         </button>,
-        <button class="format-badge" data-cmd="copyXpub" data-id={k.id} type="button">
+        <button class="format-badge" data-cmd="copyXpub" data-id={k.id} type="button" data-tooltip="Copy extended public key">
           XPUB
         </button>
       );
@@ -238,10 +280,10 @@ function renderFormatBadges(k: KeyEntry): JSX.Element[] {
     case 'wif':
     case 'encryption':
       badges.push(
-        <button class="format-badge" data-cmd="copyWif" data-id={k.id} type="button">
+        <button class="format-badge" data-cmd="copyWif" data-id={k.id} type="button" data-tooltip="Copy WIF format">
         WIF
         </button>,
-        <button class="format-badge" data-cmd="copyHex" data-id={k.id} type="button">
+        <button class="format-badge" data-cmd="copyHex" data-id={k.id} type="button" data-tooltip="Copy hex format">
           HEX
         </button>
       );
@@ -253,6 +295,7 @@ function renderFormatBadges(k: KeyEntry): JSX.Element[] {
             data-cmd={testnet ? 'copyTAddress' : 'copyAddress'}
             data-id={k.id}
             type="button"
+            data-tooltip={testnet ? 'Copy testnet address' : 'Copy Bitcoin address'}
           >
             {testnet ? 'TADDR' : 'ADDR'}
           </button>
@@ -262,13 +305,13 @@ function renderFormatBadges(k: KeyEntry): JSX.Element[] {
 
     case 'public':
       badges.push(
-        <button class="format-badge" data-cmd="copyHex" data-id={k.id} type="button">
+        <button class="format-badge" data-cmd="copyHex" data-id={k.id} type="button" data-tooltip="Copy hex format">
           HEX
         </button>,
-        <button class="format-badge" data-cmd="copyAddress" data-id={k.id} type="button">
+        <button class="format-badge" data-cmd="copyAddress" data-id={k.id} type="button" data-tooltip="Copy Bitcoin address">
           ADDR
         </button>,
-        <button class="format-badge" data-cmd="p2pkhScript" data-id={k.id} type="button">
+        <button class="format-badge" data-cmd="p2pkhScript" data-id={k.id} type="button" data-tooltip="Copy P2PKH script">
           P2PKH
         </button>
       );
@@ -276,10 +319,10 @@ function renderFormatBadges(k: KeyEntry): JSX.Element[] {
 
     case 'hdprivate':
       badges.push(
-        <button class="format-badge" data-cmd="copyXprv" data-id={k.id} type="button">
+        <button class="format-badge" data-cmd="copyXprv" data-id={k.id} type="button" data-tooltip="Copy extended private key">
           XPRIV
         </button>,
-        <button class="format-badge" data-cmd="copyXpub" data-id={k.id} type="button">
+        <button class="format-badge" data-cmd="copyXpub" data-id={k.id} type="button" data-tooltip="Copy extended public key">
           XPUB
         </button>
       );
@@ -287,7 +330,7 @@ function renderFormatBadges(k: KeyEntry): JSX.Element[] {
 
     case 'hdpublic':
       badges.push(
-        <button class="format-badge" data-cmd="copyXpub" data-id={k.id} type="button">
+        <button class="format-badge" data-cmd="copyXpub" data-id={k.id} type="button" data-tooltip="Copy extended public key">
           XPUB
         </button>
       );
@@ -318,6 +361,7 @@ export function renderActions(k: KeyEntry): JSX.Element[] {
         data-cmd="publicChild"
         data-id={k.id}
         type="button"
+        data-tooltip="Derive public key"
       >
         PUB
       </button>,
@@ -326,6 +370,7 @@ export function renderActions(k: KeyEntry): JSX.Element[] {
         data-cmd="type42Child"
         data-id={k.id}
         type="button"
+        data-tooltip="Derive Type-42 child key"
       >
         Type42
       </button>,
@@ -337,6 +382,7 @@ export function renderActions(k: KeyEntry): JSX.Element[] {
           data-cmd="setEncryptionKey"
           data-id={k.id}
           type="button"
+          data-tooltip="Set as encryption key"
         >
           + Encryption
         </button>,
@@ -353,7 +399,7 @@ export function renderActions(k: KeyEntry): JSX.Element[] {
           data-cmd="viewKeyShares"
           data-id={k.id}
           type="button"
-          title="View Key Shares"
+          data-tooltip="View key shares"
         >
           Shares
         </button>
@@ -365,9 +411,9 @@ export function renderActions(k: KeyEntry): JSX.Element[] {
           data-cmd="generateKeyShares"
           data-id={k.id}
           type="button"
-          title="Generate Key Shares"
+          data-tooltip="Split key into shares (Shamir's Secret Sharing)"
         >
-          + Shares
+          Split
         </button>
       );
     }
@@ -380,6 +426,7 @@ export function renderActions(k: KeyEntry): JSX.Element[] {
         data-cmd="bip32Child"
         data-id={k.id}
         type="button"
+        data-tooltip="Derive BIP32 child key"
       >
         BIP32
       </button>,
@@ -388,12 +435,12 @@ export function renderActions(k: KeyEntry): JSX.Element[] {
 
   if (k.type === 'public') {
     actions.push(
-      <button 
-        class="key-button" 
-        data-cmd="viewOnChain" 
-        data-id={k.id} 
+      <button
+        class="key-button"
+        data-cmd="viewOnChain"
+        data-id={k.id}
         type="button"
-        title="View on WhatsOnChain"
+        data-tooltip="View on WhatsOnChain"
       >
         WoC
       </button>
@@ -452,6 +499,34 @@ export function renderActions(k: KeyEntry): JSX.Element[] {
         type="button"
       >
         - Ord
+      </button>
+    );
+  }
+
+  // Add "Set as Identity Key" action for WIF keys
+  if (k.type === 'wif' && !k.isIdentityKey) {
+    actions.push(
+      <button
+        class="key-button"
+        data-cmd="setIdentityKey"
+        data-id={k.id}
+        type="button"
+      >
+        + ID
+      </button>
+    );
+  }
+
+  // Add "Clear Identity Key" action for identity keys
+  if (k.isIdentityKey) {
+    actions.push(
+      <button
+        class="key-button"
+        data-cmd="clearIdentityKey"
+        data-id={k.id}
+        type="button"
+      >
+        - ID
       </button>
     );
   }
