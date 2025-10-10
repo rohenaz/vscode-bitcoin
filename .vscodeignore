@@ -1,6 +1,7 @@
 # Source files (compiled to dist/)
 src/**
 !src/views/bitcoinTools/webview/dist/**
+!src/views/keyVault/webview/dist/**
 *.ts
 *.tsx
 
