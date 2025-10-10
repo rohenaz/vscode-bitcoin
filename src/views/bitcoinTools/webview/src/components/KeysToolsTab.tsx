@@ -18,11 +18,11 @@ export default function KeysToolsTab({ openItems, onOpenChange }: KeysToolsTabPr
 
   return (
     <Accordion type="multiple" className="w-full" value={openItems} onValueChange={onOpenChange}>
-      <AccordionItem value="generate">
+      <AccordionItem value="mainnet">
         <AccordionTrigger className="text-xs">
           <div className="flex items-center gap-2">
             <Plus className="h-3 w-3" />
-            Generate
+            Mainnet
           </div>
         </AccordionTrigger>
         <AccordionContent>
@@ -30,88 +30,31 @@ export default function KeysToolsTab({ openItems, onOpenChange }: KeysToolsTabPr
             <Item size="sm">
               <ItemContent>
                 <ItemTitle>Private Key</ItemTitle>
-                <ItemDescription>Generate a new private key</ItemDescription>
+                <ItemDescription>Generate in different formats</ItemDescription>
               </ItemContent>
               <ItemActions>
+                <Button variant="outline" size="sm" onClick={() => execute('bitcoin.generateWIF')}>
+                  WIF
+                </Button>
                 <Button variant="outline" size="sm" onClick={() => execute('bitcoin.generatePrivateKey')}>
-                  Generate
+                  Hex
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => execute('bitcoin.generateHDPrivateKey')}>
+                  xPrv
                 </Button>
               </ItemActions>
             </Item>
             <Item size="sm">
               <ItemContent>
                 <ItemTitle>Public Key</ItemTitle>
-                <ItemDescription>Generate a new public key</ItemDescription>
+                <ItemDescription>Generate in different formats</ItemDescription>
               </ItemContent>
               <ItemActions>
                 <Button variant="outline" size="sm" onClick={() => execute('bitcoin.generatePublicKey')}>
-                  Generate
+                  Hex
                 </Button>
-              </ItemActions>
-            </Item>
-            <Item size="sm">
-              <ItemContent>
-                <ItemTitle>WIF (Mainnet)</ItemTitle>
-                <ItemDescription>Generate mainnet WIF key</ItemDescription>
-              </ItemContent>
-              <ItemActions>
-                <Button variant="outline" size="sm" onClick={() => execute('bitcoin.generateWIF')}>
-                  Generate
-                </Button>
-              </ItemActions>
-            </Item>
-            <Item size="sm">
-              <ItemContent>
-                <ItemTitle>WIF (Testnet)</ItemTitle>
-                <ItemDescription>Generate testnet WIF key</ItemDescription>
-              </ItemContent>
-              <ItemActions>
-                <Button variant="outline" size="sm" onClick={() => execute('bitcoin.generateTestnetWIF')}>
-                  Generate
-                </Button>
-              </ItemActions>
-            </Item>
-            <Item size="sm">
-              <ItemContent>
-                <ItemTitle>WIF Vanity (Mainnet)</ItemTitle>
-                <ItemDescription>Generate vanity mainnet WIF</ItemDescription>
-              </ItemContent>
-              <ItemActions>
-                <Button variant="outline" size="sm" onClick={() => execute('bitcoin.generateWIFVanity')}>
-                  Generate
-                </Button>
-              </ItemActions>
-            </Item>
-            <Item size="sm">
-              <ItemContent>
-                <ItemTitle>WIF Vanity (Testnet)</ItemTitle>
-                <ItemDescription>Generate vanity testnet WIF</ItemDescription>
-              </ItemContent>
-              <ItemActions>
-                <Button variant="outline" size="sm" onClick={() => execute('bitcoin.generateTestnetWIFVanity')}>
-                  Generate
-                </Button>
-              </ItemActions>
-            </Item>
-            <Item size="sm">
-              <ItemContent>
-                <ItemTitle>Extended Private Key</ItemTitle>
-                <ItemDescription>Generate HD extended private key</ItemDescription>
-              </ItemContent>
-              <ItemActions>
-                <Button variant="outline" size="sm" onClick={() => execute('bitcoin.generateHDPrivateKey')}>
-                  Generate
-                </Button>
-              </ItemActions>
-            </Item>
-            <Item size="sm">
-              <ItemContent>
-                <ItemTitle>Extended Public Key</ItemTitle>
-                <ItemDescription>Generate HD extended public key</ItemDescription>
-              </ItemContent>
-              <ItemActions>
                 <Button variant="outline" size="sm" onClick={() => execute('bitcoin.generateHDPublicKey')}>
-                  Generate
+                  xPub
                 </Button>
               </ItemActions>
             </Item>
@@ -122,6 +65,52 @@ export default function KeysToolsTab({ openItems, onOpenChange }: KeysToolsTabPr
               </ItemContent>
               <ItemActions>
                 <Button variant="outline" size="sm" onClick={() => execute('bitcoin.generateMnemonic')}>
+                  Generate
+                </Button>
+              </ItemActions>
+            </Item>
+            <Item size="sm">
+              <ItemContent>
+                <ItemTitle>Vanity WIF</ItemTitle>
+                <ItemDescription>Generate vanity address</ItemDescription>
+              </ItemContent>
+              <ItemActions>
+                <Button variant="outline" size="sm" onClick={() => execute('bitcoin.generateWIFVanity')}>
+                  Generate
+                </Button>
+              </ItemActions>
+            </Item>
+          </div>
+        </AccordionContent>
+      </AccordionItem>
+
+      <AccordionItem value="testnet">
+        <AccordionTrigger className="text-xs">
+          <div className="flex items-center gap-2">
+            <Plus className="h-3 w-3" />
+            Testnet
+          </div>
+        </AccordionTrigger>
+        <AccordionContent>
+          <div className="space-y-2">
+            <Item size="sm">
+              <ItemContent>
+                <ItemTitle>Private Key (WIF)</ItemTitle>
+                <ItemDescription>Generate testnet WIF</ItemDescription>
+              </ItemContent>
+              <ItemActions>
+                <Button variant="outline" size="sm" onClick={() => execute('bitcoin.generateTestnetWIF')}>
+                  Generate
+                </Button>
+              </ItemActions>
+            </Item>
+            <Item size="sm">
+              <ItemContent>
+                <ItemTitle>Vanity WIF</ItemTitle>
+                <ItemDescription>Generate vanity testnet address</ItemDescription>
+              </ItemContent>
+              <ItemActions>
+                <Button variant="outline" size="sm" onClick={() => execute('bitcoin.generateTestnetWIFVanity')}>
                   Generate
                 </Button>
               </ItemActions>

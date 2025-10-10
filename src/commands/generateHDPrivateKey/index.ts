@@ -9,26 +9,17 @@ export async function generateHDPrivateKey(
 ) {
   try {
     const hdPrivKey = HD.fromRandom();
-    const hdPubKey = hdPrivKey.toPublic();
     const xprv = hdPrivKey.toString();
-    const xpub = hdPubKey.toString();
 
     // Only store in vault if auto-store is enabled
     if (keyVault.isAutoStoreEnabled()) {
-      // Store HD private key first
-      const parentId = await keyVault.storeKey({
+      // Store HD private key
+      // User can derive xPub child using the "+ xPub" button in the UI
+      await keyVault.storeKey({
         type: 'hdprivate',
         value: xprv,
         label: 'Generated HD Private Key',
         metadata: {},
-      });
-
-      // Store HD public key with parentId reference
-      await keyVault.storeKey({
-        type: 'hdpublic',
-        value: xpub,
-        label: 'Generated HD Public Key',
-        metadata: { parentId },
       });
     }
 

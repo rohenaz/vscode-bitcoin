@@ -109,7 +109,7 @@ export default function DataConversion() {
           onPaste={handlePaste}
           onBlur={handleBlur}
           placeholder="Paste or type data to convert"
-          className="font-mono text-xs"
+          className="font-mono text-xs min-h-[150px] max-h-[400px]"
         />
       </div>
 
@@ -152,7 +152,7 @@ export default function DataConversion() {
           value={outputValue}
           readOnly
           placeholder="Converted output will appear here"
-          className="font-mono text-xs"
+          className="font-mono text-xs min-h-[150px] max-h-[400px]"
         />
         <Button variant="secondary" className="w-full" onClick={handleCopy} disabled={!outputValue}>
           Copy

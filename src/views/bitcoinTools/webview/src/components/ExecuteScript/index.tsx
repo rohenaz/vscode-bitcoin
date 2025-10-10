@@ -25,7 +25,7 @@ export function ExecuteScript() {
     setError(null)
 
     vscode.postMessage({
-      type: 'script:execute',
+      type: 'transaction:executeScript',
       data: { script: scriptInput.trim() }
     })
   }

@@ -1,12 +1,20 @@
 import * as vscode from 'vscode';
+import * as os from 'os';
+import * as path from 'path';
+import * as fs from 'fs';
 import type { KeyVault } from '../../keyVault';
 import { walletState } from '../../services/walletState';
 import { transactionService, TransactionError } from '../../services/transactionService';
 import { ordinalsService } from '../../services/ordinalsService';
 import { tokenTransferService } from '../../services/tokenTransferService';
 import { ordinalTransferService } from '../../services/ordinalTransferService';
-import { PrivateKey } from '@bsv/sdk';
+import { PrivateKey, Script, Transaction, LockingScript, UnlockingScript } from '@bsv/sdk';
 import type { VaultBackup } from 'bitcoin-backup';
+import { encryptBackup, decryptBackup } from 'bitcoin-backup';
+import { detectFormat, convertData } from '../../utils';
+import { ScriptExecutor } from '../../utils/scriptExecutor';
+import { BapService } from '../../bapService';
+import { BapPanel } from '../../bapPanel';
 
 export class BitcoinToolsViewProvider implements vscode.WebviewViewProvider {
   public static readonly viewType = 'bitcoin.toolsView';
@@ -161,7 +169,12 @@ export class BitcoinToolsViewProvider implements vscode.WebviewViewProvider {
 
         // Handle script execution messages
         if (message.type === 'transaction:executeScript') {
-          await this.handleExecuteScript(webviewView, message.data);
+          // Check if this is standalone script execution or transaction-based
+          if (message.data.script && !message.data.sourceTXID) {
+            await this.handleStandaloneScriptExecution(webviewView, message.data);
+          } else {
+            await this.handleExecuteScript(webviewView, message.data);
+          }
           return;
         }
 
@@ -174,13 +187,11 @@ export class BitcoinToolsViewProvider implements vscode.WebviewViewProvider {
         // Handle data conversion messages
         switch (message.type) {
           case 'detect':
-            const { detectFormat } = await import('../../utils');
             const detected = detectFormat(message.input);
             webviewView.webview.postMessage({ type: 'detected', format: detected });
             break;
           case 'convert':
             try {
-              const { convertData } = await import('../../utils');
               const result = convertData(message.input, message.fromFormat, message.toFormat);
               webviewView.webview.postMessage({ type: 'result', value: result });
             } catch (error) {
@@ -746,7 +757,6 @@ export class BitcoinToolsViewProvider implements vscode.WebviewViewProvider {
     data: { rawTx: string }
   ) {
     try {
-      const { Transaction } = await import('@bsv/sdk');
       const tx = Transaction.fromHex(data.rawTx);
 
       const decodedTx = {
@@ -824,7 +834,59 @@ export class BitcoinToolsViewProvider implements vscode.WebviewViewProvider {
   }
 
   /**
-   * Handle script execution request
+   * Handle standalone script execution (no transaction context)
+   */
+  private async handleStandaloneScriptExecution(
+    webviewView: vscode.WebviewView,
+    data: { script: string }
+  ) {
+    try {
+      // Parse the script - it can be in hex, ASM, or mixed format
+      let script: any;
+      const scriptInput = data.script.trim();
+
+      try {
+        // Try parsing as ASM first (most common for user input)
+        script = Script.fromASM(scriptInput);
+      } catch (asmError) {
+        try {
+          // Try parsing as hex
+          script = Script.fromHex(scriptInput);
+        } catch (hexError) {
+          throw new Error('Invalid script format. Please provide script in ASM or hex format.');
+        }
+      }
+
+      // For standalone execution, treat the entire script as the locking script
+      const lockingScript = script.toHex();
+      const lockingScriptAsm = script.toASM();
+
+      // Send to the script executor component
+      webviewView.webview.postMessage({
+        type: 'script:ready',
+        data: {
+          spendParams: {
+            lockingScript: lockingScript,
+            lockingScriptAsm: lockingScriptAsm,
+            unlockingScript: '', // Empty unlocking script for standalone
+            sourceTXID: '0000000000000000000000000000000000000000000000000000000000000000',
+            sourceOutputIndex: 0,
+            satoshis: 0
+          }
+        }
+      });
+
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      webviewView.webview.postMessage({
+        type: 'script:error',
+        data: { error: errorMessage }
+      });
+    }
+  }
+
+  /**
+   * Handle script execution request (from transaction context)
    */
   private async handleExecuteScript(
     webviewView: vscode.WebviewView,
@@ -847,7 +909,6 @@ export class BitcoinToolsViewProvider implements vscode.WebviewViewProvider {
       }
 
       const sourceRawTx = await response.text();
-      const { Transaction } = await import('@bsv/sdk');
       const sourceTx = Transaction.fromHex(sourceRawTx);
 
       // Get the locking script from the source output
@@ -939,10 +1000,6 @@ export class BitcoinToolsViewProvider implements vscode.WebviewViewProvider {
     spendParams: any
   ) {
     try {
-      // Import ScriptExecutor class
-      const { ScriptExecutor } = await import('../../utils/scriptExecutor');
-      const { LockingScript, UnlockingScript } = await import('@bsv/sdk');
-
       // Create new executor instance
       const executor = new ScriptExecutor(spendParams);
       this.scriptExecutors.set(id, executor);
@@ -1124,10 +1181,6 @@ export class BitcoinToolsViewProvider implements vscode.WebviewViewProvider {
         const buffer = Buffer.from(arrayBuffer);
 
         // Save to ~/.bitcoin/media folder
-        const os = await import('os');
-        const path = await import('path');
-        const fs = await import('fs');
-
         const mediaDir = path.join(os.homedir(), '.bitcoin', 'media');
         if (!fs.existsSync(mediaDir)) {
           fs.mkdirSync(mediaDir, { recursive: true });
@@ -1169,8 +1222,6 @@ export class BitcoinToolsViewProvider implements vscode.WebviewViewProvider {
    */
   private async handleExportVault(webviewView: vscode.WebviewView, data?: { password?: string }) {
     try {
-      const { encryptBackup } = await import('bitcoin-backup');
-
       // If password provided from dialog, verify it first
       if (data?.password) {
         try {
@@ -1260,8 +1311,6 @@ export class BitcoinToolsViewProvider implements vscode.WebviewViewProvider {
    */
   private async handleImportVault(webviewView: vscode.WebviewView) {
     try {
-      const { decryptBackup } = await import('bitcoin-backup');
-
       // Step 1: Select backup file
       const uris = await vscode.window.showOpenDialog({
         canSelectFiles: true,
@@ -1375,7 +1424,6 @@ export class BitcoinToolsViewProvider implements vscode.WebviewViewProvider {
    */
   private async handleGetIdentities(webviewView: vscode.WebviewView) {
     try {
-      const { BapService } = await import('../../bapService');
       const bapService = new BapService();
 
       // Get identity key from vault
@@ -1415,7 +1463,6 @@ export class BitcoinToolsViewProvider implements vscode.WebviewViewProvider {
    */
   private async handleDiscoverIdentities(webviewView: vscode.WebviewView) {
     try {
-      const { BapService } = await import('../../bapService');
       const bapService = new BapService();
 
       // Get identity key from vault
@@ -1475,7 +1522,6 @@ export class BitcoinToolsViewProvider implements vscode.WebviewViewProvider {
    */
   private async handleCreateIdentity(webviewView: vscode.WebviewView, name: string) {
     try {
-      const { BapService } = await import('../../bapService');
       const bapService = new BapService();
 
       // Get identity key from vault
@@ -1494,7 +1540,7 @@ export class BitcoinToolsViewProvider implements vscode.WebviewViewProvider {
         throw new Error('Failed to create identity');
       }
 
-      const { localIdentity, updatedIds } = result;
+      const { updatedIds } = result;
 
       // Update the identity key's metadata with new bapIds
       await this._vault.updateKeyMetadata(identityKey.id, { bapIds: updatedIds });
@@ -1522,8 +1568,6 @@ export class BitcoinToolsViewProvider implements vscode.WebviewViewProvider {
    */
   private async handleViewProfile(webviewView: vscode.WebviewView, idKey: string) {
     try {
-      const { BapService } = await import('../../bapService');
-      const { BapPanel } = await import('../../bapPanel');
       const bapService = new BapService();
 
       // Fetch profile from indexer

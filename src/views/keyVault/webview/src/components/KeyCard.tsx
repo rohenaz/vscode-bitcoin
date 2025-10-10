@@ -120,7 +120,6 @@ export function KeyCard({ keyEntry }: KeyCardProps) {
 
           <CardAction>
             <div className="flex items-center gap-1">
-              {/* Type Toggle Group - Multiple selection allowed on same key */}
               {(keyEntry.type === 'wif' || keyEntry.type === 'private' || keyEntry.type === 'encryption') && (
                 <ToggleGroup
                   type="multiple"
@@ -133,9 +132,6 @@ export function KeyCard({ keyEntry }: KeyCardProps) {
                     keyEntry.isIdentityKey ? 'identity' : null,
                   ].filter(Boolean) as string[]}
                   onValueChange={(values: string[]) => {
-                    console.log('ToggleGroup values changed to:', values)
-
-                    // Check what changed and send appropriate command
                     const wasEncryption = keyEntry.isEncryptionKey
                     const wasFunding = keyEntry.isFundingKey
                     const wasOrdinals = keyEntry.isOrdinalsKey
@@ -146,7 +142,6 @@ export function KeyCard({ keyEntry }: KeyCardProps) {
                     const isOrdinals = values.includes('ordinals')
                     const isIdentity = values.includes('identity')
 
-                    // Send commands for changed flags
                     if (isEncryption !== wasEncryption) {
                       handleCommand(isEncryption ? 'setEncryptionKey' : 'clearEncryptionKey')
                     }
@@ -161,65 +156,48 @@ export function KeyCard({ keyEntry }: KeyCardProps) {
                     }
                   }}
                 >
-                  <Tooltip>
-                    <TooltipTrigger>
-                      <ToggleGroupItem
-                        value="encryption"
-                        aria-label="Toggle encryption"
-                        className="h-7 px-2 text-xs data-[state=on]:bg-chart-5/20 data-[state=on]:text-chart-5 data-[state=on]:border-chart-5/30"
-                      >
-                        Enc
-                      </ToggleGroupItem>
-                    </TooltipTrigger>
-                    <TooltipContent>{keyEntry.isEncryptionKey ? 'Clear encryption key' : 'Set as encryption key'}</TooltipContent>
-                  </Tooltip>
+                  <ToggleGroupItem
+                    value="encryption"
+                    aria-label="Toggle encryption"
+                    title={keyEntry.isEncryptionKey ? 'Clear encryption key' : 'Set as encryption key'}
+                    className="text-xs data-[state=on]:bg-chart-5/20 data-[state=on]:text-chart-5"
+                  >
+                    ENC
+                  </ToggleGroupItem>
 
                   {keyEntry.type === 'wif' && (
                     <>
-                      <Tooltip>
-                        <TooltipTrigger>
-                          <ToggleGroupItem
-                            value="wallet"
-                            aria-label="Toggle wallet"
-                            className="h-7 px-2 text-xs data-[state=on]:bg-chart-3/20 data-[state=on]:text-chart-3 data-[state=on]:border-chart-3/30"
-                          >
-                            Wallet
-                          </ToggleGroupItem>
-                        </TooltipTrigger>
-                        <TooltipContent>{keyEntry.isFundingKey ? 'Clear wallet key' : 'Set as wallet key'}</TooltipContent>
-                      </Tooltip>
+                      <ToggleGroupItem
+                        value="wallet"
+                        aria-label="Toggle wallet"
+                        title={keyEntry.isFundingKey ? 'Clear wallet key' : 'Set as wallet key'}
+                        className="text-xs data-[state=on]:bg-chart-3/20 data-[state=on]:text-chart-3"
+                      >
+                        WLT
+                      </ToggleGroupItem>
 
-                      <Tooltip>
-                        <TooltipTrigger>
-                          <ToggleGroupItem
-                            value="ordinals"
-                            aria-label="Toggle ordinals"
-                            className="h-7 px-2 text-xs data-[state=on]:bg-chart-1/20 data-[state=on]:text-chart-1 data-[state=on]:border-chart-1/30"
-                          >
-                            Ord
-                          </ToggleGroupItem>
-                        </TooltipTrigger>
-                        <TooltipContent>{keyEntry.isOrdinalsKey ? 'Clear ordinals key' : 'Set as ordinals key'}</TooltipContent>
-                      </Tooltip>
+                      <ToggleGroupItem
+                        value="ordinals"
+                        aria-label="Toggle ordinals"
+                        title={keyEntry.isOrdinalsKey ? 'Clear ordinals key' : 'Set as ordinals key'}
+                        className="text-xs data-[state=on]:bg-chart-1/20 data-[state=on]:text-chart-1"
+                      >
+                        ORD
+                      </ToggleGroupItem>
 
-                      <Tooltip>
-                        <TooltipTrigger>
-                          <ToggleGroupItem
-                            value="identity"
-                            aria-label="Toggle identity"
-                            className="h-7 px-2 text-xs data-[state=on]:bg-chart-2/20 data-[state=on]:text-chart-2 data-[state=on]:border-chart-2/30"
-                          >
-                            ID
-                          </ToggleGroupItem>
-                        </TooltipTrigger>
-                        <TooltipContent>{keyEntry.isIdentityKey ? 'Clear identity key' : 'Set as identity key'}</TooltipContent>
-                      </Tooltip>
+                      <ToggleGroupItem
+                        value="identity"
+                        aria-label="Toggle identity"
+                        title={keyEntry.isIdentityKey ? 'Clear identity key' : 'Set as identity key'}
+                        className="text-xs data-[state=on]:bg-chart-2/20 data-[state=on]:text-chart-2"
+                      >
+                        ID
+                      </ToggleGroupItem>
                     </>
                   )}
                 </ToggleGroup>
               )}
 
-              {/* Delete Button */}
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button
@@ -238,9 +216,8 @@ export function KeyCard({ keyEntry }: KeyCardProps) {
         </CardHeader>
 
         <CardContent className="min-w-0">
-          {/* Row 1: Key Value with Format Buttons Inside */}
           <div
-            className="flex items-center gap-2 p-2 bg-muted rounded cursor-pointer select-none min-w-0 overflow-hidden"
+            className="flex items-center gap-2 bg-muted rounded cursor-pointer select-none min-w-0 overflow-hidden"
             onMouseEnter={() => setHovering(true)}
             onMouseLeave={() => {
               setHovering(false)
@@ -261,22 +238,19 @@ export function KeyCard({ keyEntry }: KeyCardProps) {
             </ButtonGroup>
           </div>
 
-          {/* Row 2: Metadata + Timestamp (left) | Derivation Actions (right) */}
-          <div className="flex items-center justify-between gap-4 mt-4">
+          <div className="flex items-center justify-between gap-2 mt-2">
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
               <span>{formatDate(keyEntry.timestamp)}</span>
               {renderMetadata(keyEntry)}
             </div>
             <div className="flex items-center gap-1.5">
-              {renderDerivationButtons(keyEntry, handleCommand)}
-              {renderAdvancedButtons(keyEntry, handleCommand)}
+              {renderActionButtons(keyEntry, handleCommand)}
             </div>
           </div>
         </CardContent>
 
-        {/* Render nested children */}
         {keyEntry.children && keyEntry.children.length > 0 && (
-          <div className="ml-8 mt-2 space-y-2">
+          <div className="ml-4 mt-2 space-y-2">
             {keyEntry.children.map(child => (
               <KeyCard key={child.id} keyEntry={child} />
             ))}
@@ -288,199 +262,132 @@ export function KeyCard({ keyEntry }: KeyCardProps) {
 }
 
 function renderFormatButtons(key: KeyEntry, handleCommand: (cmd: string) => void) {
-  const buttons: React.ReactElement[] = []
-
   switch (key.type) {
     case 'mnemonic':
-      buttons.push(
-        <Tooltip key="words">
-          <TooltipTrigger asChild>
-            <Button size="sm" variant="ghost" onClick={() => handleCommand('copyWords')}>WORDS</Button>
-          </TooltipTrigger>
-          <TooltipContent>Copy mnemonic words</TooltipContent>
-        </Tooltip>,
-        <Tooltip key="xprv">
-          <TooltipTrigger asChild>
-            <Button size="sm" variant="ghost" onClick={() => handleCommand('copyXprv')}>XPRV</Button>
-          </TooltipTrigger>
-          <TooltipContent>Copy extended private key</TooltipContent>
-        </Tooltip>,
-        <Tooltip key="xpub">
-          <TooltipTrigger asChild>
-            <Button size="sm" variant="ghost" onClick={() => handleCommand('copyXpub')}>XPUB</Button>
-          </TooltipTrigger>
-          <TooltipContent>Copy extended public key</TooltipContent>
-        </Tooltip>
+      return (
+        <ButtonGroup>
+          <Button size="sm" variant="outline" onClick={() => handleCommand('copyWords')} title="Copy mnemonic words">WORDS</Button>
+          <Button size="sm" variant="outline" onClick={() => handleCommand('copyXprv')} title="Copy extended private key">XPRV</Button>
+          <Button size="sm" variant="outline" onClick={() => handleCommand('copyXpub')} title="Copy extended public key">XPUB</Button>
+        </ButtonGroup>
       )
-      break
 
     case 'wif':
+      const testnet = key.metadata?.network === 'testnet'
+      return (
+        <ButtonGroup>
+          <Button size="sm" variant="outline" onClick={() => handleCommand('copyWif')} title="Copy WIF format">WIF</Button>
+          <Button size="sm" variant="outline" onClick={() => handleCommand('copyHex')} title="Copy hex format">HEX</Button>
+          <Button size="sm" variant="outline" onClick={() => handleCommand(testnet ? 'copyTAddress' : 'copyAddress')} title={testnet ? 'Copy testnet address' : 'Copy Bitcoin address'}>
+            {testnet ? 'TADDR' : 'ADDR'}
+          </Button>
+        </ButtonGroup>
+      )
+
     case 'private':
     case 'encryption':
-      buttons.push(
-        <Tooltip key="wif">
-          <TooltipTrigger asChild>
-            <Button size="sm" variant="ghost" onClick={() => handleCommand('copyWif')}>WIF</Button>
-          </TooltipTrigger>
-          <TooltipContent>Copy WIF format</TooltipContent>
-        </Tooltip>,
-        <Tooltip key="hex">
-          <TooltipTrigger asChild>
-            <Button size="sm" variant="ghost" onClick={() => handleCommand('copyHex')}>HEX</Button>
-          </TooltipTrigger>
-          <TooltipContent>Copy hex format</TooltipContent>
-        </Tooltip>
+      return (
+        <ButtonGroup>
+          <Button size="sm" variant="outline" onClick={() => handleCommand('copyWif')} title="Copy WIF format">WIF</Button>
+          <Button size="sm" variant="outline" onClick={() => handleCommand('copyHex')} title="Copy hex format">HEX</Button>
+        </ButtonGroup>
       )
-      if (key.type === 'wif') {
-        const testnet = key.metadata?.network === 'testnet'
-        buttons.push(
-          <Tooltip key="addr">
-            <TooltipTrigger asChild>
-              <Button size="sm" variant="ghost" onClick={() => handleCommand(testnet ? 'copyTAddress' : 'copyAddress')}>
-                {testnet ? 'TADDR' : 'ADDR'}
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>{testnet ? 'Copy testnet address' : 'Copy Bitcoin address'}</TooltipContent>
-          </Tooltip>
-        )
-      }
-      break
 
     case 'public':
-      buttons.push(
-        <Tooltip key="hex">
-          <TooltipTrigger asChild>
-            <Button size="sm" variant="ghost" onClick={() => handleCommand('copyHex')}>HEX</Button>
-          </TooltipTrigger>
-          <TooltipContent>Copy hex format</TooltipContent>
-        </Tooltip>,
-        <Tooltip key="addr">
-          <TooltipTrigger asChild>
-            <Button size="sm" variant="ghost" onClick={() => handleCommand('copyAddress')}>ADDR</Button>
-          </TooltipTrigger>
-          <TooltipContent>Copy Bitcoin address</TooltipContent>
-        </Tooltip>,
-        <Tooltip key="p2pkh">
-          <TooltipTrigger asChild>
-            <Button size="sm" variant="ghost" onClick={() => handleCommand('p2pkhScript')}>P2PKH</Button>
-          </TooltipTrigger>
-          <TooltipContent>Copy P2PKH script</TooltipContent>
-        </Tooltip>
+      return (
+        <ButtonGroup>
+          <Button size="sm" variant="outline" onClick={() => handleCommand('copyHex')} title="Copy hex format">HEX</Button>
+          <Button size="sm" variant="outline" onClick={() => handleCommand('copyAddress')} title="Copy Bitcoin address">ADDR</Button>
+          <Button size="sm" variant="outline" onClick={() => handleCommand('p2pkhScript')} title="Copy P2PKH script">P2PKH</Button>
+        </ButtonGroup>
       )
-      break
 
     case 'hdprivate':
-      buttons.push(
-        <Tooltip key="xprv">
-          <TooltipTrigger asChild>
-            <Button size="sm" variant="ghost" onClick={() => handleCommand('copyXprv')}>XPRV</Button>
-          </TooltipTrigger>
-          <TooltipContent>Copy extended private key</TooltipContent>
-        </Tooltip>,
-        <Tooltip key="xpub">
-          <TooltipTrigger asChild>
-            <Button size="sm" variant="ghost" onClick={() => handleCommand('copyXpub')}>XPUB</Button>
-          </TooltipTrigger>
-          <TooltipContent>Copy extended public key</TooltipContent>
-        </Tooltip>
+      return (
+        <ButtonGroup>
+          <Button size="sm" variant="outline" onClick={() => handleCommand('copyXprv')} title="Copy extended private key">XPRV</Button>
+          <Button size="sm" variant="outline" onClick={() => handleCommand('copyXpub')} title="Copy extended public key">XPUB</Button>
+        </ButtonGroup>
       )
-      break
 
     case 'hdpublic':
-      buttons.push(
-        <Tooltip key="xpub">
-          <TooltipTrigger asChild>
-            <Button size="sm" variant="ghost" onClick={() => handleCommand('copyXpub')}>XPUB</Button>
-          </TooltipTrigger>
-          <TooltipContent>Copy extended public key</TooltipContent>
-        </Tooltip>
+      return (
+        <ButtonGroup>
+          <Button size="sm" variant="outline" onClick={() => handleCommand('copyXpub')} title="Copy extended public key">XPUB</Button>
+        </ButtonGroup>
       )
-      break
   }
 
-  return buttons
+  return null
 }
 
-function renderDerivationButtons(key: KeyEntry, handleCommand: (cmd: string) => void) {
+function renderActionButtons(key: KeyEntry, handleCommand: (cmd: string) => void) {
   const buttons: React.ReactElement[] = []
   const isSinglePriv = key.type === 'wif' || key.type === 'private' || key.type === 'encryption'
   const isHdType = key.type === 'hdprivate' || key.type === 'hdpublic' || key.type === 'mnemonic'
 
+  // Single private key derivation buttons
   if (isSinglePriv) {
     buttons.push(
-      <Tooltip key="pub">
-        <TooltipTrigger asChild>
-          <Button size="sm" variant="secondary" onClick={() => handleCommand('publicChild')}>PUB</Button>
-        </TooltipTrigger>
-        <TooltipContent>Derive public key</TooltipContent>
-      </Tooltip>,
+      <Button key="pub" size="sm" variant="outline" onClick={() => handleCommand('publicChild')} title="Derive public key">PUB</Button>,
       <ButtonGroupSeparator key="sep1" />,
-      <Tooltip key="type42">
-        <TooltipTrigger asChild>
-          <Button size="sm" variant="secondary" onClick={() => handleCommand('type42Child')}>Type42</Button>
-        </TooltipTrigger>
-        <TooltipContent>Derive Type-42 child key</TooltipContent>
-      </Tooltip>
+      <Button key="type42" size="sm" variant="outline" onClick={() => handleCommand('type42Child')} title="Derive Type-42 child key">Type42</Button>
     )
   }
 
+  // HD key derivation buttons
   if (isHdType) {
     buttons.push(
-      <Tooltip key="bip32">
-        <TooltipTrigger asChild>
-          <Button size="sm" variant="secondary" onClick={() => handleCommand('bip32Child')}>BIP32</Button>
-        </TooltipTrigger>
-        <TooltipContent>Derive BIP32 child key</TooltipContent>
-      </Tooltip>
+      <Button key="bip32" size="sm" variant="outline" onClick={() => handleCommand('bip32Child')} title="Derive BIP32 child key">BIP32</Button>
     )
   }
 
-  if (buttons.length === 0) return null
+  // Add xPub derive button for hdprivate keys
+  if (key.type === 'hdprivate') {
+    buttons.push(
+      <ButtonGroupSeparator key="sep-xpub" />,
+      <Button key="xpub" size="sm" variant="outline" onClick={() => handleCommand('publicChild')} title="Derive extended public key child">xPub</Button>
+    )
+  }
 
-  return (
-    <ButtonGroup>
-      {buttons}
-    </ButtonGroup>
-  )
-}
+  // Add separator before advanced buttons if we have derivation buttons
+  if (buttons.length > 0) {
+    // WIF keys: add Split/Shares button
+    if (key.type === 'wif') {
+      buttons.push(<ButtonGroupSeparator key="sep-advanced" />)
+      if (key.keyShares && key.keyShares.length > 0) {
+        buttons.push(
+          <Button key="shares-view" size="sm" variant="outline" onClick={() => handleCommand('viewKeyShares')} title="View key shares">Shares</Button>
+        )
+      } else {
+        buttons.push(
+          <Button key="shares-gen" size="sm" variant="outline" onClick={() => handleCommand('generateKeyShares')} title="Split key into shares (Shamir's Secret Sharing)">Split</Button>
+        )
+      }
+    }
+  } else {
+    // No derivation buttons, just add advanced buttons without separator
+    if (key.type === 'wif') {
+      if (key.keyShares && key.keyShares.length > 0) {
+        buttons.push(
+          <Button key="shares-view" size="sm" variant="outline" onClick={() => handleCommand('viewKeyShares')} title="View key shares">Shares</Button>
+        )
+      } else {
+        buttons.push(
+          <Button key="shares-gen" size="sm" variant="outline" onClick={() => handleCommand('generateKeyShares')} title="Split key into shares (Shamir's Secret Sharing)">Split</Button>
+        )
+      }
+    }
 
-function renderAdvancedButtons(key: KeyEntry, handleCommand: (cmd: string) => void) {
-  const buttons: React.ReactElement[] = []
-
-  if (key.type === 'wif') {
-    if (key.keyShares && key.keyShares.length > 0) {
+    if (key.type === 'public') {
       buttons.push(
-        <Tooltip key="shares-view">
-          <TooltipTrigger asChild>
-            <Button size="sm" variant="ghost" onClick={() => handleCommand('viewKeyShares')}>Shares</Button>
-          </TooltipTrigger>
-          <TooltipContent>View key shares</TooltipContent>
-        </Tooltip>
-      )
-    } else {
-      buttons.push(
-        <Tooltip key="shares-gen">
-          <TooltipTrigger asChild>
-            <Button size="sm" variant="ghost" onClick={() => handleCommand('generateKeyShares')}>Split</Button>
-          </TooltipTrigger>
-          <TooltipContent>Split key into shares (Shamir's Secret Sharing)</TooltipContent>
-        </Tooltip>
+        <Button key="woc" size="sm" variant="outline" onClick={() => handleCommand('viewOnChain')} title="View on WhatsOnChain">WoC</Button>
       )
     }
   }
 
-  if (key.type === 'public') {
-    buttons.push(
-      <Tooltip key="woc">
-        <TooltipTrigger asChild>
-          <Button size="sm" variant="ghost" onClick={() => handleCommand('viewOnChain')}>WoC</Button>
-        </TooltipTrigger>
-        <TooltipContent>View on WhatsOnChain</TooltipContent>
-      </Tooltip>
-    )
-  }
-
   if (buttons.length === 0) return null
+
   return (
     <ButtonGroup>
       {buttons}
@@ -526,11 +433,18 @@ function renderMetadata(key: KeyEntry) {
     items.push(
       <Tooltip key="type42">
         <TooltipTrigger>
-          <Badge variant="outline" className="text-xs">
-            Type-42
+          <Badge variant="outline" className="text-xs font-mono">
+            {key.metadata.type42Invoice}
           </Badge>
         </TooltipTrigger>
-        <TooltipContent>Type-42 derived ({key.metadata.type42Invoice.slice(0, 16)}...)</TooltipContent>
+        <TooltipContent>
+          Type-42 derived key
+          {key.metadata.type42OtherPub && (
+            <div className="text-xs mt-1 font-mono">
+              Pub: {key.metadata.type42OtherPub.slice(0, 16)}...
+            </div>
+          )}
+        </TooltipContent>
       </Tooltip>
     )
   }

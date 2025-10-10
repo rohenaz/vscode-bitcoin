@@ -1,5 +1,5 @@
 import vsApi from './vsShim';
-import { BAP } from 'bsv-bap';
+import { BAP, MemberID } from 'bsv-bap';
 import type { KeyEntry } from './keyVault';
 
 export interface BapIdentity {
@@ -87,7 +87,6 @@ export class BapService {
     } else if (bapId) {
       // Member key - single identity, read-only
       this.isMasterKey = false;
-      const { MemberID } = await import('bsv-bap');
       this.memberKey = MemberID.fromBackup({
         wif: keyEntry.value,
         id: bapId

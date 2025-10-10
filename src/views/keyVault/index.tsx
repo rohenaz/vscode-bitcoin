@@ -227,23 +227,20 @@ export class KeyPanel {
       this.ephemeralIndex = idx;
     }
 
-    // Build hierarchy for payload
-    const hierarchy = buildKeyHierarchy(refreshed);
-
     // If panel HTML not yet set, initialize it
     if (!this._panel.webview.html || this._panel.webview.html === '') {
       this._panel.webview.html = this._getHtmlForWebview(this._panel.webview);
     }
 
-    // Send update to webview
+    // Send flat list to webview - let frontend build hierarchy after filtering
     const payload = {
-      keys: hierarchy, // Send hierarchical structure
+      keys: refreshed, // Send flat list
       searchIndex: this.ephemeralIndex,
     };
 
     this._panel.webview.postMessage({
       command: 'refreshKeys',
-      keys: hierarchy,
+      keys: refreshed, // Send flat list
       searchIndex: this.ephemeralIndex,
     });
   }
@@ -319,8 +316,10 @@ export class KeyPanel {
     text?: string;
     vanityPrefix?: string;
     metadata?: Record<string, string>;
+    setAsEncryption?: boolean;
     setAsWallet?: boolean;
     setAsOrdinals?: boolean;
+    setAsIdentity?: boolean;
   }) {
     switch (msg.command) {
       case 'copyKeyValue': {
@@ -364,7 +363,7 @@ export class KeyPanel {
       case 'generateRandomKey': {
         // Frontend sends this command with the selected key type
         if (msg.type) {
-          await this.generateRandomKey(msg.type);
+          await this.generateRandomKey(msg.type, msg.vanityPrefix);
         }
         break;
       }
@@ -401,12 +400,18 @@ export class KeyPanel {
             metadata: msg.metadata
           });
 
-          // Handle advanced options
-          if (msg.setAsWallet && msg.type === 'wif') {
+          // Handle key designations
+          if (msg.setAsEncryption) {
+            await this._vault.setEncryptionKey(keyId);
+          }
+          if (msg.setAsWallet) {
             await this._vault.setFundingKey(keyId);
           }
-          if (msg.setAsOrdinals && msg.type === 'wif') {
+          if (msg.setAsOrdinals) {
             await this._vault.setOrdinalsKey(keyId);
+          }
+          if (msg.setAsIdentity) {
+            await this._vault.setIdentityKey(keyId);
           }
 
           await this.updateContent();
@@ -920,29 +925,34 @@ export class KeyPanel {
   /**
    * Generate random key
    */
-  private async generateRandomKey(type: KeyType) {
+  private async generateRandomKey(type: KeyType, vanityPrefix?: string) {
     try {
       if (type === 'vanity' || type === 'vanity-testnet') {
-        const prefix = await vsApi.window.showInputBox({
-          prompt: 'Enter desired prefix (1-5 base58 characters)',
-          validateInput: (value) => {
-            const sanitized = sanitizeVanityPrefix(value);
-            if (sanitized.length !== value.length) {
-              return 'Prefix can only contain base58 characters excluding 0, O, I, l';
-            }
-            if (!sanitized.length) {
-              return 'Prefix is required';
-            }
-            if (sanitized.length > 5) {
-              return 'Prefix must be 5 characters or fewer';
-            }
-            return null;
-          },
-        });
+        let prefix = vanityPrefix;
 
+        // Only prompt if prefix wasn't provided from frontend
         if (!prefix) {
-          vsApi.window.showWarningMessage('Vanity generation cancelled');
-          return;
+          prefix = await vsApi.window.showInputBox({
+            prompt: 'Enter desired prefix (1-5 base58 characters)',
+            validateInput: (value) => {
+              const sanitized = sanitizeVanityPrefix(value);
+              if (sanitized.length !== value.length) {
+                return 'Prefix can only contain base58 characters excluding 0, O, I, l';
+              }
+              if (!sanitized.length) {
+                return 'Prefix is required';
+              }
+              if (sanitized.length > 5) {
+                return 'Prefix must be 5 characters or fewer';
+              }
+              return null;
+            },
+          });
+
+          if (!prefix) {
+            vsApi.window.showWarningMessage('Vanity generation cancelled');
+            return;
+          }
         }
 
         const sanitized = sanitizeVanityPrefix(prefix);
@@ -1373,7 +1383,16 @@ export class KeyPanel {
       vsApi.window.showErrorMessage('BIP32 derivation only valid for HD or mnemonic keys');
       return;
     }
-    const hd = HD.fromString(parent.value);
+
+    // Convert parent to HD key
+    let hd: HD;
+    if (parent.type === 'mnemonic') {
+      const mn = Mnemonic.fromString(parent.value);
+      hd = HD.fromSeed(mn.toSeed());
+    } else {
+      hd = HD.fromString(parent.value);
+    }
+
     const derived = hd.derive(path.replace(/'/g, 'h'));
     if (!derived.privKey) {
       vsApi.window.showErrorMessage('No private key at that path (maybe xpub only?)');
@@ -1396,12 +1415,48 @@ export class KeyPanel {
   }
 
   // -------------------------------------------------------------------------
-  // Create a "Public" child from single wif/private
+  // Create a "Public" child from single wif/private or hdprivate
   // -------------------------------------------------------------------------
   private async createPublicChild(id: string) {
     const parent = await this._vault.getKey(id);
     if (!parent) return;
 
+    // Handle hdprivate -> hdpublic
+    if (parent.type === 'hdprivate') {
+      // Check if xPub child already exists
+      const all = await this._vault.getAllKeys();
+      for (const c of all) {
+        if (c.metadata?.parentId === parent.id && c.type === 'hdpublic') {
+          vsApi.window.showWarningMessage('An xPub child already exists for this key');
+          return;
+        }
+      }
+
+      try {
+        const hdPriv = HD.fromString(parent.value);
+        const hdPub = hdPriv.toPublic();
+        const xpub = hdPub.toString();
+
+        await this._vault.storeKey({
+          type: 'hdpublic',
+          value: xpub,
+          label: `xPub child of ${parent.label ?? 'HD Private Key'}`,
+          metadata: {
+            parentId: parent.id,
+          },
+        });
+
+        vsApi.window.showInformationMessage('Extended public key child created.');
+        this.updateContent();
+      } catch (error) {
+        vsApi.window.showErrorMessage(
+          `Error deriving xPub: ${error instanceof Error ? error.message : String(error)}`
+        );
+      }
+      return;
+    }
+
+    // Handle wif/private/encryption -> public
     if (
       parent.type !== 'wif' &&
       parent.type !== 'private' &&
@@ -1421,7 +1476,7 @@ export class KeyPanel {
         return;
       }
     }
-    
+
     const pubKey = derivePublicKeyString(parent)
     if (!pubKey) {
       vsApi.window.showErrorMessage('Cannot derive public key from this key type');
