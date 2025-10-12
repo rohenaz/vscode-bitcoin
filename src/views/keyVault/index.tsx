@@ -157,19 +157,19 @@ export class KeyPanel {
     this._vault.onDidChangeKeys(() => this.updateContent());
   }
 
-  public static async show(vault: KeyVault, extensionUri: vscode.Uri) {
+  public static async show(vault: KeyVault, extensionUri: vscode.Uri, options?: { openAddKeyDialog?: boolean; openImportDialog?: boolean }) {
     // Check if vault is locked
     if (!vault.isUnlocked) {
       // Check if this is first-time setup
       const hasExistingVault = await vault.hasExistingVault();
-      
+
       const password = await vsApi.window.showInputBox({
         prompt: hasExistingVault ? 'Enter vault password to unlock' : 'Set a password for your key vault',
         password: true,
         placeHolder: hasExistingVault ? undefined : 'Choose a strong password'
       });
       if (!password) return; // User cancelled
-      
+
       try {
         await vault.unlockVault(password);
       } catch (err) {
@@ -189,6 +189,16 @@ export class KeyPanel {
         { enableScripts: true, retainContextWhenHidden: true },
       );
       KeyPanel.currentPanel = new KeyPanel(panel, vault, extensionUri);
+    }
+
+    // If requested, open the Add Key dialog or trigger import
+    if (KeyPanel.currentPanel) {
+      if (options?.openAddKeyDialog) {
+        KeyPanel.currentPanel._panel.webview.postMessage({ command: 'openAddKeyDialog' });
+      }
+      if (options?.openImportDialog) {
+        KeyPanel.currentPanel._panel.webview.postMessage({ command: 'triggerImport' });
+      }
     }
   }
 
@@ -248,10 +258,10 @@ export class KeyPanel {
   private _getHtmlForWebview(webview: vscode.Webview) {
     // Get URIs for the React app build artifacts
     const scriptUri = webview.asWebviewUri(
-      vscode.Uri.joinPath(this._extensionUri, 'src', 'views', 'keyVault', 'webview', 'dist', 'assets', 'index.js')
+      vscode.Uri.joinPath(this._extensionUri, 'src', 'views', 'webview', 'dist', 'assets', 'index.js')
     );
     const styleUri = webview.asWebviewUri(
-      vscode.Uri.joinPath(this._extensionUri, 'src', 'views', 'keyVault', 'webview', 'dist', 'assets', 'index.css')
+      vscode.Uri.joinPath(this._extensionUri, 'src', 'views', 'webview', 'dist', 'assets', 'index.css')
     );
 
     // Build initial payload
@@ -298,6 +308,7 @@ export class KeyPanel {
         </div>
         <div id="root"></div>
         <script nonce="${nonce}">
+          window.PANEL_TYPE = 'key-vault';
           window.KEYVAULT_PAYLOAD = ${JSON.stringify(payload)};
         </script>
         <script type="module" nonce="${nonce}" src="${scriptUri}"></script>

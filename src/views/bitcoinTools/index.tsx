@@ -161,6 +161,12 @@ export class BitcoinToolsViewProvider implements vscode.WebviewViewProvider {
           return;
         }
 
+        // Handle open transaction in window
+        if (message.type === 'transaction:openInWindow') {
+          vscode.commands.executeCommand('bitcoin.openTransactionDecoder', message.data?.rawTxHex);
+          return;
+        }
+
         // Handle transaction broadcast messages
         if (message.type === 'transaction:broadcast') {
           await this.handleTransactionBroadcast(webviewView, message.data);
@@ -366,14 +372,11 @@ export class BitcoinToolsViewProvider implements vscode.WebviewViewProvider {
       const autoBroadcast = vscode.workspace.getConfiguration('bitcoin.wallet').get('autoBroadcast', false);
 
       if (!autoBroadcast) {
-        // Open in transaction decoder instead of broadcasting
-        webviewView.webview.postMessage({
-          type: 'transaction:populate',
-          data: { rawTxHex: rawTx },
-        });
+        // Open in transaction decoder window instead of broadcasting
+        vscode.commands.executeCommand('bitcoin.openTransactionDecoder', rawTx);
 
         vscode.window.showInformationMessage(
-          'Transaction created. Review in the Transactions tab and broadcast when ready.'
+          'Transaction created. Review in the Transaction Decoder and broadcast when ready.'
         );
 
         // Return success to close dialog
@@ -1595,12 +1598,12 @@ export class BitcoinToolsViewProvider implements vscode.WebviewViewProvider {
   }
 
   private _getHtmlForWebview(webview: vscode.Webview) {
-    // Get URIs for the React app build artifacts
+    // Get URIs for the unified webview build artifacts
     const scriptUri = webview.asWebviewUri(
-      vscode.Uri.joinPath(this._extensionUri, 'src', 'views', 'bitcoinTools', 'webview', 'dist', 'assets', 'index.js')
+      vscode.Uri.joinPath(this._extensionUri, 'src', 'views', 'webview', 'dist', 'assets', 'index.js')
     );
     const styleUri = webview.asWebviewUri(
-      vscode.Uri.joinPath(this._extensionUri, 'src', 'views', 'bitcoinTools', 'webview', 'dist', 'assets', 'index.css')
+      vscode.Uri.joinPath(this._extensionUri, 'src', 'views', 'webview', 'dist', 'assets', 'index.css')
     );
 
     // Generate a nonce for CSP
@@ -1641,6 +1644,9 @@ export class BitcoinToolsViewProvider implements vscode.WebviewViewProvider {
           <div class="loader"></div>
         </div>
         <div id="root"></div>
+        <script nonce="${nonce}">
+          window.PANEL_TYPE = 'bitcoin-tools';
+        </script>
         <script type="module" nonce="${nonce}" src="${scriptUri}"></script>
       </body>
       </html>`;

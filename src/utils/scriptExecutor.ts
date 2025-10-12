@@ -209,6 +209,13 @@ export class ScriptExecutor {
   }
 
   /**
+   * Get current step index
+   */
+  getCurrentStepIndex(): number {
+    return this.currentStepIndex
+  }
+
+  /**
    * Get total number of steps executed
    */
   getTotalSteps(): number {

@@ -30,6 +30,8 @@ import { handleXPubFromXPrivCommand } from './commands/xPubFromxPriv';
 import { API_HOST } from './constants';
 import { EncryptionService } from './encryption';
 import { KeyPanel } from './views/keyVault/index';
+import { TransactionDecoderPanel } from './views/transactionDecoder/index';
+import { ScriptExecutorPanel } from './views/scriptExecutor/index';
 import { KeyVault } from './keyVault';
 import { OutputManager } from './output';
 import { DataFormat, convertData, detectFormat } from './utils';
@@ -320,6 +322,41 @@ export async function activate(context: ExtensionContext) {
   );
   context.subscriptions.push(showKeyVaultCommand);
 
+  // Register show key vault and add key command
+  const showKeyVaultAndAddKeyCommand = vsApi.commands.registerCommand(
+    'bitcoin.showKeyVaultAndAddKey',
+    async () => {
+      await KeyPanel.show(keyVault, context.extensionUri, { openAddKeyDialog: true });
+    },
+  );
+  context.subscriptions.push(showKeyVaultAndAddKeyCommand);
+
+  // Register show key vault and import command
+  const showKeyVaultAndImportCommand = vsApi.commands.registerCommand(
+    'bitcoin.showKeyVaultAndImport',
+    async () => {
+      await KeyPanel.show(keyVault, context.extensionUri, { openImportDialog: true });
+    },
+  );
+  context.subscriptions.push(showKeyVaultAndImportCommand);
+
+  // Register transaction decoder panel command
+  const openTransactionDecoderCommand = vsApi.commands.registerCommand(
+    'bitcoin.openTransactionDecoder',
+    async (rawTxHex?: string) => {
+      TransactionDecoderPanel.show(context.extensionUri, rawTxHex);
+    },
+  );
+  context.subscriptions.push(openTransactionDecoderCommand);
+
+  // Register script executor panel command
+  const openScriptExecutorCommand = vsApi.commands.registerCommand(
+    'bitcoin.openScriptExecutor',
+    async (spendParams?: any) => {
+      ScriptExecutorPanel.show(context.extensionUri, spendParams);
+    },
+  );
+  context.subscriptions.push(openScriptExecutorCommand);
 
   // Register detect and convert command
   registerCommand(context, outputManager, 'bitcoin.decodeFile', async () =>

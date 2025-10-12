@@ -3,7 +3,7 @@
   "displayName": "Bitcoin",
   "description": "Bitcoin utilities for VS Code",
   "publisher": "Satchmo",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "icon": "images/icon.png",
   "type": "commonjs",
   "engines": {
@@ -178,6 +178,16 @@
       {
         "command": "bitcoin.showKeyVault",
         "title": "Show Key Vault",
+        "category": "Bitcoin"
+      },
+      {
+        "command": "bitcoin.showKeyVaultAndAddKey",
+        "title": "Add Key to Vault",
+        "category": "Bitcoin"
+      },
+      {
+        "command": "bitcoin.showKeyVaultAndImport",
+        "title": "Import Key to Vault",
         "category": "Bitcoin"
       },
       {
@@ -484,6 +494,11 @@
           "type": "string",
           "default": ".bitcoin/script-templates",
           "description": "Directory containing script template JSON files with regex patterns for detecting script types (relative to workspace root)"
+        },
+        "bitcoin.whatsonchain.apiKey": {
+          "type": "string",
+          "default": "",
+          "description": "WhatOnChain API key for higher rate limits (get one at https://developers.whatsonchain.com)"
         }
       }
     },
@@ -551,9 +566,7 @@
   },
   "scripts": {
     "build": "bun run build:webview && VITE_CJS_IGNORE_WARNING=true vite build",
-    "build:webview": "bun run build:bitcointools-webview && bun run build:keyvault-webview",
-    "build:bitcointools-webview": "cd src/views/bitcoinTools/webview && bun run build",
-    "build:keyvault-webview": "cd src/views/keyVault/webview && bun run build",
+    "build:webview": "cd src/views/webview && bun run build",
     "build:test": "tsc -p ./",
     "dev": "vite build --watch",
     "lint": "biome lint .",
@@ -572,12 +585,12 @@
   "devDependencies": {
     "@biomejs/biome": "^2.2.5",
     "@types/glob": "^9.0.0",
-    "@types/node": "^24.6.2",
+    "@types/node": "^24.7.2",
     "@types/node-fetch": "^2.6.13",
     "@types/vscode": "^1.99.1",
     "@vscode/test-electron": "^2.5.2",
     "@vscode/vsce": "^3.6.2",
-    "bun-types": "^1.2.23",
+    "bun-types": "^1.3.0",
     "glob": "^11.0.3",
     "source-map-explorer": "^2.5.3",
     "typescript": "^5.9.3",
@@ -591,7 +604,7 @@
     "@kitajs/html": "^4.2.10",
     "@kitajs/ts-html-plugin": "^4.1.3",
     "@mnee/ts-sdk": "^1.0.1",
-    "@types/bun": "^1.2.23",
+    "@types/bun": "^1.3.0",
     "bitcoin-backup": "^0.0.3",
     "bsv-bap": "^0.1.12",
     "js-1sat-ord": "^0.1.82",
