@@ -379,4 +379,34 @@ window.addEventListener('message', (event) => {
   if (msg.command === 'vanityGenerationCompleted') {
     setGenerateLoading(false);
   }
+  if (msg.command === 'scrollToKey') {
+    // Scroll to key by designation (WLT, ORD, ENC, ID)
+    const designation = msg.designation;
+    if (!designation) return;
+
+    // Map designation to attribute name
+    const attrMap: { [key: string]: string } = {
+      'WLT': 'data-is-funding-key',
+      'ORD': 'data-is-ordinals-key',
+      'ENC': 'data-is-encryption-key',
+      'ID': 'data-is-identity-key'
+    };
+
+    const attr = attrMap[designation];
+    if (!attr) return;
+
+    // Find the key with this designation
+    const keyCard = document.querySelector<HTMLElement>(`.key-card[${attr}="true"]`);
+    if (keyCard) {
+      // Scroll to the key
+      keyCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+      // Briefly highlight it
+      keyCard.style.transition = 'box-shadow 0.3s';
+      keyCard.style.boxShadow = '0 0 0 3px var(--vscode-focusBorder)';
+      setTimeout(() => {
+        keyCard.style.boxShadow = '';
+      }, 2000);
+    }
+  }
 });

@@ -33,6 +33,8 @@ interface TransferTokenDialogProps {
   isBurn?: boolean
 }
 
+type SendState = 'idle' | 'reviewing' | 'sending' | 'success' | 'error'
+
 export function TransferTokenDialog({
   open,
   onOpenChange,
@@ -43,8 +45,7 @@ export function TransferTokenDialog({
   const vscode = getVscode()
   const [amount, setAmount] = useState('')
   const [recipientAddress, setRecipientAddress] = useState('')
-  const [isEstimating, setIsEstimating] = useState(false)
-  const [isSending, setIsSending] = useState(false)
+  const [sendState, setSendState] = useState<SendState>('idle')
   const [error, setError] = useState<string | null>(null)
   const [feeEstimate, setFeeEstimate] = useState<any>(null)
 
@@ -53,6 +54,7 @@ export function TransferTokenDialog({
     if (open && token) {
       setAmount('')
       setRecipientAddress(isBurn ? ordAddress : '')
+      setSendState('idle')
       setError(null)
       setFeeEstimate(null)
     }
@@ -94,53 +96,49 @@ export function TransferTokenDialog({
     return null
   }, [recipientAddress, isBurn])
 
-  const canEstimate = !amountError && !addressError && amount && (isBurn || recipientAddress)
+  const canReview = !amountError && !addressError && amount && (isBurn || recipientAddress)
 
-  // Estimate fee
-  const handleEstimate = async () => {
-    if (!canEstimate || !token) return
+  // Handle review - request fee estimate
+  const handleReview = async () => {
+    if (!canReview || !token) return
 
-    setIsEstimating(true)
+    setSendState('reviewing')
     setError(null)
 
-    try {
-      vscode.postMessage({
-        type: 'wallet:transferToken:estimate',
-        data: {
-          tokenId: token.tokenId,
-          protocol: token.protocol,
-          amount: parseFloat(amount),
-          recipientAddress: isBurn ? ordAddress : recipientAddress
-        }
-      })
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to estimate fee')
-      setIsEstimating(false)
-    }
+    vscode.postMessage({
+      type: 'wallet:transferToken:estimate',
+      data: {
+        tokenId: token.tokenId,
+        protocol: token.protocol,
+        amount: parseFloat(amount),
+        recipientAddress: isBurn ? ordAddress : recipientAddress
+      }
+    })
+  }
+
+  // Handle back to edit
+  const handleBack = () => {
+    setSendState('idle')
+    setFeeEstimate(null)
   }
 
   // Send transaction
-  const handleSend = async () => {
-    if (!canEstimate || !token) return
+  const handleConfirm = async () => {
+    if (!canReview || !token) return
 
-    setIsSending(true)
+    setSendState('sending')
     setError(null)
 
-    try {
-      vscode.postMessage({
-        type: 'wallet:transferToken:send',
-        data: {
-          tokenId: token.tokenId,
-          protocol: token.protocol,
-          amount: parseFloat(amount),
-          recipientAddress: isBurn ? ordAddress : recipientAddress,
-          isBurn
-        }
-      })
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to send transaction')
-      setIsSending(false)
-    }
+    vscode.postMessage({
+      type: 'wallet:transferToken:send',
+      data: {
+        tokenId: token.tokenId,
+        protocol: token.protocol,
+        amount: parseFloat(amount),
+        recipientAddress: isBurn ? ordAddress : recipientAddress,
+        isBurn
+      }
+    })
   }
 
   // Listen for responses from extension
@@ -151,19 +149,19 @@ export function TransferTokenDialog({
       switch (type) {
         case 'wallet:transferToken:estimateResult':
           setFeeEstimate(data)
-          setIsEstimating(false)
           break
 
         case 'wallet:transferToken:success':
-          setIsSending(false)
-          onOpenChange(false)
-          // TODO: Show success notification with txid
+          setSendState('success')
+          // Close after a brief delay to show success state
+          setTimeout(() => {
+            onOpenChange(false)
+          }, 1500)
           break
 
         case 'wallet:transferToken:error':
           setError(data.error)
-          setIsSending(false)
-          setIsEstimating(false)
+          setSendState('error')
           break
       }
     }
@@ -180,121 +178,185 @@ export function TransferTokenDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            {isBurn ? (
-              <>
-                <Flame className="h-4 w-4" />
-                Burn {tokenName}
-              </>
-            ) : (
-              <>
-                <Send className="h-4 w-4" />
-                Send {tokenName}
-              </>
-            )}
-          </DialogTitle>
+          <div className="flex items-center gap-2">
+            <DialogTitle className="flex items-center gap-2">
+              {isBurn ? (
+                <>
+                  <Flame className="h-4 w-4" />
+                  Burn {tokenName}
+                </>
+              ) : (
+                <>
+                  <Send className="h-4 w-4" />
+                  Send {tokenName}
+                </>
+              )}
+            </DialogTitle>
+            {sendState === 'reviewing' && <Badge variant="secondary">Reviewing</Badge>}
+            {sendState === 'sending' && <Badge variant="default">Sending</Badge>}
+            {sendState === 'success' && <Badge variant="default" className="bg-green-600">Success</Badge>}
+            {sendState === 'error' && <Badge variant="destructive">Failed</Badge>}
+          </div>
           <DialogDescription>
-            {isBurn
+            {sendState === 'idle' && (isBurn
               ? 'Burn tokens to remove them from circulation'
-              : `Transfer ${tokenName} tokens to another address`
-            }
+              : `Transfer ${tokenName} tokens to another address`)}
+            {sendState === 'reviewing' && 'Review transaction details'}
+            {sendState === 'sending' && 'Broadcasting transaction...'}
+            {sendState === 'success' && 'Transaction sent successfully'}
+            {sendState === 'error' && 'Transaction failed'}
           </DialogDescription>
         </DialogHeader>
 
         <div className="grid gap-4 py-4">
-          {/* Token Info */}
-          <div className="flex items-center justify-between p-3 bg-muted rounded-lg">
-            <div className="flex items-center gap-2">
-              {token.icon && (
-                <img
-                  src={`https://ordfs.network/${token.icon}`}
-                  className="h-6 w-6 rounded"
-                  alt={tokenName}
-                />
-              )}
-              <div>
-                <div className="font-medium text-sm">{tokenName}</div>
-                <div className="text-xs text-muted-foreground">
-                  Balance: {token.balance.toLocaleString()}
+          {/* Input State */}
+          {sendState === 'idle' && (
+            <>
+              {/* Token Info */}
+              <div className="flex items-center justify-between p-3 bg-muted rounded-lg">
+                <div className="flex items-center gap-2">
+                  {token.icon && (
+                    <img
+                      src={`https://ordfs.network/${token.icon}`}
+                      className="h-6 w-6 rounded"
+                      alt={tokenName}
+                    />
+                  )}
+                  <div>
+                    <div className="font-medium text-sm">{tokenName}</div>
+                    <div className="text-xs text-muted-foreground">
+                      Balance: {token.balance.toLocaleString()}
+                    </div>
+                  </div>
                 </div>
+                <Badge variant={token.protocol === 'BSV20' ? 'default' : 'secondary'}>
+                  {token.protocol}
+                </Badge>
               </div>
-            </div>
-            <Badge variant={token.protocol === 'BSV20' ? 'default' : 'secondary'}>
-              {token.protocol}
-            </Badge>
-          </div>
 
-          {/* Amount Input */}
-          <div className="grid gap-2">
-            <div className="flex items-center justify-between">
-              <Label htmlFor="amount">Amount</Label>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-6 text-xs"
-                onClick={() => setAmount(token.balance.toString())}
-              >
-                Max
-              </Button>
-            </div>
-            <Input
-              id="amount"
-              type="number"
-              placeholder={`0.${'0'.repeat(token.decimals)}`}
-              value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-              step={step}
-              min={step}
-              max={token.balance}
-            />
-            {amountError && (
-              <p className="text-sm text-destructive">{amountError}</p>
-            )}
-          </div>
+              {/* Amount Input */}
+              <div className="grid gap-2">
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="amount">Amount</Label>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 text-xs"
+                    onClick={() => setAmount(token.balance.toString())}
+                  >
+                    Max
+                  </Button>
+                </div>
+                <Input
+                  id="amount"
+                  type="number"
+                  placeholder={`0.${'0'.repeat(token.decimals)}`}
+                  value={amount}
+                  onChange={(e) => setAmount(e.target.value)}
+                  step={step}
+                  min={step}
+                  max={token.balance}
+                />
+                {amountError && (
+                  <p className="text-sm text-destructive">{amountError}</p>
+                )}
+              </div>
 
-          {/* Recipient Address (not shown for burn) */}
-          {!isBurn && (
-            <div className="grid gap-2">
-              <Label htmlFor="address">Recipient Address</Label>
-              <Input
-                id="address"
-                type="text"
-                placeholder="1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa"
-                value={recipientAddress}
-                onChange={(e) => setRecipientAddress(e.target.value)}
-              />
-              {addressError && (
-                <p className="text-sm text-destructive">{addressError}</p>
+              {/* Recipient Address (not shown for burn) */}
+              {!isBurn && (
+                <div className="grid gap-2">
+                  <Label htmlFor="address">Recipient Address</Label>
+                  <Input
+                    id="address"
+                    type="text"
+                    placeholder="1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa"
+                    value={recipientAddress}
+                    onChange={(e) => setRecipientAddress(e.target.value)}
+                  />
+                  {addressError && (
+                    <p className="text-sm text-destructive">{addressError}</p>
+                  )}
+                </div>
               )}
-            </div>
+            </>
           )}
 
-          {/* Fee Estimate */}
-          {feeEstimate && (
-            <Alert>
-              <AlertDescription>
-                <div className="text-xs space-y-1">
+          {/* Review State */}
+          {sendState === 'reviewing' && feeEstimate && (
+            <>
+              <Alert>
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>
+                  Please review the transaction details carefully before confirming.
+                </AlertDescription>
+              </Alert>
+
+              <div className="space-y-3 text-sm">
+                <div>
+                  <div className="text-xs text-muted-foreground mb-1">Token</div>
+                  <div className="flex items-center gap-2 p-2 bg-muted rounded">
+                    {token.icon && (
+                      <img
+                        src={`https://ordfs.network/${token.icon}`}
+                        className="h-5 w-5 rounded"
+                        alt={tokenName}
+                      />
+                    )}
+                    <span className="font-medium">{tokenName}</span>
+                    <Badge variant={token.protocol === 'BSV20' ? 'default' : 'secondary'} className="text-xs">
+                      {token.protocol}
+                    </Badge>
+                  </div>
+                </div>
+
+                {!isBurn && (
+                  <div>
+                    <div className="text-xs text-muted-foreground mb-1">To</div>
+                    <code className="text-xs break-all bg-muted p-2 rounded block">
+                      {recipientAddress}
+                    </code>
+                  </div>
+                )}
+
+                <div className="space-y-2">
                   <div className="flex justify-between">
-                    <span>Transaction Fee:</span>
-                    <span className="font-medium">{feeEstimate.estimatedFee} sats</span>
+                    <span className="text-muted-foreground">Amount</span>
+                    <span className="font-medium">{amount} {tokenName}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Transaction Fee</span>
+                    <span>{feeEstimate.estimatedFee} sats</span>
                   </div>
                   {feeEstimate.fundingFee > 0 && (
                     <div className="flex justify-between">
-                      <span>Funding Fee:</span>
-                      <span className="font-medium">{feeEstimate.fundingFee} sats</span>
+                      <span className="text-muted-foreground">Funding Fee</span>
+                      <span>{feeEstimate.fundingFee} sats</span>
                     </div>
                   )}
-                  <div className="flex justify-between border-t pt-1">
-                    <span>Total Cost:</span>
-                    <span className="font-medium">{feeEstimate.totalCost} sats</span>
+                  <div className="flex justify-between font-medium border-t pt-2">
+                    <span>Total Cost</span>
+                    <span>{feeEstimate.totalCost} sats</span>
                   </div>
                 </div>
-              </AlertDescription>
-            </Alert>
+              </div>
+            </>
           )}
 
-          {/* Error Message */}
-          {error && (
+          {/* Sending State */}
+          {sendState === 'sending' && (
+            <div className="flex flex-col items-center justify-center py-8 space-y-4">
+              <Loader2 className="h-12 w-12 animate-spin text-primary" />
+              <div className="text-center">
+                <p className="font-medium">Broadcasting transaction...</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  This may take a few moments
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Error State */}
+          {sendState === 'error' && error && (
             <Alert variant="destructive">
               <AlertCircle className="h-4 w-4" />
               <AlertDescription>{error}</AlertDescription>
@@ -303,28 +365,31 @@ export function TransferTokenDialog({
         </div>
 
         <DialogFooter>
-          <Button
-            variant="outline"
-            onClick={() => onOpenChange(false)}
-            disabled={isSending}
-          >
-            Cancel
-          </Button>
-          {!feeEstimate ? (
-            <Button
-              onClick={handleEstimate}
-              disabled={!canEstimate || isEstimating}
-            >
-              {isEstimating && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Estimate Fee
-            </Button>
-          ) : (
-            <Button
-              onClick={handleSend}
-              disabled={isSending || !!amountError || !!addressError}
-            >
-              {isSending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              {isBurn ? 'Burn Tokens' : 'Send Tokens'}
+          {sendState === 'idle' && (
+            <>
+              <Button variant="outline" onClick={() => onOpenChange(false)}>
+                Cancel
+              </Button>
+              <Button onClick={handleReview} disabled={!canReview}>
+                Review
+              </Button>
+            </>
+          )}
+
+          {sendState === 'reviewing' && (
+            <>
+              <Button variant="outline" onClick={handleBack}>
+                Back
+              </Button>
+              <Button onClick={handleConfirm}>
+                {isBurn ? 'Confirm & Burn' : 'Confirm & Send'}
+              </Button>
+            </>
+          )}
+
+          {(sendState === 'success' || sendState === 'error') && (
+            <Button onClick={() => onOpenChange(false)} className="w-full">
+              Close
             </Button>
           )}
         </DialogFooter>

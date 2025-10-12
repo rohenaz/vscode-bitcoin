@@ -316,8 +316,8 @@ export async function activate(context: ExtensionContext) {
   // Register show key vault command
   const showKeyVaultCommand = vsApi.commands.registerCommand(
     'bitcoin.showKeyVault',
-    async () => {
-      await KeyPanel.show(keyVault, context.extensionUri);
+    async (scrollTo?: string) => {
+      await KeyPanel.show(keyVault, context.extensionUri, { scrollTo });
     },
   );
   context.subscriptions.push(showKeyVaultCommand);

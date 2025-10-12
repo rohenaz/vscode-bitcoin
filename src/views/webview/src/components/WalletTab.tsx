@@ -38,6 +38,8 @@ interface WalletState {
     payAddress: string;
     ordAddress: string;
   } | null;
+  hasFundingKey: boolean;
+  hasOrdinalsKey: boolean;
   balance: {
     total: number;
     spendable: number;
@@ -51,9 +53,9 @@ interface WalletState {
   settings: {
     showBsv20: boolean;
     showBsv21: boolean;
+    autoBroadcast: boolean;
   };
-  isLoading: boolean;
-  loadingStates?: {
+  loadingStates: {
     balance: boolean;
     nfts: boolean;
     bsv20: boolean;
@@ -72,12 +74,19 @@ export default function WalletTab({ isActive }: WalletTabProps) {
   const { vaultState } = useVault()
   const [state, setState] = useState<WalletState>({
     fundingKey: null,
+    hasFundingKey: false,
+    hasOrdinalsKey: false,
     balance: { total: 0, spendable: 0 },
     nfts: [],
     collections: [],
     tokens: { bsv20: [], bsv21: [] },
-    settings: { showBsv20: false, showBsv21: true },
-    isLoading: true,
+    settings: { showBsv20: false, showBsv21: true, autoBroadcast: false },
+    loadingStates: {
+      balance: false,
+      nfts: false,
+      bsv20: false,
+      bsv21: false
+    },
     isVaultLocked: true,
     lastUpdate: 0
   })
@@ -97,23 +106,44 @@ export default function WalletTab({ isActive }: WalletTabProps) {
       switch (type) {
         case 'wallet:stateUpdate':
           console.log('[WalletTab] Received stateUpdate:', {
-            hasFundingKey: !!data.fundingKey,
-            isLoading: data.isLoading
+            hasFundingKey: data.hasFundingKey,
+            hasOrdinalsKey: data.hasOrdinalsKey,
+            balance: data.balance,
+            loadingStates: data.loadingStates
           })
-          setState(prev => ({ ...prev, ...data }))
+          setState(prev => {
+            const newState = { ...prev, ...data };
+            console.log('[WalletTab] State after merge:', {
+              hasFundingKey: newState.hasFundingKey,
+              hasOrdinalsKey: newState.hasOrdinalsKey,
+              balance: newState.balance
+            });
+            return newState;
+          })
           break
 
         case 'wallet:fundingKeyChanged':
           console.log('[WalletTab] Received fundingKeyChanged:', {
-            hasFundingKey: !!data.fundingKey,
-            isLoading: data.isLoading
+            hasFundingKey: data.hasFundingKey,
+            hasOrdinalsKey: data.hasOrdinalsKey,
+            balance: data.balance,
+            loadingStates: data.loadingStates
           })
+          console.log('[WalletTab] Replacing entire state with:', data);
           setState(data)
           break
 
         case 'wallet:error':
           console.error('Wallet error:', data.error)
-          setState(prev => ({ ...prev, isLoading: false }))
+          setState(prev => ({
+            ...prev,
+            loadingStates: {
+              balance: false,
+              nfts: false,
+              bsv20: false,
+              bsv21: false
+            }
+          }))
           break
       }
     }
@@ -131,17 +161,16 @@ export default function WalletTab({ isActive }: WalletTabProps) {
     }
   }, [isActive])
 
+  // NOTE: Removed redundant useEffect that watched vaultState changes
+  // The backend already handles key changes via onFundingKeyChanged() event
+  // which selectively refreshes only balance OR tokens, not both
+
   const formatBSV = (satoshis: number): string => {
     return (satoshis / 100000000).toFixed(8)
   }
 
   const formatSats = (satoshis: number): string => {
     return satoshis.toLocaleString()
-  }
-
-  const truncateAddress = (address: string): string => {
-    if (!address) return ''
-    return `${address.slice(0, 6)}...${address.slice(-6)}`
   }
 
   const copyAddress = (address: string) => {
@@ -246,6 +275,7 @@ export default function WalletTab({ isActive }: WalletTabProps) {
         onOpenChange={setShowSendDialog}
         spendableBalance={state.balance.spendable}
         payAddress={state.fundingKey?.payAddress || ''}
+        autoBroadcast={state.settings.autoBroadcast}
       />
 
       <ReceiveDialog
@@ -282,34 +312,76 @@ export default function WalletTab({ isActive }: WalletTabProps) {
       />
 
       <div className="wallet-container relative">
-      {/* Header Bar */}
+      {/* Header Bar with Key Selection Buttons */}
       <div className="wallet-header flex items-center justify-between mb-2 pb-2 border-b">
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={openKeyVault}
-        >
-          <Wallet className="h-3 w-3 mr-2" />
-          {state.fundingKey?.label || truncateAddress(state.fundingKey?.payAddress || '') || "Select Key"}
-        </Button>
-
-        {state.isLoading ? (
-          <div className="flex items-center gap-2 px-2">
-            <RefreshCw className="h-3 w-3 animate-spin text-muted-foreground" />
-            <span className="text-xs text-muted-foreground">Loading...</span>
-          </div>
-        ) : (
+        <div className="flex items-center gap-2">
+          {/* Wallet (Funding) Key Button */}
           <Button
-            variant="ghost"
+            variant="outline"
             size="sm"
-            onClick={handleRefresh}
+            onClick={() => {
+              vscode.postMessage({
+                type: 'openKeyVault',
+                data: { scrollTo: 'WLT' }
+              })
+            }}
+            className="relative"
           >
-            <RefreshCw className="h-3 w-3" />
+            <div className="flex items-center gap-2">
+              {/* Green indicator for wallet */}
+              <div className={`h-2 w-2 rounded-full ${
+                state.loadingStates.balance
+                  ? 'bg-green-500 animate-pulse'
+                  : state.hasFundingKey
+                    ? 'bg-green-500'
+                    : 'bg-muted-foreground/30'
+              }`} />
+              <Wallet className="h-3 w-3" />
+              <span className="text-xs">
+                {state.hasFundingKey ? 'Wallet' : 'No Wallet'}
+              </span>
+            </div>
           </Button>
-        )}
+
+          {/* Ordinals Key Button */}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              vscode.postMessage({
+                type: 'openKeyVault',
+                data: { scrollTo: 'ORD' }
+              })
+            }}
+            className="relative"
+          >
+            <div className="flex items-center gap-2">
+              {/* Blue indicator for ordinals */}
+              <div className={`h-2 w-2 rounded-full ${
+                (state.loadingStates.nfts || state.loadingStates.bsv20 || state.loadingStates.bsv21)
+                  ? 'bg-blue-500 animate-pulse'
+                  : state.hasOrdinalsKey
+                    ? 'bg-blue-500'
+                    : 'bg-muted-foreground/30'
+              }`} />
+              <Image className="h-3 w-3" />
+              <span className="text-xs">
+                {state.hasOrdinalsKey ? 'Ordinals' : 'No Ordinals'}
+              </span>
+            </div>
+          </Button>
+        </div>
+
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={handleRefresh}
+        >
+          <RefreshCw className="h-3 w-3" />
+        </Button>
       </div>
 
-      {/* Empty State - Vault Locked or No Funding Key */}
+      {/* Empty State - Vault Locked or No Keys */}
       {!state.fundingKey && (
         <Empty>
           <EmptyHeader>
@@ -317,12 +389,12 @@ export default function WalletTab({ isActive }: WalletTabProps) {
               <Wallet className="h-12 w-12 text-muted-foreground" />
             </EmptyMedia>
             <EmptyTitle>
-              {vaultState.isLocked ? 'Vault Locked' : 'No Funding Key Selected'}
+              {vaultState.isLocked ? 'Vault Locked' : 'No Keys Selected'}
             </EmptyTitle>
             <EmptyDescription>
               {vaultState.isLocked
                 ? 'Unlock your Key Vault to access your wallet, ordinals, and tokens'
-                : 'Set a funding key in the Key Vault to view your wallet, ordinals, and tokens'
+                : 'Set a funding key or ordinals key in the Key Vault to get started'
               }
             </EmptyDescription>
           </EmptyHeader>
@@ -356,11 +428,12 @@ export default function WalletTab({ isActive }: WalletTabProps) {
                   </div>
                 )}
               </div>
-              <div className="grid grid-cols-3 gap-2 mt-4">
+              <div className="flex justify-center gap-2 mt-4">
                 <Button
                   onClick={handleSend}
-                  disabled={state.balance.spendable === 0}
+                  disabled={!state.hasFundingKey || state.balance.spendable === 0}
                   size="sm"
+                  title={!state.hasFundingKey ? 'Requires funding key' : undefined}
                 >
                   <Send className="h-4 w-4 mr-2" />
                   Send

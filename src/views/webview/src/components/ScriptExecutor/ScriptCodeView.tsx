@@ -119,40 +119,39 @@ export function ScriptCodeView({
                 ({chunk.data.length} bytes)
               </span>
             </span>
-            <button
-              onClick={() => handleCopy(Utils.toHex(chunk.data!), `Data ${chunkKey}`)}
-              className="flex-shrink-0 hover:text-foreground transition-colors"
-              title="Copy data as hex"
-            >
-              {copiedItem === `Data ${chunkKey}` ? (
-                <Check className="h-3 w-3 text-green-400" />
-              ) : (
-                <Copy className="h-3 w-3" />
-              )}
-            </button>
+            {/* Copy button visible on hover */}
+            {isHovered && (
+              <button
+                onClick={() => handleCopy(Utils.toHex(chunk.data!), `Data ${chunkKey}`)}
+                className="flex-shrink-0 hover:text-foreground transition-colors"
+                title="Copy data as hex"
+              >
+                {copiedItem === `Data ${chunkKey}` ? (
+                  <Check className="h-3 w-3 text-green-400" />
+                ) : (
+                  <Copy className="h-3 w-3" />
+                )}
+              </button>
+            )}
           </span>
         ) : (
-          <span className="flex-1"></span>
-        )}
-
-        {/* Copy button for entire opcode (visible on hover) */}
-        {isHovered && (
-          <button
-            onClick={() => {
-              const opcodeText = chunk.data
-                ? `${opName} ${Utils.toHex(chunk.data)}`
-                : opName
-              handleCopy(opcodeText, `Opcode ${chunkKey}`)
-            }}
-            className="flex-shrink-0 hover:text-foreground transition-colors ml-auto"
-            title="Copy opcode"
-          >
-            {copiedItem === `Opcode ${chunkKey}` ? (
-              <Check className="h-3 w-3 text-green-400" />
-            ) : (
-              <Copy className="h-3 w-3" />
+          <>
+            <span className="flex-1"></span>
+            {/* Copy button for opcode (visible on hover, only for non-data opcodes) */}
+            {isHovered && (
+              <button
+                onClick={() => handleCopy(opName, `Opcode ${chunkKey}`)}
+                className="flex-shrink-0 hover:text-foreground transition-colors"
+                title="Copy opcode"
+              >
+                {copiedItem === `Opcode ${chunkKey}` ? (
+                  <Check className="h-3 w-3 text-green-400" />
+                ) : (
+                  <Copy className="h-3 w-3" />
+                )}
+              </button>
             )}
-          </button>
+          </>
         )}
       </div>
     )

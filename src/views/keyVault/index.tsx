@@ -157,7 +157,7 @@ export class KeyPanel {
     this._vault.onDidChangeKeys(() => this.updateContent());
   }
 
-  public static async show(vault: KeyVault, extensionUri: vscode.Uri, options?: { openAddKeyDialog?: boolean; openImportDialog?: boolean }) {
+  public static async show(vault: KeyVault, extensionUri: vscode.Uri, options?: { openAddKeyDialog?: boolean; openImportDialog?: boolean; scrollTo?: string }) {
     // Check if vault is locked
     if (!vault.isUnlocked) {
       // Check if this is first-time setup
@@ -191,13 +191,16 @@ export class KeyPanel {
       KeyPanel.currentPanel = new KeyPanel(panel, vault, extensionUri);
     }
 
-    // If requested, open the Add Key dialog or trigger import
+    // If requested, open the Add Key dialog, trigger import, or scroll to key
     if (KeyPanel.currentPanel) {
       if (options?.openAddKeyDialog) {
         KeyPanel.currentPanel._panel.webview.postMessage({ command: 'openAddKeyDialog' });
       }
       if (options?.openImportDialog) {
         KeyPanel.currentPanel._panel.webview.postMessage({ command: 'triggerImport' });
+      }
+      if (options?.scrollTo) {
+        KeyPanel.currentPanel._panel.webview.postMessage({ command: 'scrollToKey', designation: options.scrollTo });
       }
     }
   }

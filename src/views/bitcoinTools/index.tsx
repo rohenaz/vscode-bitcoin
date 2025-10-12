@@ -31,6 +31,14 @@ export class BitcoinToolsViewProvider implements vscode.WebviewViewProvider {
         this.handleGetVaultStats(this._view);
       }
     });
+
+    // Listen for key changes to update vault stats
+    this._vault.onDidChangeKeys(() => {
+      if (this._view) {
+        console.log('[BitcoinToolsView] Keys changed, broadcasting vault stats');
+        this.handleGetVaultStats(this._view);
+      }
+    });
   }
 
   public resolveWebviewView(
@@ -151,7 +159,12 @@ export class BitcoinToolsViewProvider implements vscode.WebviewViewProvider {
           return;
         }
         if (message.type === 'setIdentityKey') {
-          vscode.commands.executeCommand('bitcoin.openKeyVault');
+          vscode.commands.executeCommand('bitcoin.showKeyVault');
+          return;
+        }
+        if (message.type === 'openKeyVault') {
+          // Open key vault and optionally scroll to specific designation
+          vscode.commands.executeCommand('bitcoin.showKeyVault', message.data?.scrollTo);
           return;
         }
 

@@ -13,7 +13,7 @@ import { Label } from '@/components/ui/label'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
-import { Loader2, CheckCircle2, XCircle, AlertCircle, ArrowRight } from 'lucide-react'
+import { Loader2, CheckCircle2, XCircle, AlertCircle, ArrowRight, Settings } from 'lucide-react'
 import { getVscode } from '../vscode'
 
 interface SendBsvDialogProps {
@@ -21,6 +21,7 @@ interface SendBsvDialogProps {
   onOpenChange: (open: boolean) => void
   spendableBalance: number
   payAddress: string
+  autoBroadcast?: boolean
 }
 
 // interface SendBsvResponse {
@@ -33,8 +34,16 @@ interface SendBsvDialogProps {
 
 type SendState = 'idle' | 'confirming' | 'broadcasting' | 'success' | 'error'
 
-export function SendBsvDialog({ open, onOpenChange, spendableBalance, payAddress }: SendBsvDialogProps) {
+export function SendBsvDialog({ open, onOpenChange, spendableBalance, payAddress, autoBroadcast = false }: SendBsvDialogProps) {
   const vscode = getVscode()
+
+  // Open settings for auto-broadcast
+  const openAutoBroadcastSettings = () => {
+    vscode.postMessage({
+      command: 'openSettings',
+      setting: 'bitcoin.wallet.autoBroadcast'
+    })
+  }
 
   // Form state
   const [recipientAddress, setRecipientAddress] = useState('')
@@ -350,6 +359,25 @@ export function SendBsvDialog({ open, onOpenChange, spendableBalance, payAddress
                 Please review the transaction details carefully before confirming.
               </AlertDescription>
             </Alert>
+
+            {/* Auto-Broadcast Status */}
+            <div className="flex items-center justify-between text-xs py-2 px-3 rounded-md bg-muted/50">
+              <div className="flex items-center gap-2">
+                <span className="text-muted-foreground">Auto-broadcast:</span>
+                <Badge variant={autoBroadcast ? "default" : "secondary"} className="text-xs h-5">
+                  {autoBroadcast ? "Enabled" : "Disabled"}
+                </Badge>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-6 px-2 text-xs"
+                onClick={openAutoBroadcastSettings}
+              >
+                <Settings className="h-3 w-3 mr-1" />
+                Settings
+              </Button>
+            </div>
 
             <div className="space-y-3 text-sm">
               <div>
