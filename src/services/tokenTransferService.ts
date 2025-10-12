@@ -49,8 +49,8 @@ export interface BurnTokenConfig {
 export interface TransferResult {
   tx: Transaction;
   spentOutpoints: string[];
-  tokenChange?: number;
-  payChange?: number;
+  tokenChange?: TokenUtxo[];
+  payChange?: Utxo;
   fee: number;
 }
 
