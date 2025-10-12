@@ -488,12 +488,6 @@ class WalletStateManager {
     });
   }
 
-  private async onVaultUnlocked(): Promise<void> {
-    console.log('[WalletState] onVaultUnlocked - immediately loading funding key');
-    // Vault state already updated in event listener above
-    // Just load the funding key and start fetching
-    await this.loadFundingKey();
-  }
 
   async checkVaultStatus(): Promise<void> {
     if (!this.vault) return;
