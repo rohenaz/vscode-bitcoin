@@ -102,27 +102,19 @@ class WalletStateManager {
   }
 
   async loadFundingKey(shouldRefresh = true): Promise<void> {
-    if (!this.vault) {
-      console.log('[WalletState] loadFundingKey - no vault');
-      return;
-    }
+    if (!this.vault) return;
 
     try {
-      console.log('[WalletState] loadFundingKey START - vault.isUnlocked:', this.vault.isUnlocked, 'shouldRefresh:', shouldRefresh);
-
       // Update vault locked state
       this.state.isVaultLocked = !this.vault.isUnlocked;
 
       const fundingKey = await this.vault.getFundingKey();
       const ordinalsKey = await this.vault.getOrdinalsKey();
 
-      console.log('[WalletState] Got keys - funding:', fundingKey?.id || 'null', 'ordinals:', ordinalsKey?.id || 'null');
-
       // Update state based on what keys we have
       if ((fundingKey && fundingKey.type === 'wif') || (ordinalsKey && ordinalsKey.type === 'wif')) {
         await this.setFundingKey(fundingKey, ordinalsKey, shouldRefresh);
       } else {
-        console.log('[WalletState] No valid keys, clearing');
         this.clearFundingKey();
       }
     } catch (error) {
@@ -162,17 +154,14 @@ class WalletStateManager {
       this.state.hasFundingKey = !!(key && key.type === 'wif');
       this.state.hasOrdinalsKey = !!(ordinalsKey && ordinalsKey.type === 'wif');
 
-      // CRITICAL: Clear data for keys that don't exist anymore
-      // This ensures state is always consistent when pushState() is called
+      // Clear data for keys that don't exist anymore
       if (!this.state.hasFundingKey) {
-        console.log('[WalletState] Clearing funding key data - aborting requests and resetting balance');
         this.balanceAbortController?.abort();
         this.balanceAbortController = null;
         this.state.balance = { total: 0, spendable: 0 };
         this.state.loadingStates.balance = false;
       }
       if (!this.state.hasOrdinalsKey) {
-        console.log('[WalletState] Clearing ordinals key data - aborting requests and resetting NFTs/tokens');
         this.nftsAbortController?.abort();
         this.nftsAbortController = null;
         this.bsv20AbortController?.abort();
@@ -187,21 +176,7 @@ class WalletStateManager {
         this.state.loadingStates.bsv21 = false;
       }
 
-      console.log('[WalletState] setFundingKey CALLED:', {
-        hasKeyParam: !!key,
-        keyType: key?.type,
-        hasOrdinalsKeyParam: !!ordinalsKey,
-        ordinalsKeyType: ordinalsKey?.type,
-        payAddress,
-        ordAddress,
-        hasFundingKey: this.state.hasFundingKey,
-        hasOrdinalsKey: this.state.hasOrdinalsKey,
-        balance: this.state.balance,
-        shouldRefresh
-      });
-
-      // Push funding key immediately so UI shows it right away
-      console.log('[WalletState] Calling pushState() with balance:', this.state.balance);
+      // Push state immediately so UI updates right away
       this.pushState();
 
       // Fetch wallet data if requested (default behavior for initial load)
@@ -261,8 +236,6 @@ class WalletStateManager {
 
     const { payAddress } = this.state.fundingKey;
 
-    console.log('[WalletState] refreshBalance - hasFundingKey:', this.state.hasFundingKey, 'payAddress:', payAddress);
-
     if (this.state.hasFundingKey && payAddress) {
       // Abort any existing balance request
       this.balanceAbortController?.abort();
@@ -311,8 +284,6 @@ class WalletStateManager {
     const { ordAddress } = this.state.fundingKey;
     const config = vsApi.workspace.getConfiguration('bitcoin');
     const showNfts = config.get('wallet.showNfts', true);
-
-    console.log('[WalletState] refreshNfts - hasOrdinalsKey:', this.state.hasOrdinalsKey, 'ordAddress:', ordAddress);
 
     if (this.state.hasOrdinalsKey && ordAddress && showNfts) {
       // Abort any existing NFTs request
@@ -365,7 +336,6 @@ class WalletStateManager {
   }
 
   async refreshTokens(): Promise<void> {
-    console.log('[WalletState] 🪙 refreshTokens CALLED');
     if (!this.state.fundingKey) return;
 
     const { ordAddress } = this.state.fundingKey;
@@ -373,8 +343,6 @@ class WalletStateManager {
     const showTokens = config.get('wallet.showTokens', true);
     const showBsv20 = config.get('wallet.showBsv20', false);
     const showBsv21 = config.get('wallet.showBsv21', true);
-
-    console.log('[WalletState] refreshTokens - hasOrdinalsKey:', this.state.hasOrdinalsKey, 'ordAddress:', ordAddress);
 
     if (this.state.hasOrdinalsKey && ordAddress && showTokens) {
       // BSV-20
@@ -483,81 +451,41 @@ class WalletStateManager {
   }
 
   private async onFundingKeyChanged(): Promise<void> {
-    console.log('[WalletState] ============ onFundingKeyChanged START ============');
-
-    // Remember the addresses we had before (to detect if keys were replaced)
+    // Remember what we had before
     const oldPayAddress = this.state.fundingKey?.payAddress || null;
     const oldOrdAddress = this.state.fundingKey?.ordAddress || null;
     const hadFundingKey = this.state.hasFundingKey;
     const hadOrdinalsKey = this.state.hasOrdinalsKey;
 
-    console.log('[WalletState] BEFORE reload - hasFundingKey:', hadFundingKey, 'hasOrdinalsKey:', hadOrdinalsKey);
-
-    // Reload keys but don't auto-refresh - we'll do selective refresh below
+    // Reload keys (without auto-refresh - we'll do selective refresh below)
     await this.loadFundingKey(false);
 
-    console.log('[WalletState] AFTER reload - hasFundingKey:', this.state.hasFundingKey, 'hasOrdinalsKey:', this.state.hasOrdinalsKey);
-
-    // Detect what changed by comparing addresses (handles key replacement)
+    // Detect what changed
     const newPayAddress = this.state.fundingKey?.payAddress || null;
     const newOrdAddress = this.state.fundingKey?.ordAddress || null;
 
-    // Determine if keys were ADDED or REMOVED (vs just changed)
     const fundingKeyAdded = !hadFundingKey && this.state.hasFundingKey;
-    const fundingKeyRemoved = hadFundingKey && !this.state.hasFundingKey;
     const fundingKeyReplaced = hadFundingKey && this.state.hasFundingKey && (oldPayAddress !== newPayAddress);
-    const fundingKeyChanged = fundingKeyAdded || fundingKeyRemoved || fundingKeyReplaced;
-
     const ordinalsKeyAdded = !hadOrdinalsKey && this.state.hasOrdinalsKey;
-    const ordinalsKeyRemoved = hadOrdinalsKey && !this.state.hasOrdinalsKey;
     const ordinalsKeyReplaced = hadOrdinalsKey && this.state.hasOrdinalsKey && (oldOrdAddress !== newOrdAddress);
-    const ordinalsKeyChanged = ordinalsKeyAdded || ordinalsKeyRemoved || ordinalsKeyReplaced;
 
-    console.log('[WalletState] Changes:', {
-      fundingKeyAdded,
-      fundingKeyRemoved,
-      fundingKeyReplaced,
-      ordinalsKeyAdded,
-      ordinalsKeyRemoved,
-      ordinalsKeyReplaced
-    });
-
-    // Only fetch if keys were ADDED or REPLACED (not removed)
+    // Selectively refresh only what changed
     const needsFundingRefresh = fundingKeyAdded || fundingKeyReplaced;
     const needsOrdinalsRefresh = ordinalsKeyAdded || ordinalsKeyReplaced;
 
     if (needsFundingRefresh && !needsOrdinalsRefresh) {
-      console.log('[WalletState] ✅ Funding key ONLY changed - fetching balance ONLY (NOT tokens)');
       await this.refreshBalance();
     } else if (needsOrdinalsRefresh && !needsFundingRefresh) {
-      console.log('[WalletState] ✅ Ordinals key ONLY changed - fetching NFTs and tokens ONLY (NOT balance)');
       await Promise.all([this.refreshNfts(), this.refreshTokens()]);
     } else if (needsFundingRefresh && needsOrdinalsRefresh) {
-      console.log('[WalletState] ✅ BOTH keys changed - fetching ALL data');
       await this.refreshAllData();
-    } else {
-      console.log('[WalletState] ✅ No keys added/replaced - no fetch needed (data already cleared)');
     }
 
-    // Send notification about the final state
-    console.log('[WalletState] Sending fundingKeyChanged notification with state:', {
-      hasWebview: !!this.webview,
-      hasFundingKey: this.state.hasFundingKey,
-      hasOrdinalsKey: this.state.hasOrdinalsKey,
-      balance: this.state.balance
+    // Notify UI of final state
+    this.webview?.webview.postMessage({
+      type: 'wallet:fundingKeyChanged',
+      data: this.state
     });
-
-    if (!this.webview) {
-      console.error('[WalletState] NO WEBVIEW! Cannot send fundingKeyChanged');
-    } else {
-      this.webview.webview.postMessage({
-        type: 'wallet:fundingKeyChanged',
-        data: this.state
-      });
-      console.log('[WalletState] fundingKeyChanged message sent');
-    }
-
-    console.log('[WalletState] ============ onFundingKeyChanged END ============');
   }
 
   private async onVaultUnlocked(): Promise<void> {
@@ -589,6 +517,8 @@ class WalletStateManager {
   }
 
   pushState(): void {
+    if (!this.webview) return;
+
     // Read settings before pushing
     const config = vsApi.workspace.getConfiguration('bitcoin');
     this.state.settings = {
@@ -597,25 +527,10 @@ class WalletStateManager {
       autoBroadcast: config.get('wallet.autoBroadcast', false)
     };
 
-    console.log('[WalletState] pushState:', {
-      hasWebview: !!this.webview,
-      isVaultLocked: this.state.isVaultLocked,
-      hasFundingKey: this.state.hasFundingKey,
-      hasOrdinalsKey: this.state.hasOrdinalsKey,
-      balance: this.state.balance,
-      fundingKeyId: this.state.fundingKey?.id
-    });
-
-    if (!this.webview) {
-      console.error('[WalletState] NO WEBVIEW! Cannot send message');
-      return;
-    }
-
     this.webview.webview.postMessage({
       type: 'wallet:stateUpdate',
       data: this.state
     });
-    console.log('[WalletState] Message sent to webview');
   }
 
   private pushError(error: string): void {

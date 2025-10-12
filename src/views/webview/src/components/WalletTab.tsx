@@ -105,31 +105,10 @@ export default function WalletTab({ isActive }: WalletTabProps) {
 
       switch (type) {
         case 'wallet:stateUpdate':
-          console.log('[WalletTab] Received stateUpdate:', {
-            hasFundingKey: data.hasFundingKey,
-            hasOrdinalsKey: data.hasOrdinalsKey,
-            balance: data.balance,
-            loadingStates: data.loadingStates
-          })
-          setState(prev => {
-            const newState = { ...prev, ...data };
-            console.log('[WalletTab] State after merge:', {
-              hasFundingKey: newState.hasFundingKey,
-              hasOrdinalsKey: newState.hasOrdinalsKey,
-              balance: newState.balance
-            });
-            return newState;
-          })
+          setState(prev => ({ ...prev, ...data }))
           break
 
         case 'wallet:fundingKeyChanged':
-          console.log('[WalletTab] Received fundingKeyChanged:', {
-            hasFundingKey: data.hasFundingKey,
-            hasOrdinalsKey: data.hasOrdinalsKey,
-            balance: data.balance,
-            loadingStates: data.loadingStates
-          })
-          console.log('[WalletTab] Replacing entire state with:', data);
           setState(data)
           break
 
