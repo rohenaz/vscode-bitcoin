@@ -8,6 +8,7 @@ import { transactionService, TransactionError } from '../../services/transaction
 import { ordinalsService } from '../../services/ordinalsService';
 import { tokenTransferService } from '../../services/tokenTransferService';
 import { ordinalTransferService } from '../../services/ordinalTransferService';
+import { mintService } from '../../services/mintService';
 import { PrivateKey, Script, Transaction, LockingScript, UnlockingScript } from '@bsv/sdk';
 import type { VaultBackup } from 'bitcoin-backup';
 import { encryptBackup, decryptBackup } from 'bitcoin-backup';
@@ -79,18 +80,6 @@ export class BitcoinToolsViewProvider implements vscode.WebviewViewProvider {
             case 'wallet:checkVaultStatus':
               await walletState.checkVaultStatus();
               break;
-            case 'wallet:enableBsv20':
-              await this.handleToggleBsv20(webviewView, true);
-              break;
-            case 'wallet:disableBsv20':
-              await this.handleToggleBsv20(webviewView, false);
-              break;
-            case 'wallet:enableBsv21':
-              await this.handleToggleBsv21(webviewView, true);
-              break;
-            case 'wallet:disableBsv21':
-              await this.handleToggleBsv21(webviewView, false);
-              break;
             case 'wallet:getNfts':
             case 'wallet:getTokens':
               // State already loaded, just push current state
@@ -107,6 +96,12 @@ export class BitcoinToolsViewProvider implements vscode.WebviewViewProvider {
               break;
             case 'wallet:transferToken:send':
               await this.handleTransferToken(webviewView, message.data);
+              break;
+            case 'wallet:mintNft':
+              await this.handleMintNft(webviewView, message.data);
+              break;
+            case 'wallet:mintBsv21':
+              await this.handleMintBsv21(webviewView, message.data);
               break;
           }
           return;
@@ -137,6 +132,14 @@ export class BitcoinToolsViewProvider implements vscode.WebviewViewProvider {
             case 'vault:import':
               await this.handleImportVault(webviewView);
               break;
+          }
+          return;
+        }
+
+        // Handle open external URL
+        if (message.type === 'openExternal') {
+          if (message.url) {
+            vscode.env.openExternal(vscode.Uri.parse(message.url));
           }
           return;
         }
@@ -260,37 +263,6 @@ export class BitcoinToolsViewProvider implements vscode.WebviewViewProvider {
     }
   }
 
-  /**
-   * Handle toggling BSV-20 tokens
-   */
-  private async handleToggleBsv20(webviewView: vscode.WebviewView, enable: boolean) {
-    try {
-      // Update configuration
-      await vscode.workspace.getConfiguration('bitcoin.wallet').update('showBsv20', enable, vscode.ConfigurationTarget.Global);
-
-      // Refresh wallet data to fetch/clear BSV-20 tokens
-      await walletState.refreshAllData();
-    } catch (error) {
-      console.error('Error toggling BSV-20:', error);
-      vscode.window.showErrorMessage(`Failed to ${enable ? 'enable' : 'disable'} BSV-20 tokens`);
-    }
-  }
-
-  /**
-   * Handle toggling BSV-21 tokens
-   */
-  private async handleToggleBsv21(webviewView: vscode.WebviewView, enable: boolean) {
-    try {
-      // Update configuration
-      await vscode.workspace.getConfiguration('bitcoin.wallet').update('showBsv21', enable, vscode.ConfigurationTarget.Global);
-
-      // Refresh wallet data to fetch/clear BSV-21 tokens
-      await walletState.refreshAllData();
-    } catch (error) {
-      console.error('Error toggling BSV-21:', error);
-      vscode.window.showErrorMessage(`Failed to ${enable ? 'enable' : 'disable'} BSV-21 tokens`);
-    }
-  }
 
   /**
    * Handle Send BSV estimate request
@@ -620,6 +592,180 @@ export class BitcoinToolsViewProvider implements vscode.WebviewViewProvider {
 
       // Show error notification
       vscode.window.showErrorMessage(`Token transfer failed: ${errorMessage}`);
+    }
+  }
+
+  /**
+   * Handle Mint NFT request
+   */
+  private async handleMintNft(
+    webviewView: vscode.WebviewView,
+    data: {
+      fileData: string;
+      contentType: string;
+      metadata?: Record<string, string>;
+    }
+  ) {
+    try {
+      // Get funding and ordinals keys
+      const fundingKey = await this._vault.getFundingKey();
+      const ordinalsKey = await this._vault.getOrdinalsKey();
+
+      if (!fundingKey || fundingKey.type !== 'wif') {
+        throw new Error('No funding key available');
+      }
+      if (!ordinalsKey || ordinalsKey.type !== 'wif') {
+        throw new Error('No ordinals key available');
+      }
+
+      // Get addresses
+      const payAddress = ordinalsService.deriveOrdAddress(fundingKey.value);
+      const ordAddress = ordinalsService.deriveOrdAddress(ordinalsKey.value);
+
+      // Fetch fresh UTXOs
+      const paymentUtxos = await ordinalsService.getPaymentUtxos(payAddress);
+      if (paymentUtxos.length === 0) {
+        throw new Error('No payment UTXOs available');
+      }
+
+      // Build mint config
+      const mintConfig = {
+        fileData: data.fileData,
+        contentType: data.contentType,
+        metadata: data.metadata,
+        paymentUtxos,
+        paymentPk: PrivateKey.fromWif(fundingKey.value),
+        ordAddress,
+      };
+
+      // Mint NFT
+      const result = await mintService.mintNft(mintConfig);
+
+      // Get raw transaction hex
+      const rawTx = result.tx.toHex();
+
+      // Broadcast transaction
+      const broadcastResult = await transactionService.broadcastTransaction(rawTx);
+
+      if (broadcastResult.status === 'success') {
+        // Success
+        webviewView.webview.postMessage({
+          type: 'wallet:mintNft:success',
+          data: {
+            txid: broadcastResult.txid,
+            fee: result.fee,
+          },
+        });
+
+        // Show success notification
+        vscode.window.showInformationMessage(
+          `NFT minted successfully! ${broadcastResult.txid?.slice(0, 8)}...`
+        );
+
+        // Refresh wallet data
+        await walletState.refreshAllData();
+      } else {
+        throw new Error(broadcastResult.message || 'Broadcast failed');
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+
+      webviewView.webview.postMessage({
+        type: 'wallet:mintNft:error',
+        data: { error: errorMessage },
+      });
+
+      // Show error notification
+      vscode.window.showErrorMessage(`Mint NFT failed: ${errorMessage}`);
+    }
+  }
+
+  /**
+   * Handle Mint BSV21 Token request
+   */
+  private async handleMintBsv21(
+    webviewView: vscode.WebviewView,
+    data: {
+      symbol: string;
+      iconData: string;
+      iconType: string;
+      maxSupply: number;
+      decimals: number;
+    }
+  ) {
+    try {
+      // Get funding and ordinals keys
+      const fundingKey = await this._vault.getFundingKey();
+      const ordinalsKey = await this._vault.getOrdinalsKey();
+
+      if (!fundingKey || fundingKey.type !== 'wif') {
+        throw new Error('No funding key available');
+      }
+      if (!ordinalsKey || ordinalsKey.type !== 'wif') {
+        throw new Error('No ordinals key available');
+      }
+
+      // Get addresses
+      const payAddress = ordinalsService.deriveOrdAddress(fundingKey.value);
+      const ordAddress = ordinalsService.deriveOrdAddress(ordinalsKey.value);
+
+      // Fetch fresh UTXOs
+      const paymentUtxos = await ordinalsService.getPaymentUtxos(payAddress);
+      if (paymentUtxos.length === 0) {
+        throw new Error('No payment UTXOs available');
+      }
+
+      // Build mint config
+      const mintConfig = {
+        symbol: data.symbol,
+        iconData: data.iconData,
+        iconType: data.iconType,
+        maxSupply: data.maxSupply,
+        decimals: data.decimals,
+        paymentUtxos,
+        paymentPk: PrivateKey.fromWif(fundingKey.value),
+        ordAddress,
+      };
+
+      // Mint BSV21 token
+      const result = await mintService.mintBsv21(mintConfig);
+
+      // Get raw transaction hex
+      const rawTx = result.tx.toHex();
+
+      // Broadcast transaction
+      const broadcastResult = await transactionService.broadcastTransaction(rawTx);
+
+      if (broadcastResult.status === 'success') {
+        // Success
+        webviewView.webview.postMessage({
+          type: 'wallet:mintBsv21:success',
+          data: {
+            txid: broadcastResult.txid,
+            fee: result.fee,
+          },
+        });
+
+        // Show success notification
+        vscode.window.showInformationMessage(
+          `BSV21 token deployed successfully! ${broadcastResult.txid?.slice(0, 8)}...`
+        );
+
+        // Refresh wallet data
+        await walletState.refreshAllData();
+      } else {
+        throw new Error(broadcastResult.message || 'Broadcast failed');
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+
+      webviewView.webview.postMessage({
+        type: 'wallet:mintBsv21:error',
+        data: { error: errorMessage },
+      });
+
+      // Show error notification
+      vscode.window.showErrorMessage(`Mint BSV21 token failed: ${errorMessage}`);
     }
   }
 

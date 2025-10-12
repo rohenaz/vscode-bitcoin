@@ -67,6 +67,7 @@ class WalletStateManager {
   private webview: WebviewView | null = null;
   private refreshTimer: NodeJS.Timeout | null = null;
   private vaultDisposable: { dispose: () => void } | null = null;
+  private configDisposable: { dispose: () => void } | null = null;
 
   // AbortControllers for cancelling in-flight requests
   private balanceAbortController: AbortController | null = null;
@@ -95,6 +96,18 @@ class WalletStateManager {
       this.pushState();
       // Don't automatically load funding key on unlock - wait for user to switch to wallet tab
       // this.onVaultUnlocked();
+    });
+
+    // Listen to configuration changes for token settings
+    this.configDisposable = vsApi.workspace.onDidChangeConfiguration(e => {
+      if (e.affectsConfiguration('bitcoin.wallet.showBsv20')) {
+        console.log('[WalletState] BSV-20 setting changed, refreshing BSV-20 tokens only');
+        this.refreshBsv20();
+      }
+      if (e.affectsConfiguration('bitcoin.wallet.showBsv21')) {
+        console.log('[WalletState] BSV-21 setting changed, refreshing BSV-21 tokens only');
+        this.refreshBsv21();
+      }
     });
 
     // Setup auto-refresh if enabled
@@ -335,17 +348,15 @@ class WalletStateManager {
     }
   }
 
-  async refreshTokens(): Promise<void> {
+  async refreshBsv20(): Promise<void> {
     if (!this.state.fundingKey) return;
 
     const { ordAddress } = this.state.fundingKey;
     const config = vsApi.workspace.getConfiguration('bitcoin');
     const showTokens = config.get('wallet.showTokens', true);
     const showBsv20 = config.get('wallet.showBsv20', false);
-    const showBsv21 = config.get('wallet.showBsv21', true);
 
     if (this.state.hasOrdinalsKey && ordAddress && showTokens) {
-      // BSV-20
       if (showBsv20) {
         // Abort any existing BSV-20 request
         this.bsv20AbortController?.abort();
@@ -380,9 +391,24 @@ class WalletStateManager {
       } else {
         this.state.tokens.bsv20 = [];
         this.state.loadingStates.bsv20 = false;
+        this.pushState();
       }
+    } else {
+      this.state.tokens.bsv20 = [];
+      this.state.loadingStates.bsv20 = false;
+      this.pushState();
+    }
+  }
 
-      // BSV-21
+  async refreshBsv21(): Promise<void> {
+    if (!this.state.fundingKey) return;
+
+    const { ordAddress } = this.state.fundingKey;
+    const config = vsApi.workspace.getConfiguration('bitcoin');
+    const showTokens = config.get('wallet.showTokens', true);
+    const showBsv21 = config.get('wallet.showBsv21', true);
+
+    if (this.state.hasOrdinalsKey && ordAddress && showTokens) {
       if (showBsv21) {
         // Abort any existing BSV-21 request
         this.bsv21AbortController?.abort();
@@ -417,11 +443,10 @@ class WalletStateManager {
       } else {
         this.state.tokens.bsv21 = [];
         this.state.loadingStates.bsv21 = false;
+        this.pushState();
       }
     } else {
-      this.state.tokens.bsv20 = [];
       this.state.tokens.bsv21 = [];
-      this.state.loadingStates.bsv20 = false;
       this.state.loadingStates.bsv21 = false;
       this.pushState();
     }
@@ -438,7 +463,8 @@ class WalletStateManager {
       await Promise.all([
         this.refreshBalance(),
         this.refreshNfts(),
-        this.refreshTokens()
+        this.refreshBsv20(),
+        this.refreshBsv21()
       ]);
 
       this.state.lastUpdate = Date.now();
@@ -476,7 +502,7 @@ class WalletStateManager {
     if (needsFundingRefresh && !needsOrdinalsRefresh) {
       await this.refreshBalance();
     } else if (needsOrdinalsRefresh && !needsFundingRefresh) {
-      await Promise.all([this.refreshNfts(), this.refreshTokens()]);
+      await Promise.all([this.refreshNfts(), this.refreshBsv20(), this.refreshBsv21()]);
     } else if (needsFundingRefresh && needsOrdinalsRefresh) {
       await this.refreshAllData();
     }
@@ -569,6 +595,11 @@ class WalletStateManager {
     if (this.vaultDisposable) {
       this.vaultDisposable.dispose();
       this.vaultDisposable = null;
+    }
+
+    if (this.configDisposable) {
+      this.configDisposable.dispose();
+      this.configDisposable = null;
     }
   }
 }

@@ -14,7 +14,7 @@ import {
 } from '@/components/ui/context-menu'
 import {
   Wallet, RefreshCw, Send, Download, Copy,
-  MapPin, Image, Coins, Flame, FolderOpen, Loader2, X, ExternalLink, Check, FileText, Play
+  MapPin, Image, Coins, Flame, FolderOpen, Loader2, X, ExternalLink, Check, FileText, Play, Sparkles
 } from 'lucide-react'
 import { getVscode } from '../vscode'
 import { useVault } from '../contexts/VaultContext'
@@ -22,6 +22,8 @@ import { SendBsvDialog } from './SendBsvDialog'
 import { ReceiveDialog } from './ReceiveDialog'
 import { TransferTokenDialog } from './TransferTokenDialog'
 import { TransferOrdinalDialog } from './TransferOrdinalDialog'
+import { MintNftDialog } from './MintNftDialog'
+import { MintBsv21Dialog } from './MintBsv21Dialog'
 
 interface Collection {
   id: string;
@@ -98,6 +100,9 @@ export default function WalletTab({ isActive }: WalletTabProps) {
   // Ordinal selection state
   const [selectedNfts, setSelectedNfts] = useState<Set<string>>(new Set())
   const [showTransferOrdinalDialog, setShowTransferOrdinalDialog] = useState(false)
+  // Mint dialog state
+  const [showMintNftDialog, setShowMintNftDialog] = useState(false)
+  const [showMintBsv21Dialog, setShowMintBsv21Dialog] = useState(false)
 
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
@@ -288,6 +293,19 @@ export default function WalletTab({ isActive }: WalletTabProps) {
         }}
         selectedNfts={getSelectedNftsArray()}
         vscode={vscode}
+      />
+
+      {/* Mint Dialogs */}
+      <MintNftDialog
+        open={showMintNftDialog}
+        onOpenChange={setShowMintNftDialog}
+        ordAddress={state.fundingKey?.ordAddress || ''}
+      />
+
+      <MintBsv21Dialog
+        open={showMintBsv21Dialog}
+        onOpenChange={setShowMintBsv21Dialog}
+        ordAddress={state.fundingKey?.ordAddress || ''}
       />
 
       <div className="wallet-container relative">
@@ -581,7 +599,37 @@ export default function WalletTab({ isActive }: WalletTabProps) {
                 </div>
               </AccordionTrigger>
               <AccordionContent>
-                {state.tokens.bsv20.length === 0 && state.tokens.bsv21.length === 0 ? (
+                {/* Show empty state only if:
+                    - No ordinals key, OR
+                    - Both token types disabled, OR
+                    - Not loading AND both arrays empty
+                */}
+                {!state.hasOrdinalsKey ? (
+                  <Empty>
+                    <EmptyHeader>
+                      <EmptyMedia variant="icon">
+                        <Coins className="h-8 w-8 text-muted-foreground" />
+                      </EmptyMedia>
+                      <EmptyTitle className="text-sm">No Ordinals Key</EmptyTitle>
+                      <EmptyDescription className="text-xs">
+                        Set an ordinals key to view tokens
+                      </EmptyDescription>
+                    </EmptyHeader>
+                  </Empty>
+                ) : (!state.settings.showBsv20 && !state.settings.showBsv21) ? (
+                  <Empty>
+                    <EmptyHeader>
+                      <EmptyMedia variant="icon">
+                        <Coins className="h-8 w-8 text-muted-foreground" />
+                      </EmptyMedia>
+                      <EmptyTitle className="text-sm">Tokens Disabled</EmptyTitle>
+                      <EmptyDescription className="text-xs">
+                        Enable BSV-20 or BSV-21 in settings to view tokens
+                      </EmptyDescription>
+                    </EmptyHeader>
+                  </Empty>
+                ) : (state.tokens.bsv20.length === 0 && state.tokens.bsv21.length === 0 &&
+                     !state.loadingStates?.bsv20 && !state.loadingStates?.bsv21) ? (
                   <Empty>
                     <EmptyHeader>
                       <EmptyMedia variant="icon">
@@ -594,7 +642,7 @@ export default function WalletTab({ isActive }: WalletTabProps) {
                     </EmptyHeader>
                   </Empty>
                 ) : (
-                  <Accordion type="multiple" className="w-full">
+                  <Accordion type="multiple" className="w-full pl-2">
                     <AccordionItem value="bsv20">
                       <AccordionTrigger className="text-xs py-2">
                         <div className="flex items-center gap-2">
@@ -617,24 +665,24 @@ export default function WalletTab({ isActive }: WalletTabProps) {
                               size="sm"
                               variant="outline"
                               onClick={() => {
-                                // Optimistically update UI
-                                setState(prev => ({
-                                  ...prev,
-                                  settings: { ...prev.settings, showBsv20: true },
-                                  loadingStates: {
-                                    balance: prev.loadingStates?.balance ?? false,
-                                    nfts: prev.loadingStates?.nfts ?? false,
-                                    bsv20: true,
-                                    bsv21: prev.loadingStates?.bsv21 ?? false
-                                  }
-                                }))
-                                // Tell backend to enable and refresh
-                                vscode.postMessage({ type: 'wallet:enableBsv20' })
+                                vscode.postMessage({
+                                  command: 'openSettings',
+                                  setting: 'bitcoin.wallet.showBsv20'
+                                })
                               }}
                               className="h-7 text-xs"
                             >
                               Enable in Settings
                             </Button>
+                          </div>
+                        ) : state.loadingStates?.bsv20 ? (
+                          <div className="text-center py-4 text-muted-foreground text-xs">
+                            <Loader2 className="h-4 w-4 animate-spin mx-auto mb-2" />
+                            <p>Loading BSV-20 tokens...</p>
+                          </div>
+                        ) : state.tokens.bsv20.length === 0 ? (
+                          <div className="text-center py-4 text-muted-foreground text-xs">
+                            <p>No BSV-20 tokens found</p>
                           </div>
                         ) : (
                           <div className="space-y-1">
@@ -678,24 +726,24 @@ export default function WalletTab({ isActive }: WalletTabProps) {
                               size="sm"
                               variant="outline"
                               onClick={() => {
-                                // Optimistically update UI
-                                setState(prev => ({
-                                  ...prev,
-                                  settings: { ...prev.settings, showBsv21: true },
-                                  loadingStates: {
-                                    balance: prev.loadingStates?.balance ?? false,
-                                    nfts: prev.loadingStates?.nfts ?? false,
-                                    bsv20: prev.loadingStates?.bsv20 ?? false,
-                                    bsv21: true
-                                  }
-                                }))
-                                // Tell backend to enable and refresh
-                                vscode.postMessage({ type: 'wallet:enableBsv21' })
+                                vscode.postMessage({
+                                  command: 'openSettings',
+                                  setting: 'bitcoin.wallet.showBsv21'
+                                })
                               }}
                               className="h-7 text-xs"
                             >
                               Enable in Settings
                             </Button>
+                          </div>
+                        ) : state.loadingStates?.bsv21 ? (
+                          <div className="text-center py-4 text-muted-foreground text-xs">
+                            <Loader2 className="h-4 w-4 animate-spin mx-auto mb-2" />
+                            <p>Loading BSV-21 tokens...</p>
+                          </div>
+                        ) : state.tokens.bsv21.length === 0 ? (
+                          <div className="text-center py-4 text-muted-foreground text-xs">
+                            <p>No BSV-21 tokens found</p>
                           </div>
                         ) : (
                           <div className="space-y-1">
@@ -715,6 +763,81 @@ export default function WalletTab({ isActive }: WalletTabProps) {
                             ))}
                           </div>
                         )}
+                      </AccordionContent>
+                    </AccordionItem>
+                  </Accordion>
+                )}
+              </AccordionContent>
+            </AccordionItem>
+
+            {/* Mint Section */}
+            <AccordionItem value="mint">
+              <AccordionTrigger className="text-xs">
+                <div className="flex items-center gap-2">
+                  <Sparkles className="h-3 w-3" />
+                  Mint
+                </div>
+              </AccordionTrigger>
+              <AccordionContent>
+                {!state.hasOrdinalsKey ? (
+                  <Empty>
+                    <EmptyHeader>
+                      <EmptyMedia variant="icon">
+                        <Sparkles className="h-8 w-8 text-muted-foreground" />
+                      </EmptyMedia>
+                      <EmptyTitle className="text-sm">No Ordinals Key</EmptyTitle>
+                      <EmptyDescription className="text-xs">
+                        Set an ordinals key to mint NFTs and tokens
+                      </EmptyDescription>
+                    </EmptyHeader>
+                  </Empty>
+                ) : (
+                  <Accordion type="multiple" className="w-full pl-2">
+                    {/* Mint NFT */}
+                    <AccordionItem value="mint-nft">
+                      <AccordionTrigger className="text-xs py-2">
+                        <div className="flex items-center gap-2">
+                          <Image className="h-3 w-3" />
+                          Mint NFT
+                        </div>
+                      </AccordionTrigger>
+                      <AccordionContent>
+                        <div className="text-center py-4 text-muted-foreground text-xs">
+                          <p className="mb-2">Inscribe any file as an NFT ordinal</p>
+                          <Button
+                            size="sm"
+                            variant="default"
+                            onClick={() => setShowMintNftDialog(true)}
+                            className="h-7 text-xs"
+                          >
+                            <Sparkles className="h-3 w-3 mr-1" />
+                            Mint NFT
+                          </Button>
+                        </div>
+                      </AccordionContent>
+                    </AccordionItem>
+
+                    {/* Mint BSV21 Token */}
+                    <AccordionItem value="mint-bsv21">
+                      <AccordionTrigger className="text-xs py-2">
+                        <div className="flex items-center gap-2">
+                          <Coins className="h-3 w-3" />
+                          Mint BSV21 Token
+                        </div>
+                      </AccordionTrigger>
+                      <AccordionContent>
+                        <div className="text-center py-4 text-muted-foreground text-xs">
+                          <p className="mb-2">Deploy a new BSV-21 token</p>
+                          <Button
+                            size="sm"
+                            variant="default"
+                            onClick={() => setShowMintBsv21Dialog(true)}
+                            className="h-7 text-xs"
+                          >
+                            <Sparkles className="h-3 w-3 mr-1" />
+                            Mint Token
+                          </Button>
+                        </div>
                       </AccordionContent>
                     </AccordionItem>
                   </Accordion>
@@ -959,6 +1082,7 @@ interface TokenCardProps {
 }
 
 function TokenCard({ token, onSend, onBurn }: TokenCardProps) {
+  const vscode = getVscode()
   const [imgError, setImgError] = useState(false)
 
   const truncateOutpoint = (outpoint: string): string => {
@@ -987,7 +1111,7 @@ function TokenCard({ token, onSend, onBurn }: TokenCardProps) {
     if (origin) {
       const protocol = token.protocol === 'BSV20' ? 'bsv20' : 'bsv21'
       const url = `https://1sat.market/market/${protocol}/${origin}`
-      window.open(url, '_blank')
+      vscode.postMessage({ type: 'openExternal', url })
     }
   }
 
