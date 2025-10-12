@@ -1,7 +1,7 @@
 import type { KeyVault, KeyEntry } from '../keyVault';
 import type { WebviewView } from 'vscode';
 import { ordinalsService } from './ordinalsService';
-import type { NftUtxo, TokenUtxo } from 'js-1sat-ord';
+import type { NftUtxo } from 'js-1sat-ord';
 import type { TokenBalance, Collection } from './ordinalsService';
 import vsApi from '../vsShim';
 
