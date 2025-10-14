@@ -260,6 +260,31 @@ export class BitcoinToolsViewProvider implements vscode.WebviewViewProvider {
           return;
         }
 
+        // Handle transaction delete
+        if (message.type === 'transaction:delete') {
+          const { txid } = message.data;
+          const success = txCache.delete(txid);
+
+          if (success) {
+            // Refresh history to remove deleted transaction
+            const history = txCache.listAll().map(tx => ({
+              txid: tx.txid,
+              size: tx.size,
+              inputCount: tx.inputCount || 0,
+              outputCount: tx.outputCount || 0,
+              network: tx.network === 'test' ? 'testnet' : 'mainnet',
+              timestamp: tx.lastAccessed,
+              label: tx.label
+            }));
+            webviewView.webview.postMessage({
+              type: 'decodeHistory:data',
+              data: history
+            });
+            vscode.window.showInformationMessage(`Transaction ${txid.slice(0, 8)}... deleted from history`);
+          }
+          return;
+        }
+
         // Handle request for raw tx from decode history
         if (message.type === 'decodeHistory:getRawTx') {
           const { txid, action } = message.data;

@@ -450,7 +450,13 @@ export class TxCache {
     try {
       const rawTx = await this.fetchFromJungleBus(txid);
       console.log(`[TxCache] Fetched ${txid} from JungleBus (mainnet)`);
-      this.set(txid, rawTx, 'main');
+
+      // Decode to get metadata
+      const tx = Transaction.fromHex(rawTx);
+      this.set(txid, rawTx, 'main', {
+        inputCount: tx.inputs.length,
+        outputCount: tx.outputs.length
+      });
       return rawTx;
     } catch (error) {
       console.warn(`[TxCache] JungleBus failed for ${txid}: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -464,7 +470,13 @@ export class TxCache {
     try {
       const rawTx = await this.fetchFromWhatOnChain(txid, firstNetwork === 'main' ? 'mainnet' : 'testnet');
       console.log(`[TxCache] Fetched ${txid} from WhatOnChain (${firstNetwork})`);
-      this.set(txid, rawTx, firstNetwork);
+
+      // Decode to get metadata
+      const tx = Transaction.fromHex(rawTx);
+      this.set(txid, rawTx, firstNetwork, {
+        inputCount: tx.inputs.length,
+        outputCount: tx.outputs.length
+      });
       return rawTx;
     } catch (firstError) {
       console.warn(`[TxCache] WhatOnChain ${firstNetwork} failed for ${txid}, trying ${secondNetwork}...`);
@@ -473,7 +485,13 @@ export class TxCache {
       try {
         const rawTx = await this.fetchFromWhatOnChain(txid, secondNetwork === 'main' ? 'mainnet' : 'testnet');
         console.log(`[TxCache] Fetched ${txid} from WhatOnChain (${secondNetwork})`);
-        this.set(txid, rawTx, secondNetwork);
+
+        // Decode to get metadata
+        const tx = Transaction.fromHex(rawTx);
+        this.set(txid, rawTx, secondNetwork, {
+          inputCount: tx.inputs.length,
+          outputCount: tx.outputs.length
+        });
         return rawTx;
       } catch (secondError) {
         throw new Error(`Failed to fetch ${txid} from all sources (JungleBus, WhatOnChain main/test)`);

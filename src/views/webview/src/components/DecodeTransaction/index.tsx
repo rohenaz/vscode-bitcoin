@@ -8,13 +8,13 @@ import {
   ResizablePanel,
   ResizablePanelGroup,
 } from '@/components/ui/resizable'
-import { Copy, Loader2, Edit, Radio, ExternalLink } from 'lucide-react'
+import { Copy, Loader2, Radio, ExternalLink } from 'lucide-react'
 import type { DecodedTransaction } from '../../types/decodedTransaction'
 import { TransactionInputs } from './TransactionInputs'
 import { TransactionOutputs } from './TransactionOutputs'
 import { ScriptDebugger } from '../ScriptDebugger'
 import type { SpendParams } from '../../types/scriptExecution'
-import { formatBytes, truncateTxid } from '../../utils/scriptParser'
+import { formatBytes } from '../../utils/scriptParser'
 import { getVscode } from '../../vscode'
 
 interface DecodeTransactionProps {
@@ -31,7 +31,6 @@ export function DecodeTransaction({ rawTxHex, onRawTxHexChange, openInWindow = f
   const [error, setError] = useState<string | null>(null)
   const [showScriptDebugger, setShowScriptDebugger] = useState(false)
   const [scriptDebuggerData, setScriptDebuggerData] = useState<any>(null)
-  const [showInput, setShowInput] = useState(true)
   const [onChain, setOnChain] = useState<boolean | null>(null)
   const [network, setNetwork] = useState<string>('mainnet')
 
@@ -57,12 +56,6 @@ export function DecodeTransaction({ rawTxHex, onRawTxHexChange, openInWindow = f
       type: 'transaction:decode',
       data: { rawTx: rawTxHex.trim() }
     })
-  }
-
-  const handleEdit = () => {
-    setShowInput(true)
-    setDecodedTx(null)
-    setError(null)
   }
 
   const handleCopy = (text: string, label: string) => {
@@ -98,7 +91,6 @@ export function DecodeTransaction({ rawTxHex, onRawTxHexChange, openInWindow = f
         setNetwork(message.data.network || 'mainnet')
         setIsDecoding(false)
         setError(null)
-        setShowInput(false)
         setOnChain(null) // Reset status, will be updated by onChainStatus message
       } else if (message.type === 'transaction:spendingInfo') {
         // Update outputs with spending information
@@ -187,17 +179,19 @@ export function DecodeTransaction({ rawTxHex, onRawTxHexChange, openInWindow = f
   } : null
 
   return (
-    <div className="space-y-4">
+    <div className="h-full flex flex-col">
       {/* Script Debugger */}
       {showScriptDebugger && spendParams && (
-        <ScriptDebugger
-          spendParams={spendParams}
-        />
+        <div className="p-4">
+          <ScriptDebugger
+            spendParams={spendParams}
+          />
+        </div>
       )}
 
-      {/* Input Area */}
-      {showInput && (
-        <div className="space-y-2">
+      {/* Input Area - Only shown when no decoded transaction */}
+      {!decodedTx && (
+        <div className="p-4 space-y-2">
           <Textarea
             placeholder="Paste raw transaction hex..."
             value={rawTxHex}
@@ -223,18 +217,100 @@ export function DecodeTransaction({ rawTxHex, onRawTxHexChange, openInWindow = f
 
       {/* Error Display */}
       {error && (
-        <Card className="p-4 border-destructive">
-          <p className="text-sm text-destructive">{error}</p>
-        </Card>
+        <div className="p-4">
+          <Card className="p-4 border-destructive">
+            <p className="text-sm text-destructive">{error}</p>
+          </Card>
+        </div>
       )}
 
       {/* Decoded Transaction Display */}
-      {decodedTx && !showInput && (
-        <div className="space-y-4">
-          {/* Transaction Summary - Fixed Top Section */}
-          <Card className="p-4">
-            {/* Status and Actions Row */}
-            <div className="flex items-center justify-between mb-4">
+      {decodedTx && (
+        <div className="flex-1 flex flex-col">
+          {/* Transaction Metadata */}
+          <div className="p-4 border-b">
+            <div className="grid grid-cols-2 gap-x-8 gap-y-2 text-xs">
+              {/* Left Column */}
+              <div className="space-y-2">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Size</span>
+                  <span className="font-mono">{formatBytes(decodedTx.size)}</span>
+                </div>
+
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Version</span>
+                  <span className="font-mono">{decodedTx.version}</span>
+                </div>
+
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Lock Time</span>
+                  <span className="font-mono">{decodedTx.lockTime}</span>
+                </div>
+              </div>
+
+              {/* Right Column */}
+              <div className="space-y-2">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Inputs</span>
+                  <span className="font-mono">{decodedTx.inputs.length}</span>
+                </div>
+
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Outputs</span>
+                  <span className="font-mono">{decodedTx.outputs.length}</span>
+                </div>
+
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Network</span>
+                  <span className="font-mono">{network}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Inputs and Outputs - Resizable */}
+          <div className="flex-1 overflow-hidden p-4">
+            <ResizablePanelGroup direction="horizontal" className="h-full">
+              {/* Inputs Panel */}
+              <ResizablePanel defaultSize={50} minSize={30}>
+                <div className="h-full flex flex-col">
+                  <h3 className="font-mono font-semibold text-sm p-2 border-b">
+                    Inputs ({decodedTx.inputs.length})
+                  </h3>
+                  <div className="flex-1 overflow-auto p-2">
+                    <TransactionInputs
+                      inputs={decodedTx.inputs}
+                      outputs={decodedTx.outputs}
+                      transactionVersion={decodedTx.version}
+                      transactionLockTime={decodedTx.lockTime}
+                      network={network}
+                    />
+                  </div>
+                </div>
+              </ResizablePanel>
+
+              <ResizableHandle withHandle />
+
+              {/* Outputs Panel */}
+              <ResizablePanel defaultSize={50} minSize={30}>
+                <div className="h-full flex flex-col">
+                  <h3 className="font-mono font-semibold text-sm p-2 border-b">
+                    Outputs ({decodedTx.outputs.length})
+                  </h3>
+                  <div className="flex-1 overflow-auto p-2">
+                    <TransactionOutputs
+                      outputs={decodedTx.outputs}
+                      network={network}
+                    />
+                  </div>
+                </div>
+              </ResizablePanel>
+            </ResizablePanelGroup>
+          </div>
+
+          {/* Status and Actions - Bottom */}
+          <div className="border-t p-4">
+            <div className="flex items-center justify-between">
               {onChain === true && (
                 <div className="text-xs text-green-600 dark:text-green-400 flex items-center gap-2">
                   <span>✓</span>
@@ -258,15 +334,6 @@ export function DecodeTransaction({ rawTxHex, onRawTxHexChange, openInWindow = f
                 >
                   <Copy className="mr-2 h-3 w-3" />
                   Copy Raw
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="text-xs"
-                  onClick={handleEdit}
-                >
-                  <Edit className="mr-2 h-3 w-3" />
-                  Edit
                 </Button>
                 <Button
                   variant="outline"
@@ -307,100 +374,7 @@ export function DecodeTransaction({ rawTxHex, onRawTxHexChange, openInWindow = f
                 </Button>
               </ButtonGroup>
             </div>
-
-            {/* 2-Column Grid */}
-            <div className="grid grid-cols-2 gap-x-8 gap-y-2 text-xs">
-              {/* Left Column */}
-              <div className="space-y-2">
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Transaction ID</span>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-5 w-5 p-0"
-                    onClick={() => handleCopy(decodedTx.txid, 'Transaction ID')}
-                  >
-                    <Copy className="h-3 w-3" />
-                  </Button>
-                </div>
-                <div className="font-mono text-[10px] break-all">{decodedTx.txid}</div>
-
-                <div className="flex justify-between pt-2">
-                  <span className="text-muted-foreground">Size</span>
-                  <span className="font-mono">{formatBytes(decodedTx.size)}</span>
-                </div>
-
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Version</span>
-                  <span className="font-mono">{decodedTx.version}</span>
-                </div>
-
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Lock Time</span>
-                  <span className="font-mono">{decodedTx.lockTime}</span>
-                </div>
-              </div>
-
-              {/* Right Column */}
-              <div className="space-y-2">
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Inputs</span>
-                  <span className="font-mono">{decodedTx.inputs.length}</span>
-                </div>
-
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Outputs</span>
-                  <span className="font-mono">{decodedTx.outputs.length}</span>
-                </div>
-
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Network</span>
-                  <span className="font-mono">{network}</span>
-                </div>
-              </div>
-            </div>
-          </Card>
-
-          {/* Separator */}
-          <div className="border-t border-border" />
-
-          {/* Inputs and Outputs - Resizable */}
-          <ResizablePanelGroup direction="horizontal" className="h-[calc(100vh-400px)] min-h-[400px]">
-            {/* Inputs Panel */}
-            <ResizablePanel defaultSize={50} minSize={30}>
-              <div className="h-full flex flex-col">
-                <h3 className="font-mono font-semibold text-sm p-2 border-b">
-                  Inputs ({decodedTx.inputs.length})
-                </h3>
-                <div className="flex-1 overflow-auto p-2">
-                  <TransactionInputs
-                    inputs={decodedTx.inputs}
-                    outputs={decodedTx.outputs}
-                    transactionVersion={decodedTx.version}
-                    transactionLockTime={decodedTx.lockTime}
-                    network={network}
-                  />
-                </div>
-              </div>
-            </ResizablePanel>
-
-            <ResizableHandle withHandle />
-
-            {/* Outputs Panel */}
-            <ResizablePanel defaultSize={50} minSize={30}>
-              <div className="h-full flex flex-col">
-                <h3 className="font-mono font-semibold text-sm p-2 border-b">
-                  Outputs ({decodedTx.outputs.length})
-                </h3>
-                <div className="flex-1 overflow-auto p-2">
-                  <TransactionOutputs
-                    outputs={decodedTx.outputs}
-                    network={network}
-                  />
-                </div>
-              </div>
-            </ResizablePanel>
-          </ResizablePanelGroup>
+          </div>
         </div>
       )}
     </div>

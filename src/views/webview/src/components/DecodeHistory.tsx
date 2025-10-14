@@ -27,7 +27,7 @@ import {
   ItemTitle,
 } from '@/components/ui/item'
 import { TxAvatar } from './TxAvatar'
-import { MoreHorizontal, Copy, Bug, Edit } from 'lucide-react'
+import { MoreHorizontal, Copy, Bug, Edit, Trash2, Badge } from 'lucide-react'
 import { getVscode } from '../vscode'
 import { formatBytes } from '../utils/scriptParser'
 
@@ -78,6 +78,13 @@ export function DecodeHistory({ history, onDecode, onDebug }: DecodeHistoryProps
     }
   }
 
+  const handleDelete = (txid: string) => {
+    vscode.postMessage({
+      type: 'transaction:delete',
+      data: { txid }
+    })
+  }
+
   const formatTimestamp = (timestamp: number): string => {
     const date = new Date(timestamp)
     const now = new Date()
@@ -92,12 +99,6 @@ export function DecodeHistory({ history, onDecode, onDebug }: DecodeHistoryProps
     if (diffDays < 7) return `${diffDays}d ago`
 
     return date.toLocaleDateString()
-  }
-
-  const formatTxid = (txid: string): string => {
-    // Show first 16 chars and last 8 chars
-    if (txid.length <= 24) return txid
-    return `${txid.slice(0, 16)}...${txid.slice(-8)}`
   }
 
   if (history.length === 0) {
@@ -124,12 +125,12 @@ export function DecodeHistory({ history, onDecode, onDebug }: DecodeHistoryProps
               <TxAvatar txid={entry.txid} size={32} />
             </ItemMedia>
             <ItemContent>
-              <ItemTitle className="font-mono text-xs">
-                {entry.label || formatTxid(entry.txid)}
+              <ItemTitle className="flex space-between font-mono text-xs">
+                <div className="w-full overflow-clip overflow-hidden text-ellipsis">{entry.label || `${entry.txid.slice(0, 16)}...${entry.txid.slice(-8)}`}</div>
                 {entry.network === 'testnet' && (
-                  <span className="ml-2 inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-medium bg-yellow-500/10 text-yellow-500">
+                  <Badge className="ml-2 inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-medium bg-yellow-500/10 text-yellow-500">
                     testnet
-                  </span>
+                  </Badge>
                 )}
               </ItemTitle>
               <ItemDescription className="text-[10px]">
@@ -161,6 +162,10 @@ export function DecodeHistory({ history, onDecode, onDebug }: DecodeHistoryProps
                     <DropdownMenuItem onSelect={() => handleRename(entry)}>
                       <Edit className="h-3 w-3 mr-2" />
                       Rename
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => handleDelete(entry.txid)} className="text-destructive focus:text-destructive">
+                      <Trash2 className="h-3 w-3 mr-2" />
+                      Delete
                     </DropdownMenuItem>
                   </DropdownMenuGroup>
                 </DropdownMenuContent>

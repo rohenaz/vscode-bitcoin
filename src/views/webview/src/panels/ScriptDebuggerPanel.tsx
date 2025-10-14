@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useParams } from 'react-router-dom'
 import { ScriptDebugger } from '../components/ScriptDebugger'
 import { ScriptDebuggerInput } from '../components/ScriptDebuggerInput'
+import { PanelHeader } from '../components/PanelHeader'
 import type { SpendParams } from '../types/scriptExecution'
 import '../App.css'
 
@@ -52,32 +53,24 @@ export function ScriptDebuggerPanel() {
     setSpendParams(null)
   }
 
+  const formatSubtitle = (): string | undefined => {
+    if (!spendParams?.sourceTXID) return undefined
+    const txidPart = `${spendParams.sourceTXID.slice(0, 16)}...${spendParams.sourceTXID.slice(-8)}`
+    const inputPart = spendParams.inputIndex !== undefined ? ` Input: ${spendParams.inputIndex}` : ''
+    return txidPart + inputPart
+  }
+
   return (
     <div className="h-screen flex flex-col bg-background">
-      {/* Sticky Header */}
-      <div className="sticky top-0 z-10 bg-background border-b border-border p-4">
-        <div className="flex items-center justify-between">
-          <h1 className="text-lg font-semibold">Script Debugger</h1>
-          {spendParams && (
-            <button
-              onClick={handleReset}
-              className="text-xs text-muted-foreground hover:text-foreground px-3 py-1 rounded hover:bg-accent"
-            >
-              New Script
-            </button>
-          )}
-        </div>
-        {spendParams?.sourceTXID && (
-          <div className="mt-2 text-xs text-muted-foreground font-mono">
-            <span className="opacity-60">TX:</span> {spendParams.sourceTXID.slice(0, 16)}...{spendParams.sourceTXID.slice(-8)}
-            {spendParams.inputIndex !== undefined && (
-              <span className="ml-3">
-                <span className="opacity-60">Input:</span> {spendParams.inputIndex}
-              </span>
-            )}
-          </div>
-        )}
-      </div>
+      {/* Header */}
+      <PanelHeader
+        title="Script Debugger"
+        subtitle={formatSubtitle()}
+        action={spendParams ? {
+          label: 'New Script',
+          onClick: handleReset
+        } : undefined}
+      />
 
       {/* Main Content */}
       <div className="flex-1 overflow-hidden px-4">

@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams } from 'react-router-dom'
 import { DecodeTransaction } from '../components/DecodeTransaction'
+import { PanelHeader } from '../components/PanelHeader'
 import { getVscode } from '../vscode'
 import '../App.css'
 
@@ -8,6 +9,7 @@ export function TransactionDecoderPanel() {
   const vscode = getVscode()
   const { txid: txidParam } = useParams<{ txid?: string }>()
   const [rawTxHex, setRawTxHex] = useState('')
+  const [decodedTxid, setDecodedTxid] = useState<string | null>(null)
   const shouldAutoDecode = useRef(false)
 
   // Initial setup - run once on mount
@@ -81,6 +83,10 @@ export function TransactionDecoderPanel() {
         setRawTxHex(message.data.rawTx)
         shouldAutoDecode.current = true
       }
+      // Extract txid from decoded transaction
+      else if (message.type === 'transaction:decoded' && message.data?.txid) {
+        setDecodedTxid(message.data.txid)
+      }
     }
 
     window.addEventListener('message', handleMessage)
@@ -91,8 +97,31 @@ export function TransactionDecoderPanel() {
     setRawTxHex(value)
   }
 
+  const handleExplore = () => {
+    if (decodedTxid) {
+      vscode.postMessage({
+        type: 'openExternal',
+        url: `https://whatsonchain.com/tx/${decodedTxid}`
+      })
+    }
+  }
+
+  const formatTxidDisplay = (txid: string): string => {
+    return `${txid.slice(0, 16)}...${txid.slice(-8)}`
+  }
+
   return (
     <div className="h-screen flex flex-col bg-background">
+      {/* Header */}
+      <PanelHeader
+        title="Transaction Decoder"
+        subtitle={decodedTxid ? formatTxidDisplay(decodedTxid) : undefined}
+        action={decodedTxid ? {
+          label: 'Explore',
+          onClick: handleExplore
+        } : undefined}
+      />
+
       {/* Main Content */}
       <div className="flex-1 overflow-hidden">
         <DecodeTransaction
