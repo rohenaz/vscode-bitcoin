@@ -45,14 +45,20 @@ export default function TransactionsTab({ openItems, onOpenChange }: Transaction
   }, [openItems, onOpenChange])
 
   const handleDecodeFromHistory = (entry: DecodeHistoryEntry) => {
-    // Request raw tx from backend (txCache)
+    // Open transaction decoder with txid - uses unified routing approach
+    const network = entry.network || 'main'
     vscode.postMessage({
-      type: 'decodeHistory:getRawTx',
-      data: {
-        txid: entry.txid,
-        action: 'decode',
-        network: entry.network || 'mainnet'
-      }
+      command: 'bitcoin.openTransactionDecoder',
+      args: [{ txid: entry.txid, network }]
+    })
+  }
+
+  const handleDebugFromHistory = (entry: DecodeHistoryEntry) => {
+    // Open script debugger with txid and network - it will fetch the tx and prompt for input selection
+    const network = entry.network || 'main'
+    vscode.postMessage({
+      command: 'bitcoin.openScriptDebugger',
+      args: [{ txid: entry.txid, network }]
     })
   }
 
@@ -108,7 +114,7 @@ export default function TransactionsTab({ openItems, onOpenChange }: Transaction
         <AccordionTrigger className="text-xs">
           <div className="flex items-center gap-2">
             <History className="h-3 w-3" />
-            Decode History
+            History
             {history.length > 0 && (
               <span className="ml-auto text-muted-foreground">({history.length})</span>
             )}
@@ -118,6 +124,7 @@ export default function TransactionsTab({ openItems, onOpenChange }: Transaction
           <DecodeHistory
             history={history}
             onDecode={handleDecodeFromHistory}
+            onDebug={handleDebugFromHistory}
           />
         </AccordionContent>
       </AccordionItem>

@@ -91,7 +91,7 @@ export function TransactionInputs({ inputs, outputs, transactionVersion, transac
       case 'ascii':
         return (
           <ScrollArea className="h-48 w-full rounded-md border border-border">
-            <pre className="text-[10px] font-mono whitespace-pre-wrap break-all bg-black/30 p-2">
+            <pre className="text-[10px] font-mono whitespace-pre-wrap break-all bg-muted p-2">
               {hexToAscii(script)}
             </pre>
           </ScrollArea>
@@ -99,7 +99,7 @@ export function TransactionInputs({ inputs, outputs, transactionVersion, transac
       case 'script':
         return (
           <ScrollArea className="h-48 w-full rounded-md border border-border">
-            <pre className="text-[10px] font-mono whitespace-pre-wrap break-all bg-black/30 p-2">
+            <pre className="text-[10px] font-mono whitespace-pre-wrap break-all bg-muted p-2">
               {scriptAsm}
             </pre>
           </ScrollArea>
@@ -108,7 +108,7 @@ export function TransactionInputs({ inputs, outputs, transactionVersion, transac
       default:
         return (
           <ScrollArea className="h-48 w-full rounded-md border border-border">
-            <pre className="text-[10px] font-mono whitespace-pre-wrap break-all bg-black/30 p-2">
+            <pre className="text-[10px] font-mono whitespace-pre-wrap break-all bg-muted p-2">
               {script}
             </pre>
           </ScrollArea>
@@ -117,7 +117,7 @@ export function TransactionInputs({ inputs, outputs, transactionVersion, transac
   }
 
   return (
-    <ul className="rounded bg-gradient-to-b from-[#1a1a1a] to-black space-y-1">
+    <ul className="rounded space-y-1">
       {inputs.map((input) => {
         const isExpanded = expandedIndex === input.index
         const address = input.lockingScript ? extractP2PKHAddress(input.lockingScript) : null
@@ -152,7 +152,7 @@ export function TransactionInputs({ inputs, outputs, transactionVersion, transac
                       </code>
                       <button
                         onClick={(e) => handleLoadTransaction(input.sourceTXID, e)}
-                        className="text-[10px] text-blue-500/80 hover:text-blue-400 w-fit"
+                        className="text-[10px] text-primary hover:underline w-fit"
                         title="Click to view source transaction"
                       >
                         via {truncateTxid(input.sourceTXID)} [{input.sourceOutputIndex}]
@@ -165,7 +165,7 @@ export function TransactionInputs({ inputs, outputs, transactionVersion, transac
                       </code>
                       <button
                         onClick={(e) => handleLoadTransaction(input.sourceTXID, e)}
-                        className="text-[10px] text-blue-500/80 hover:text-blue-400 w-fit"
+                        className="text-[10px] text-primary hover:underline w-fit"
                         title="Click to view source transaction"
                       >
                         via {truncateTxid(input.sourceTXID)} [{input.sourceOutputIndex}]
@@ -175,7 +175,7 @@ export function TransactionInputs({ inputs, outputs, transactionVersion, transac
                     <>
                       <button
                         onClick={(e) => handleLoadTransaction(input.sourceTXID, e)}
-                        className="text-xs font-mono text-blue-500/80 hover:text-blue-400 truncate w-fit"
+                        className="text-xs font-mono text-primary hover:underline truncate w-fit"
                         title="Click to view source transaction"
                       >
                         {truncateTxid(input.sourceTXID)}

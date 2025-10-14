@@ -19,7 +19,8 @@ export function AppRoutes() {
 
       {/* Script Debugger Routes */}
       <Route path="/debugger" element={<ScriptDebuggerPanel />} />
-      <Route path="/debugger/:txid/:inputIndex" element={<ScriptDebuggerPanel />} />
+      <Route path="/debugger/:network/:txid" element={<ScriptDebuggerPanel />} />
+      <Route path="/debugger/:network/:txid/:inputIndex" element={<ScriptDebuggerPanel />} />
 
       {/* Default redirect based on panel type */}
       <Route path="*" element={<Navigate to={getDefaultRoute()} replace />} />
@@ -63,10 +64,11 @@ export function getInitialRouterEntry(): string {
         }
         break
       case 'script-executor':
+        const network = initialData.network || 'main'
         if (initialData.txid && initialData.inputIndex !== undefined) {
-          return `/debugger/${initialData.txid}/${initialData.inputIndex}`
+          return `/debugger/${network}/${initialData.txid}/${initialData.inputIndex}`
         } else if (initialData.txid) {
-          return `/debugger/${initialData.txid}/0`
+          return `/debugger/${network}/${initialData.txid}`
         }
         break
     }

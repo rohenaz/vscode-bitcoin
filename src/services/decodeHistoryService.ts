@@ -61,9 +61,18 @@ export class DecodeHistoryService {
     // Remove existing entry with same txid if it exists
     this.history = this.history.filter(h => h.txid !== entry.txid);
 
+    // If network isn't provided, try to get it from txCache
+    let network = entry.network;
+    if (!network) {
+      const { txCache } = await import('./txCache');
+      const detectedNetwork = txCache.getNetwork(entry.txid);
+      network = detectedNetwork === 'test' ? 'test' : 'main';
+    }
+
     // Add new entry at the beginning
     this.history.unshift({
       ...entry,
+      network,
       timestamp: Date.now(),
     });
 

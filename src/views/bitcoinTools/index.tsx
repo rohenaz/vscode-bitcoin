@@ -19,20 +19,18 @@ import { BapPanel } from '../../bapPanel';
 import { MARKET_API_HOST } from '../../constants';
 import { createIdentitySigner } from '../../utils/identitySigner';
 import type { LocalSigner } from 'js-1sat-ord';
-import { DecodeHistoryService } from '../../services/decodeHistoryService';
+import { txCache } from '../../services/txCache';
 
 export class BitcoinToolsViewProvider implements vscode.WebviewViewProvider {
   public static readonly viewType = 'bitcoin.toolsView';
   private _view?: vscode.WebviewView;
   private scriptDebuggers: Map<string, any> = new Map(); // Will hold ScriptDebugger instances
-  private _historyService?: DecodeHistoryService;
 
   constructor(
     private readonly _extensionUri: vscode.Uri,
     private readonly _vault: KeyVault,
     private readonly _context: vscode.ExtensionContext
   ) {
-    this._historyService = new DecodeHistoryService(_context);
     // Listen for vault unlock events to update vault stats
     this._vault.onDidUnlock(() => {
       if (this._view) {
@@ -222,7 +220,15 @@ export class BitcoinToolsViewProvider implements vscode.WebviewViewProvider {
 
         // Handle decode history messages
         if (message.type === 'decodeHistory:get') {
-          const history = this._historyService?.getHistory() || [];
+          const history = txCache.listAll().map(tx => ({
+            txid: tx.txid,
+            size: tx.size,
+            inputCount: tx.inputCount || 0,
+            outputCount: tx.outputCount || 0,
+            network: tx.network === 'test' ? 'testnet' : 'mainnet',
+            timestamp: tx.lastAccessed,
+            label: tx.label
+          }));
           webviewView.webview.postMessage({
             type: 'decodeHistory:data',
             data: history
@@ -230,18 +236,45 @@ export class BitcoinToolsViewProvider implements vscode.WebviewViewProvider {
           return;
         }
 
+        // Handle transaction label update
+        if (message.type === 'transaction:setLabel') {
+          const { txid, label } = message.data;
+          const success = txCache.setLabel(txid, label);
+
+          if (success) {
+            // Refresh history to show updated label
+            const history = txCache.listAll().map(tx => ({
+              txid: tx.txid,
+              size: tx.size,
+              inputCount: tx.inputCount || 0,
+              outputCount: tx.outputCount || 0,
+              network: tx.network === 'test' ? 'testnet' : 'mainnet',
+              timestamp: tx.lastAccessed,
+              label: tx.label
+            }));
+            webviewView.webview.postMessage({
+              type: 'decodeHistory:data',
+              data: history
+            });
+          }
+          return;
+        }
+
         // Handle request for raw tx from decode history
         if (message.type === 'decodeHistory:getRawTx') {
           const { txid, action } = message.data;
-          const { txCache } = await import('../../services/txCache');
 
           try {
-            // Try to get from cache first, if not found, fetch from network
-            let rawTx = txCache.get(txid);
-            if (!rawTx) {
-              // Fetch from network and cache it
-              const network = message.data.network || 'mainnet';
-              rawTx = await txCache.fetch(txid, network);
+            // Try to get from cache first (checks both networks), if not found, fetch from network
+            let rawTx: string;
+
+            const cached = txCache.get(txid);
+            if (cached) {
+              rawTx = cached.rawTxHex;
+            } else {
+              // Fetch from network and cache it (will auto-detect and save network)
+              const preferredNetwork = message.data.network || 'mainnet';
+              rawTx = await txCache.fetch(txid, preferredNetwork);
             }
 
             if (action === 'decode') {
@@ -319,7 +352,9 @@ export class BitcoinToolsViewProvider implements vscode.WebviewViewProvider {
         } else if (message.command === 'downloadOrdinal' && message.origin) {
           await this.handleDownloadOrdinal(webviewView, message.origin, message.contentType);
         } else {
-          vscode.commands.executeCommand(message.command);
+          // Execute command with args if provided
+          const args = message.args || [];
+          vscode.commands.executeCommand(message.command, ...args);
         }
       }
     });
@@ -1075,9 +1110,16 @@ export class BitcoinToolsViewProvider implements vscode.WebviewViewProvider {
   ) {
     try {
       const tx = Transaction.fromHex(data.rawTx);
+      const txid = tx.id('hex') as string;
+
+      // Save to txCache for persistent history with metadata
+      txCache.set(txid, data.rawTx, 'main', {
+        inputCount: tx.inputs.length,
+        outputCount: tx.outputs.length
+      });
 
       const decodedTx = {
-        txid: tx.id('hex') as string,
+        txid,
         version: tx.version,
         lockTime: tx.lockTime,
         size: data.rawTx.length / 2,
@@ -1224,7 +1266,6 @@ export class BitcoinToolsViewProvider implements vscode.WebviewViewProvider {
       );
 
       // Fetch the source transaction to get the locking script using unified txCache
-      const { txCache } = await import('../../services/txCache');
       const sourceRawTx = await txCache.fetch(data.sourceTXID);
       const sourceTx = Transaction.fromHex(sourceRawTx);
 

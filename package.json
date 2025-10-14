@@ -430,6 +430,11 @@
           "maximum": 10240,
           "description": "Maximum size in MB for transaction storage (minimum 10MB, maximum 10GB). Oldest transactions will be pruned when limit is reached."
         },
+        "bitcoin.storage.useProjectLevel": {
+          "type": "boolean",
+          "default": false,
+          "description": "Store transaction cache at project level ([project]/.bitcoin) instead of user level (~/.bitcoin). Useful if you want to commit cached transactions to the project repository."
+        },
         "bitcoin.outputPreference": {
           "type": "string",
           "enum": ["clipboard", "file", "workspace"],

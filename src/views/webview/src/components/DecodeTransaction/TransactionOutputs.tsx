@@ -29,7 +29,7 @@ export function TransactionOutputs({ outputs, highlightIndex, network = 'mainnet
   }
 
   return (
-    <ul className="rounded bg-gradient-to-b from-[#1a1a1a] to-black space-y-1">
+    <ul className="rounded space-y-1">
       {outputs.map((output) => {
         const scriptInfo = detectScriptType(output.lockingScriptAsm)
         const address = scriptInfo.type === 'p2pkh' ? extractP2PKHAddress(output.lockingScript) : null
@@ -40,7 +40,7 @@ export function TransactionOutputs({ outputs, highlightIndex, network = 'mainnet
           <li
             key={`output-${output.index}`}
             className={`rounded ${
-              isHighlighted ? 'bg-accent/30 ring-1 ring-primary' : ''
+              isHighlighted ? 'bg-accent' : ''
             }`}
           >
             <div

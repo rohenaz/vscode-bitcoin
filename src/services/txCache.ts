@@ -54,11 +54,20 @@ interface TransactionMetadata {
   size: number;
   timestamp: number;
   lastAccessed: number;
+  network: 'main' | 'test';
+  label?: string;
+  inputCount?: number;
+  outputCount?: number;
 }
 
 interface StorageIndex {
   transactions: { [txid: string]: Omit<TransactionMetadata, 'txid'> };
   totalSize: number;
+}
+
+export interface CachedTransaction {
+  rawTxHex: string;
+  network: 'main' | 'test';
 }
 
 export interface CacheStats {
@@ -73,15 +82,17 @@ export interface CacheStats {
  * Unified transaction cache with persistent file-system storage and LRU pruning.
  *
  * Features:
- * - File-based cache (.bitcoin/transactions/<txid>.hex)
+ * - Network-aware file-based cache (.bitcoin/transactions/main/<txid>.hex, .bitcoin/transactions/test/<txid>.hex)
  * - LRU (Least Recently Used) pruning
  * - Configurable size limits (10MB-10GB, default 100MB)
- * - Unified fetch: Cache → JungleBus → WhatOnChain → Error
+ * - Unified fetch: Cache → JungleBus → WhatOnChain main → WhatOnChain test → Error
  * - Batch operations
  * - Transaction decoding
  */
 export class TxCache {
   private transactionsDir: string;
+  private mainNetDir: string;
+  private testNetDir: string;
   private indexFile: string;
   private index: StorageIndex;
   private readonly ABSOLUTE_MIN_SIZE_MB = 10;
@@ -90,35 +101,61 @@ export class TxCache {
   constructor(workspaceRoot?: string) {
     const bitcoinDir = this.getBitcoinDirectory(workspaceRoot);
     this.transactionsDir = path.join(bitcoinDir, 'transactions');
+    this.mainNetDir = path.join(this.transactionsDir, 'main');
+    this.testNetDir = path.join(this.transactionsDir, 'test');
     this.indexFile = path.join(this.transactionsDir, 'index.json');
 
-    this.ensureDirectory();
+    console.log('[TxCache] Initializing with paths:', {
+      bitcoinDir,
+      transactionsDir: this.transactionsDir,
+      mainNetDir: this.mainNetDir,
+      testNetDir: this.testNetDir,
+      indexFile: this.indexFile
+    });
+
+    this.ensureDirectories();
     this.index = this.loadIndex();
+    console.log('[TxCache] Loaded index:', {
+      transactionCount: Object.keys(this.index.transactions).length,
+      totalSize: this.index.totalSize
+    });
   }
 
   private getBitcoinDirectory(workspaceRoot?: string): string {
-    if (workspaceRoot) {
-      const config = vsApi.workspace.getConfiguration('bitcoin');
-      const bitcoinPath = config.get<string>('workspace.path') || '.bitcoin';
-      return path.join(workspaceRoot, bitcoinPath);
-    }
-
     const config = vsApi.workspace.getConfiguration('bitcoin');
     const bitcoinPath = config.get<string>('workspace.path') || '.bitcoin';
 
-    if (!vsApi?.workspace?.workspaceFolders?.length) {
-      const homeDir = process.env.HOME || process.env.USERPROFILE || '.';
-      return path.join(homeDir, bitcoinPath);
+    // If workspaceRoot explicitly provided, use it (for project-level operations)
+    if (workspaceRoot) {
+      return path.join(workspaceRoot, bitcoinPath);
     }
 
-    const wsRoot = vsApi.workspace.workspaceFolders[0].uri.fsPath;
-    return path.join(wsRoot, bitcoinPath);
+    // Check if user wants project-level storage (opt-in via config)
+    const useProjectLevel = config.get<boolean>('storage.useProjectLevel') || false;
+
+    if (useProjectLevel && vsApi?.workspace?.workspaceFolders?.length) {
+      // Project-level: Store in workspace folder (can be committed)
+      const wsRoot = vsApi.workspace.workspaceFolders[0].uri.fsPath;
+      return path.join(wsRoot, bitcoinPath);
+    }
+
+    // Default: User-level storage in home directory (shared across all projects)
+    const homeDir = process.env.HOME || process.env.USERPROFILE || '.';
+    return path.join(homeDir, bitcoinPath);
   }
 
-  private ensureDirectory(): void {
-    if (!fs.existsSync(this.transactionsDir)) {
-      fs.mkdirSync(this.transactionsDir, { recursive: true });
+  private ensureDirectories(): void {
+    if (!fs.existsSync(this.mainNetDir)) {
+      fs.mkdirSync(this.mainNetDir, { recursive: true });
     }
+    if (!fs.existsSync(this.testNetDir)) {
+      fs.mkdirSync(this.testNetDir, { recursive: true });
+    }
+  }
+
+  private getFilePath(txid: string, network: 'main' | 'test'): string {
+    const dir = network === 'test' ? this.testNetDir : this.mainNetDir;
+    return path.join(dir, `${txid}.hex`);
   }
 
   private loadIndex(): StorageIndex {
@@ -181,7 +218,7 @@ export class TxCache {
         break;
       }
 
-      this.deleteTransactionFile(tx.txid);
+      this.deleteTransactionFile(tx.txid, tx.network);
       delete this.index.transactions[tx.txid];
       currentSize -= tx.size;
 
@@ -192,8 +229,8 @@ export class TxCache {
     this.saveIndex();
   }
 
-  private deleteTransactionFile(txid: string): void {
-    const filePath = path.join(this.transactionsDir, `${txid}.hex`);
+  private deleteTransactionFile(txid: string, network: 'main' | 'test'): void {
+    const filePath = this.getFilePath(txid, network);
     try {
       if (fs.existsSync(filePath)) {
         fs.unlinkSync(filePath);
@@ -243,40 +280,79 @@ export class TxCache {
 
   /**
    * Get transaction from cache (local file only)
+   * Checks both main and test networks
    */
-  get(txid: string): string | null {
-    const filePath = path.join(this.transactionsDir, `${txid}.hex`);
-
-    if (!fs.existsSync(filePath)) {
-      return null;
-    }
-
-    try {
-      const rawTxHex = fs.readFileSync(filePath, 'utf-8');
-
-      // Update last accessed time (LRU tracking)
-      if (this.index.transactions[txid]) {
-        this.index.transactions[txid].lastAccessed = Date.now();
-        this.saveIndex();
+  get(txid: string): CachedTransaction | null {
+    // Check if we have metadata (tells us which network)
+    const meta = this.index.transactions[txid];
+    if (meta) {
+      const filePath = this.getFilePath(txid, meta.network);
+      if (fs.existsSync(filePath)) {
+        try {
+          const rawTxHex = fs.readFileSync(filePath, 'utf-8');
+          // Update last accessed time (LRU tracking)
+          meta.lastAccessed = Date.now();
+          this.saveIndex();
+          return { rawTxHex, network: meta.network };
+        } catch (error) {
+          console.error(`[TxCache] Failed to load ${txid} from ${meta.network}:`, error);
+        }
       }
-
-      return rawTxHex;
-    } catch (error) {
-      console.error(`[TxCache] Failed to load ${txid}:`, error);
-      return null;
     }
+
+    // Fallback: check both networks if metadata is missing or file doesn't exist
+    for (const network of ['main', 'test'] as const) {
+      const filePath = this.getFilePath(txid, network);
+      if (fs.existsSync(filePath)) {
+        try {
+          const rawTxHex = fs.readFileSync(filePath, 'utf-8');
+          // Rebuild metadata if missing
+          if (!this.index.transactions[txid]) {
+            const size = Buffer.byteLength(rawTxHex, 'utf-8');
+            this.index.transactions[txid] = {
+              size,
+              timestamp: Date.now(),
+              lastAccessed: Date.now(),
+              network
+            };
+            this.index.totalSize += size;
+            this.saveIndex();
+          }
+          return { rawTxHex, network };
+        } catch (error) {
+          console.error(`[TxCache] Failed to load ${txid} from ${network}:`, error);
+        }
+      }
+    }
+
+    return null;
   }
 
   /**
-   * Save transaction to cache
+   * Save transaction to cache with network information
    */
-  set(txid: string, rawTxHex: string): void {
+  set(txid: string, rawTxHex: string, network: 'main' | 'test' = 'main', metadata?: { inputCount?: number; outputCount?: number }): void {
     const size = Buffer.byteLength(rawTxHex, 'utf-8');
     const now = Date.now();
 
     const existing = this.index.transactions[txid];
     if (existing) {
+      // If network changed, delete old file and update
+      if (existing.network !== network) {
+        this.deleteTransactionFile(txid, existing.network);
+        this.index.totalSize -= existing.size;
+      }
       existing.lastAccessed = now;
+      existing.network = network;
+
+      // Update metadata if provided
+      if (metadata?.inputCount !== undefined) {
+        existing.inputCount = metadata.inputCount;
+      }
+      if (metadata?.outputCount !== undefined) {
+        existing.outputCount = metadata.outputCount;
+      }
+
       this.saveIndex();
       console.log(`[TxCache] Updated access time for ${txid}`);
       return;
@@ -284,18 +360,29 @@ export class TxCache {
 
     this.pruneIfNeeded(size);
 
-    const filePath = path.join(this.transactionsDir, `${txid}.hex`);
-    fs.writeFileSync(filePath, rawTxHex, 'utf-8');
+    const filePath = this.getFilePath(txid, network);
+    console.log(`[TxCache] Writing ${txid} to: ${filePath}`);
+
+    try {
+      fs.writeFileSync(filePath, rawTxHex, 'utf-8');
+      console.log(`[TxCache] Successfully wrote file: ${filePath}`);
+    } catch (error) {
+      console.error(`[TxCache] FAILED to write ${filePath}:`, error);
+      throw error;
+    }
 
     this.index.transactions[txid] = {
       size,
       timestamp: now,
-      lastAccessed: now
+      lastAccessed: now,
+      network,
+      inputCount: metadata?.inputCount,
+      outputCount: metadata?.outputCount
     };
     this.index.totalSize += size;
     this.saveIndex();
 
-    console.log(`[TxCache] Saved ${txid} (${size} bytes). Total: ${this.index.totalSize} bytes`);
+    console.log(`[TxCache] Saved ${txid} to ${network} (${size} bytes). Total: ${this.index.totalSize} bytes`);
   }
 
   /**
@@ -303,6 +390,23 @@ export class TxCache {
    */
   exists(txid: string): boolean {
     return !!this.index.transactions[txid];
+  }
+
+  /**
+   * Get network for a transaction if it's in cache
+   */
+  getNetwork(txid: string): 'main' | 'test' | null {
+    return this.index.transactions[txid]?.network || null;
+  }
+
+  /**
+   * List all cached transactions with metadata
+   */
+  listAll(): Array<TransactionMetadata & { txid: string }> {
+    return Object.entries(this.index.transactions).map(([txid, meta]) => ({
+      txid,
+      ...meta
+    })).sort((a, b) => b.lastAccessed - a.lastAccessed); // Most recent first
   }
 
   /**
@@ -314,7 +418,7 @@ export class TxCache {
       return false;
     }
 
-    this.deleteTransactionFile(txid);
+    this.deleteTransactionFile(txid, meta.network);
     this.index.totalSize -= meta.size;
     delete this.index.transactions[txid];
     this.saveIndex();
@@ -325,49 +429,54 @@ export class TxCache {
 
   /**
    * Fetch transaction with unified fallback strategy
-   * Order: Cache → JungleBus → WhatOnChain → Error
+   * Order: Cache → JungleBus → WhatOnChain main → WhatOnChain test → Error
+   * Automatically detects and saves network information
    *
    * @param txid Transaction ID
-   * @param network Network to use for WhatOnChain fallback (default: 'mainnet')
+   * @param preferredNetwork Preferred network to try first (default: 'mainnet')
    * @returns Raw transaction hex
    */
-  async fetch(txid: string, network: string = 'mainnet'): Promise<string> {
-    // 1. Check cache
+  async fetch(txid: string, preferredNetwork: string = 'mainnet'): Promise<string> {
+    // 1. Check cache (checks both networks automatically)
     const cached = this.get(txid);
     if (cached) {
-      console.log(`[TxCache] Cache hit for ${txid}`);
-      return cached;
+      console.log(`[TxCache] Cache hit for ${txid} on ${cached.network}`);
+      return cached.rawTxHex;
     }
 
     console.log(`[TxCache] Cache miss for ${txid}, fetching...`);
 
-    // 2. Try JungleBus (primary)
+    // 2. Try JungleBus (primary) - assume mainnet since JungleBus is mainnet-only
     try {
       const rawTx = await this.fetchFromJungleBus(txid);
-      console.log(`[TxCache] Fetched ${txid} from JungleBus`);
-      this.set(txid, rawTx);
+      console.log(`[TxCache] Fetched ${txid} from JungleBus (mainnet)`);
+      this.set(txid, rawTx, 'main');
       return rawTx;
     } catch (error) {
       console.warn(`[TxCache] JungleBus failed for ${txid}: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
 
-    // 3. Fallback to WhatOnChain (try mainnet)
-    try {
-      const rawTx = await this.fetchFromWhatOnChain(txid, 'mainnet');
-      console.log(`[TxCache] Fetched ${txid} from WhatOnChain (mainnet)`);
-      this.set(txid, rawTx);
-      return rawTx;
-    } catch (mainnetError) {
-      console.warn(`[TxCache] WhatOnChain mainnet failed for ${txid}, trying testnet...`);
+    // 3. Try WhatOnChain - prefer the user's specified network first
+    const firstNetwork = preferredNetwork === 'testnet' || preferredNetwork === 'test' ? 'test' : 'main';
+    const secondNetwork = firstNetwork === 'main' ? 'test' : 'main';
 
-      // 4. Last resort: WhatOnChain testnet
+    // Try preferred network first
+    try {
+      const rawTx = await this.fetchFromWhatOnChain(txid, firstNetwork === 'main' ? 'mainnet' : 'testnet');
+      console.log(`[TxCache] Fetched ${txid} from WhatOnChain (${firstNetwork})`);
+      this.set(txid, rawTx, firstNetwork);
+      return rawTx;
+    } catch (firstError) {
+      console.warn(`[TxCache] WhatOnChain ${firstNetwork} failed for ${txid}, trying ${secondNetwork}...`);
+
+      // 4. Last resort: try other network
       try {
-        const rawTx = await this.fetchFromWhatOnChain(txid, 'testnet');
-        console.log(`[TxCache] Fetched ${txid} from WhatOnChain (testnet)`);
-        this.set(txid, rawTx);
+        const rawTx = await this.fetchFromWhatOnChain(txid, secondNetwork === 'main' ? 'mainnet' : 'testnet');
+        console.log(`[TxCache] Fetched ${txid} from WhatOnChain (${secondNetwork})`);
+        this.set(txid, rawTx, secondNetwork);
         return rawTx;
-      } catch (testnetError) {
-        throw new Error(`Failed to fetch ${txid} from all sources (JungleBus, WhatOnChain mainnet/testnet)`);
+      } catch (secondError) {
+        throw new Error(`Failed to fetch ${txid} from all sources (JungleBus, WhatOnChain main/test)`);
       }
     }
   }
@@ -551,7 +660,7 @@ export class TxCache {
         break;
       }
 
-      this.deleteTransactionFile(tx.txid);
+      this.deleteTransactionFile(tx.txid, tx.network);
       delete this.index.transactions[tx.txid];
       currentSize -= tx.size;
       prunedCount++;
@@ -568,9 +677,9 @@ export class TxCache {
    * Clear entire cache
    */
   clear(): void {
-    const txids = Object.keys(this.index.transactions);
-    for (const txid of txids) {
-      this.deleteTransactionFile(txid);
+    const entries = Object.entries(this.index.transactions);
+    for (const [txid, meta] of entries) {
+      this.deleteTransactionFile(txid, meta.network);
     }
 
     this.index = {
@@ -580,6 +689,22 @@ export class TxCache {
     this.saveIndex();
 
     console.log('[TxCache] Cleared all transactions');
+  }
+
+  /**
+   * Update transaction label
+   */
+  setLabel(txid: string, label: string): boolean {
+    const tx = this.index.transactions[txid];
+    if (!tx) {
+      console.warn(`[TxCache] Cannot set label for non-existent transaction ${txid}`);
+      return false;
+    }
+
+    tx.label = label || undefined;
+    this.saveIndex();
+    console.log(`[TxCache] Updated label for ${txid}: "${label}"`);
+    return true;
   }
 
   /**

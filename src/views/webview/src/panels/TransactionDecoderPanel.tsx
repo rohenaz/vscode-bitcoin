@@ -25,15 +25,25 @@ export function TransactionDecoderPanel() {
 
   // Load transaction from INITIAL_DATA or route params
   useEffect(() => {
-    // Check if we have INITIAL_DATA with rawTxHex (new architecture)
-    const initialData = window.INITIAL_DATA
+    const initialData = window.INITIAL_DATA as any
+
+    // Check if we have INITIAL_DATA with rawTxHex (immediate display)
     if (initialData?.rawTxHex) {
-      console.log('[TransactionDecoderPanel] Loading from INITIAL_DATA:', initialData.txid)
+      console.log('[TransactionDecoderPanel] Loading rawTx from INITIAL_DATA:', initialData.txid)
       setRawTxHex(initialData.rawTxHex)
       shouldAutoDecode.current = true
-    } else if (txidParam) {
-      // If we have a txid in the route but no INITIAL_DATA, we need to fetch it
-      // This shouldn't normally happen in the new architecture, but handle it gracefully
+    }
+    // Check if we have INITIAL_DATA with just txid (need to fetch)
+    else if (initialData?.txid) {
+      console.log('[TransactionDecoderPanel] Loading txid from INITIAL_DATA:', initialData.txid)
+      const network = initialData.network === 'test' ? 'testnet' : 'mainnet'
+      vscode.postMessage({
+        type: 'transaction:loadByTxid',
+        data: { txid: initialData.txid, network }
+      })
+    }
+    // Fallback: route param with no INITIAL_DATA
+    else if (txidParam) {
       console.log('[TransactionDecoderPanel] Route has txid but no INITIAL_DATA, requesting load:', txidParam)
       vscode.postMessage({
         type: 'transaction:loadByTxid',
@@ -59,8 +69,14 @@ export function TransactionDecoderPanel() {
     const handleMessage = (event: MessageEvent) => {
       const message = event.data
 
-      // Handle transaction loaded by txid
-      if (message.type === 'transaction:decoded' && message.data?.rawTx) {
+      // Handle transaction loaded by txid (from backend fetch)
+      if (message.type === 'transaction:populate' && message.data?.rawTxHex) {
+        console.log('[TransactionDecoderPanel] Received transaction from backend')
+        setRawTxHex(message.data.rawTxHex)
+        shouldAutoDecode.current = true
+      }
+      // Handle transaction decoded (legacy)
+      else if (message.type === 'transaction:decoded' && message.data?.rawTx) {
         console.log('[TransactionDecoderPanel] Received decoded transaction')
         setRawTxHex(message.data.rawTx)
         shouldAutoDecode.current = true

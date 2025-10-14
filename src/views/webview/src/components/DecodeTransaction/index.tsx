@@ -230,150 +230,178 @@ export function DecodeTransaction({ rawTxHex, onRawTxHexChange, openInWindow = f
 
       {/* Decoded Transaction Display */}
       {decodedTx && !showInput && (
-        <ResizablePanelGroup direction="vertical" className="h-[calc(100vh-200px)] min-h-[600px]">
-          {/* Transaction Summary Panel */}
-          <ResizablePanel defaultSize={25} minSize={15}>
-            <div className="p-4 space-y-2 h-full overflow-auto">
-              <div className="flex justify-between items-center text-xs">
-                <span className="text-muted-foreground">Transaction ID</span>
-                <div className="flex items-center gap-2">
-                  <code className="font-mono text-[10px]">{truncateTxid(decodedTx.txid)}</code>
+        <div className="space-y-4">
+          {/* Transaction Summary - Fixed Top Section */}
+          <Card className="p-4">
+            {/* Status and Actions Row */}
+            <div className="flex items-center justify-between mb-4">
+              {onChain === true && (
+                <div className="text-xs text-green-600 dark:text-green-400 flex items-center gap-2">
+                  <span>✓</span>
+                  <span>Transaction found on chain</span>
+                </div>
+              )}
+              {onChain === false && (
+                <div className="text-xs text-muted-foreground flex items-center gap-2">
+                  <span>⊘</span>
+                  <span>Not found on chain</span>
+                </div>
+              )}
+              {onChain === null && <div />}
+
+              <ButtonGroup>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="text-xs"
+                  onClick={() => handleCopy(rawTxHex, 'Raw Transaction')}
+                >
+                  <Copy className="mr-2 h-3 w-3" />
+                  Copy Raw
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="text-xs"
+                  onClick={handleEdit}
+                >
+                  <Edit className="mr-2 h-3 w-3" />
+                  Edit
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="text-xs"
+                  onClick={() => {
+                    const baseUrl = network === 'testnet'
+                      ? 'https://test.whatsonchain.com'
+                      : 'https://whatsonchain.com'
+                    vscode.postMessage({
+                      type: 'openExternal',
+                      url: `${baseUrl}/tx/${decodedTx.txid}`
+                    })
+                  }}
+                >
+                  <ExternalLink className="mr-2 h-3 w-3" />
+                  View
+                </Button>
+                <Button
+                  variant="default"
+                  size="sm"
+                  className="text-xs"
+                  onClick={handleBroadcast}
+                  disabled={isBroadcasting || onChain === true}
+                  title={onChain === true ? 'Transaction already on chain' : 'Broadcast to network'}
+                >
+                  {isBroadcasting ? (
+                    <>
+                      <Loader2 className="mr-2 h-3 w-3 animate-spin" />
+                      Broadcasting...
+                    </>
+                  ) : (
+                    <>
+                      <Radio className="mr-2 h-3 w-3" />
+                      Broadcast
+                    </>
+                  )}
+                </Button>
+              </ButtonGroup>
+            </div>
+
+            {/* 2-Column Grid */}
+            <div className="grid grid-cols-2 gap-x-8 gap-y-2 text-xs">
+              {/* Left Column */}
+              <div className="space-y-2">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Transaction ID</span>
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="h-6 w-6 p-0"
+                    className="h-5 w-5 p-0"
                     onClick={() => handleCopy(decodedTx.txid, 'Transaction ID')}
                   >
                     <Copy className="h-3 w-3" />
                   </Button>
                 </div>
+                <div className="font-mono text-[10px] break-all">{decodedTx.txid}</div>
+
+                <div className="flex justify-between pt-2">
+                  <span className="text-muted-foreground">Size</span>
+                  <span className="font-mono">{formatBytes(decodedTx.size)}</span>
+                </div>
+
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Version</span>
+                  <span className="font-mono">{decodedTx.version}</span>
+                </div>
+
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Lock Time</span>
+                  <span className="font-mono">{decodedTx.lockTime}</span>
+                </div>
               </div>
 
-              <div className="flex justify-between text-xs">
-                <span className="text-muted-foreground">Size</span>
-                <span className="font-mono">{formatBytes(decodedTx.size)}</span>
-              </div>
+              {/* Right Column */}
+              <div className="space-y-2">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Inputs</span>
+                  <span className="font-mono">{decodedTx.inputs.length}</span>
+                </div>
 
-              <div className="flex justify-between text-xs">
-                <span className="text-muted-foreground">Version</span>
-                <span className="font-mono">{decodedTx.version}</span>
-              </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Outputs</span>
+                  <span className="font-mono">{decodedTx.outputs.length}</span>
+                </div>
 
-              <div className="flex justify-between text-xs">
-                <span className="text-muted-foreground">Lock Time</span>
-                <span className="font-mono">{decodedTx.lockTime}</span>
-              </div>
-
-              <div className="pt-2 border-t border-border space-y-2">
-                {onChain === true && (
-                  <div className="text-xs text-green-500 flex items-center gap-2">
-                    <span>✓</span>
-                    <span>Transaction found on chain</span>
-                  </div>
-                )}
-                <ButtonGroup className="w-full">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="text-xs"
-                    onClick={() => handleCopy(rawTxHex, 'Raw Transaction')}
-                  >
-                    <Copy className="mr-2 h-3 w-3" />
-                    Copy Raw
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="text-xs"
-                    onClick={handleEdit}
-                  >
-                    <Edit className="mr-2 h-3 w-3" />
-                    Edit
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="text-xs"
-                    onClick={() => {
-                      const baseUrl = network === 'testnet'
-                        ? 'https://test.whatsonchain.com'
-                        : 'https://whatsonchain.com'
-                      vscode.postMessage({
-                        type: 'openExternal',
-                        url: `${baseUrl}/tx/${decodedTx.txid}`
-                      })
-                    }}
-                  >
-                    <ExternalLink className="mr-2 h-3 w-3" />
-                    View
-                  </Button>
-                  <Button
-                    variant="default"
-                    size="sm"
-                    className="text-xs"
-                    onClick={handleBroadcast}
-                    disabled={isBroadcasting || onChain === true}
-                    title={onChain === true ? 'Transaction already on chain' : 'Broadcast to network'}
-                  >
-                    {isBroadcasting ? (
-                      <>
-                        <Loader2 className="mr-2 h-3 w-3 animate-spin" />
-                        Broadcasting...
-                      </>
-                    ) : (
-                      <>
-                        <Radio className="mr-2 h-3 w-3" />
-                        Broadcast
-                      </>
-                    )}
-                  </Button>
-                </ButtonGroup>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Network</span>
+                  <span className="font-mono">{network}</span>
+                </div>
               </div>
             </div>
-          </ResizablePanel>
+          </Card>
 
-          <ResizableHandle withHandle />
+          {/* Separator */}
+          <div className="border-t border-border" />
 
-          {/* Inputs and Outputs Panel */}
-          <ResizablePanel defaultSize={75} minSize={40}>
-            <ResizablePanelGroup direction="horizontal">
-              {/* Inputs Panel */}
-              <ResizablePanel defaultSize={50} minSize={30}>
-                <div className="h-full flex flex-col">
-                  <h3 className="font-mono font-semibold text-sm p-2 bg-background border-b">
-                    Inputs ({decodedTx.inputs.length})
-                  </h3>
-                  <div className="flex-1 overflow-auto p-2">
-                    <TransactionInputs
-                      inputs={decodedTx.inputs}
-                      outputs={decodedTx.outputs}
-                      transactionVersion={decodedTx.version}
-                      transactionLockTime={decodedTx.lockTime}
-                      network={network}
-                    />
-                  </div>
+          {/* Inputs and Outputs - Resizable */}
+          <ResizablePanelGroup direction="horizontal" className="h-[calc(100vh-400px)] min-h-[400px]">
+            {/* Inputs Panel */}
+            <ResizablePanel defaultSize={50} minSize={30}>
+              <div className="h-full flex flex-col">
+                <h3 className="font-mono font-semibold text-sm p-2 border-b">
+                  Inputs ({decodedTx.inputs.length})
+                </h3>
+                <div className="flex-1 overflow-auto p-2">
+                  <TransactionInputs
+                    inputs={decodedTx.inputs}
+                    outputs={decodedTx.outputs}
+                    transactionVersion={decodedTx.version}
+                    transactionLockTime={decodedTx.lockTime}
+                    network={network}
+                  />
                 </div>
-              </ResizablePanel>
+              </div>
+            </ResizablePanel>
 
-              <ResizableHandle withHandle />
+            <ResizableHandle withHandle />
 
-              {/* Outputs Panel */}
-              <ResizablePanel defaultSize={50} minSize={30}>
-                <div className="h-full flex flex-col">
-                  <h3 className="font-mono font-semibold text-sm p-2 bg-background border-b">
-                    Outputs ({decodedTx.outputs.length})
-                  </h3>
-                  <div className="flex-1 overflow-auto p-2">
-                    <TransactionOutputs
-                      outputs={decodedTx.outputs}
-                      network={network}
-                    />
-                  </div>
+            {/* Outputs Panel */}
+            <ResizablePanel defaultSize={50} minSize={30}>
+              <div className="h-full flex flex-col">
+                <h3 className="font-mono font-semibold text-sm p-2 border-b">
+                  Outputs ({decodedTx.outputs.length})
+                </h3>
+                <div className="flex-1 overflow-auto p-2">
+                  <TransactionOutputs
+                    outputs={decodedTx.outputs}
+                    network={network}
+                  />
                 </div>
-              </ResizablePanel>
-            </ResizablePanelGroup>
-          </ResizablePanel>
-        </ResizablePanelGroup>
+              </div>
+            </ResizablePanel>
+          </ResizablePanelGroup>
+        </div>
       )}
     </div>
   )

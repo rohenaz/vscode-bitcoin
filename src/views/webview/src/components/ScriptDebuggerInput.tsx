@@ -9,13 +9,30 @@ import { getVscode } from '../vscode'
 interface ScriptDebuggerInputProps {
   onExecute?: (params: any) => void
   initialUnlockingScript?: string
+  initialTxid?: string
+  initialNetwork?: string
 }
 
-export function ScriptDebuggerInput(_props: ScriptDebuggerInputProps) {
+export function ScriptDebuggerInput({ initialTxid = '', initialNetwork = 'main' }: ScriptDebuggerInputProps) {
   const vscode = getVscode()
-  const [txid, setTxid] = useState('')
+  const [txid, setTxid] = useState(initialTxid)
   const [isLoading, setIsLoading] = useState(false)
   const [transaction, setTransaction] = useState<any>(null)
+
+  // Auto-load transaction if initialTxid is provided
+  useEffect(() => {
+    if (initialTxid && !transaction && !isLoading) {
+      console.log('[ScriptDebuggerInput] Auto-loading transaction:', initialTxid, initialNetwork)
+      setIsLoading(true)
+      vscode.postMessage({
+        type: 'transaction:loadByTxid',
+        data: {
+          txid: initialTxid,
+          network: initialNetwork === 'test' ? 'test' : 'main'
+        }
+      })
+    }
+  }, [initialTxid, initialNetwork]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {

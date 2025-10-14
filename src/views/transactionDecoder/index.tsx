@@ -1,6 +1,5 @@
 import * as vscode from 'vscode'
 import fetch from 'node-fetch'
-import { DecodeHistoryService } from '../../services/decodeHistoryService'
 import { txCache } from '../../services/txCache'
 
 interface CachedTransaction {
@@ -13,16 +12,15 @@ interface CachedTransaction {
 
 export class TransactionDecoderPanel {
   public static currentPanel: TransactionDecoderPanel | undefined
-  private static historyService: DecodeHistoryService | undefined
   private readonly _panel: vscode.WebviewPanel
   private readonly _extensionUri: vscode.Uri
   private _disposables: vscode.Disposable[] = []
   private _txCache: Map<string, CachedTransaction> = new Map()
 
-  private constructor(panel: vscode.WebviewPanel, extensionUri: vscode.Uri, txid?: string) {
+  private constructor(panel: vscode.WebviewPanel, extensionUri: vscode.Uri, txid?: string, network: 'main' | 'test' = 'main') {
     this._panel = panel
     this._extensionUri = extensionUri
-    this._panel.webview.html = this._getHtmlForWebview(this._panel.webview, txid)
+    this._panel.webview.html = this._getHtmlForWebview(this._panel.webview, txid, network)
     this._panel.onDidDispose(() => this.dispose(), null, this._disposables)
 
     // Handle messages from webview
@@ -174,25 +172,18 @@ export class TransactionDecoderPanel {
           data: decodedTx
         })
 
-        // Store to cache
+        // Store to panel cache
         this._txCache.set(txid, {
           decodedTx,
           rawTxHex: rawTx,
           timestamp: Date.now()
         })
 
-        // Save to decode history (rawTx is stored in txCache, not duplicated here)
-        if (TransactionDecoderPanel.historyService) {
-          TransactionDecoderPanel.historyService.addEntry({
-            txid,
-            size,
-            inputCount: tx.inputs.length,
-            outputCount: tx.outputs.length,
-            network
-          }).catch(err => {
-            console.error('Failed to save decode history:', err)
-          })
-        }
+        // Save to persistent txCache (provides filesystem-backed history)
+        txCache.set(txid, rawTx, network === 'testnet' ? 'test' : 'main', {
+          inputCount: tx.inputs.length,
+          outputCount: tx.outputs.length
+        })
 
         // Check if transaction exists on chain
         this.checkTransactionOnChain(txid, network)
@@ -352,34 +343,40 @@ export class TransactionDecoderPanel {
     }
   }
 
-  public static initialize(context: vscode.ExtensionContext) {
-    TransactionDecoderPanel.historyService = new DecodeHistoryService(context)
-  }
-
-  public static async show(extensionUri: vscode.Uri, rawTxHex?: string) {
+  public static async show(extensionUri: vscode.Uri, dataOrRawTxHex?: string | { txid: string; network?: string }) {
     let txid: string | undefined
+    let network: 'main' | 'test' = 'main'
 
-    // If raw hex is provided, decode and save to storage
-    if (rawTxHex) {
+    // Handle both raw hex string and { txid } object (like script debugger)
+    if (typeof dataOrRawTxHex === 'string') {
+      // Legacy: raw hex provided directly
       try {
         const { Transaction } = await import('@bsv/sdk')
-        const tx = Transaction.fromHex(rawTxHex)
+        const tx = Transaction.fromHex(dataOrRawTxHex)
         txid = tx.id('hex') as string
 
-        // Save to storage
-        txCache.set(txid, rawTxHex)
+        // Save to storage with metadata
+        txCache.set(txid, dataOrRawTxHex, 'main', {
+          inputCount: tx.inputs.length,
+          outputCount: tx.outputs.length
+        })
         console.log(`[TransactionDecoderPanel] Saved transaction ${txid} to storage`)
       } catch (error) {
         console.error('[TransactionDecoderPanel] Failed to decode/save transaction:', error)
       }
+    } else if (dataOrRawTxHex && typeof dataOrRawTxHex === 'object' && 'txid' in dataOrRawTxHex) {
+      // New: txid provided, will be fetched by frontend
+      txid = dataOrRawTxHex.txid
+      network = dataOrRawTxHex.network === 'test' || dataOrRawTxHex.network === 'testnet' ? 'test' : 'main'
+      console.log(`[TransactionDecoderPanel] Opening with txid: ${txid}, network: ${network}`)
     }
 
     if (TransactionDecoderPanel.currentPanel) {
       TransactionDecoderPanel.currentPanel._panel.reveal(vscode.ViewColumn.One)
       if (txid) {
-        // Reload with new txid
+        // Reload with new txid/network
         TransactionDecoderPanel.currentPanel._panel.webview.html =
-          TransactionDecoderPanel.currentPanel._getHtmlForWebview(TransactionDecoderPanel.currentPanel._panel.webview, txid)
+          TransactionDecoderPanel.currentPanel._getHtmlForWebview(TransactionDecoderPanel.currentPanel._panel.webview, txid, network)
       }
       return
     }
@@ -395,7 +392,7 @@ export class TransactionDecoderPanel {
       }
     )
 
-    const instance = new TransactionDecoderPanel(panel, extensionUri, txid)
+    const instance = new TransactionDecoderPanel(panel, extensionUri, txid, network)
     TransactionDecoderPanel.currentPanel = instance
   }
 
@@ -737,7 +734,7 @@ export class TransactionDecoderPanel {
     }
   }
 
-  private _getHtmlForWebview(webview: vscode.Webview, txid?: string) {
+  private _getHtmlForWebview(webview: vscode.Webview, txid?: string, network: 'main' | 'test' = 'main') {
     const scriptUri = webview.asWebviewUri(
       vscode.Uri.joinPath(this._extensionUri, 'src', 'views', 'webview', 'dist', 'assets', 'index.js')
     )
@@ -746,12 +743,16 @@ export class TransactionDecoderPanel {
     )
     const nonce = getNonce()
 
-    // Build INITIAL_DATA if txid is provided - include rawTxHex for immediate access
+    // Build INITIAL_DATA if txid is provided
     let initialDataScript = ''
     if (txid) {
-      const rawTxHex = txCache.get(txid)
-      if (rawTxHex) {
-        initialDataScript = `window.INITIAL_DATA = ${JSON.stringify({ txid, rawTxHex })};`
+      const cached = txCache.get(txid)
+      if (cached) {
+        // Transaction in cache - provide rawTxHex for immediate display
+        initialDataScript = `window.INITIAL_DATA = ${JSON.stringify({ txid, rawTxHex: cached.rawTxHex, network: cached.network })};`
+      } else {
+        // Not in cache - provide just txid, frontend will fetch with network preference
+        initialDataScript = `window.INITIAL_DATA = ${JSON.stringify({ txid, network })};`
       }
     }
 

@@ -4,6 +4,7 @@ import { parse } from 'bpu-ts';
 import { JUNGLEBUS_API_HOST } from '../../constants';
 import type { OutputManager } from '../../output';
 import vsApi from '../../vsShim';
+import { txCache } from '../../services/txCache';
 const { toHex, toArray } = Utils;
 
 export async function handleGetTxCommand(
@@ -78,7 +79,6 @@ export async function handleGetTxCommand(
     return undefined;
   }
   // Fetch transaction using unified txCache (tries cache → JungleBus → WhatOnChain)
-  const { txCache } = await import('../../services/txCache');
   const rawTx = await txCache.fetch(txid);
 
   if (format.value === 'base64') {

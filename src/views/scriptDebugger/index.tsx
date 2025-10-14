@@ -447,9 +447,18 @@ export class ScriptDebuggerPanel {
     const nonce = getNonce()
 
     // Build INITIAL_DATA with spendParams for immediate frontend access
-    const initialDataScript = spendParams
-      ? `window.INITIAL_DATA = ${JSON.stringify({ spendParams })};`
-      : ''
+    // If spendParams only has a txid field, treat it as initialTxid instead
+    let initialDataScript = ''
+    if (spendParams) {
+      if (spendParams.txid && !spendParams.sourceTXID) {
+        // Only txid provided - set as initialTxid for the input form (auto-load mode)
+        const network = spendParams.network || 'main'
+        initialDataScript = `window.INITIAL_DATA = ${JSON.stringify({ txid: spendParams.txid, network })};`
+      } else {
+        // Full spendParams - set for immediate execution
+        initialDataScript = `window.INITIAL_DATA = ${JSON.stringify({ spendParams })};`
+      }
+    }
 
     return `<!DOCTYPE html>
       <html lang="en">

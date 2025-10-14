@@ -340,15 +340,12 @@ export async function activate(context: ExtensionContext) {
   );
   context.subscriptions.push(showKeyVaultAndImportCommand);
 
-  // Initialize transaction decoder history service
-  TransactionDecoderPanel.initialize(context);
-  ScriptDebuggerPanel.initialize(context); // TxCache is singleton, no init needed
-
   // Register transaction decoder panel command
   const openTransactionDecoderCommand = vsApi.commands.registerCommand(
     'bitcoin.openTransactionDecoder',
-    async (rawTxHex?: string) => {
-      TransactionDecoderPanel.show(context.extensionUri, rawTxHex);
+    async (dataOrRawTxHex?: string | { txid: string; network?: string }) => {
+      // Support both legacy rawTxHex string and new { txid } object
+      TransactionDecoderPanel.show(context.extensionUri, dataOrRawTxHex);
     },
   );
   context.subscriptions.push(openTransactionDecoderCommand);
