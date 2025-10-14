@@ -72,17 +72,14 @@ export function ScriptCodeView({
     const now = Date.now()
     const timeSinceLastScroll = now - lastScrollTimeRef.current
 
-    // Calculate next PC (the instruction about to be executed)
-    const nextPC = currentPC + 1
-
     const performScroll = () => {
-      if (currentContext === 'LockingScript' && nextPC >= 0 && nextPC < lockingScript.chunks.length) {
-        lockingVirtualizer.scrollToIndex(nextPC, {
+      if (currentContext === 'LockingScript' && currentPC >= 0 && currentPC < lockingScript.chunks.length) {
+        lockingVirtualizer.scrollToIndex(currentPC, {
           align: 'center',
           behavior: 'auto', // Use 'auto' instead of 'smooth' for faster updates
         })
-      } else if (currentContext === 'UnlockingScript' && nextPC >= 0 && nextPC < unlockingScript.chunks.length) {
-        unlockingVirtualizer.scrollToIndex(nextPC, {
+      } else if (currentContext === 'UnlockingScript' && currentPC >= 0 && currentPC < unlockingScript.chunks.length) {
+        unlockingVirtualizer.scrollToIndex(currentPC, {
           align: 'center',
           behavior: 'auto',
         })
@@ -183,11 +180,8 @@ export function ScriptCodeView({
   }
 
   const renderChunk = (chunk: ScriptChunk, index: number, isActive: boolean, context: string, style?: React.CSSProperties) => {
-    // Highlight the NEXT instruction to execute, not the one that was just executed
-    // currentPC represents the instruction that was just executed in the current step
-    // So we need to highlight currentPC + 1 to show what's NEXT
-    const nextPC = currentPC + 1
-    const isCurrentChunk = isActive && index === nextPC
+    // currentPC now directly points to the next instruction to execute (no +1 needed)
+    const isCurrentChunk = isActive && index === currentPC
     const opName = getOpcodeName(chunk.op)
     const isDataPush = chunk.op >= 0 && chunk.op <= 96
     const chunkKey = `${context}-${index}`

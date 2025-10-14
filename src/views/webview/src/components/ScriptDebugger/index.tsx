@@ -116,6 +116,12 @@ export function ScriptDebugger({ spendParams }: ScriptDebuggerProps) {
         // Calculate total steps: unlocking script chunks + locking script chunks
         const total = message.data.unlockingScript.chunks.length + message.data.lockingScript.chunks.length
         setTotalSteps(total)
+
+        // Set initial step to show first instruction highlighted
+        if (message.data.initialStep) {
+          actualStepIndexRef.current = -1 // Not executed yet
+          updateUIState(message.data.initialStep, -1, true)
+        }
       }
 
       if (message.type === 'scriptDebugger:step' && message.data.id === executorId) {

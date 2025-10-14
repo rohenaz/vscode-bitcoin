@@ -135,6 +135,29 @@ export class ScriptDebuggerPanel {
         data: chunk.data ? Array.from(chunk.data) : undefined
       }))
 
+      // Send initial step representing "ready" state (about to execute first instruction)
+      const initialStep = {
+        stepNumber: 0,
+        context: 'UnlockingScript' as const,
+        programCounter: 0,
+        opcode: 0,
+        opcodeName: 'READY',
+        opcodeHex: '0x00',
+        data: undefined,
+        stack: [],
+        altStack: [],
+        ifStack: [],
+        stackMem: 0,
+        altStackMem: 0,
+        description: 'Ready to execute',
+        stackDiff: {
+          mainStackChanges: [],
+          altStackChanges: [],
+          ifStackChanges: []
+        },
+        success: true
+      }
+
       this._panel.webview.postMessage({
         type: 'scriptDebugger:initialized',
         data: {
@@ -148,7 +171,8 @@ export class ScriptDebuggerPanel {
             chunks: lockingChunks,
             hex: lockingScript.toHex(),
             asm: lockingScript.toASM()
-          }
+          },
+          initialStep
         }
       })
 

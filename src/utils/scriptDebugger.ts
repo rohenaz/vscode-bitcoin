@@ -14,7 +14,7 @@ import type {
  * step-by-step execution with full state history for debugging
  */
 export class ScriptDebugger {
-  private spend: typeof Spend
+  private spend: Spend
   private history: ExecutionStep[] = []
   private currentStepIndex: number = -1
   private initialState: ExecutionState
@@ -108,11 +108,11 @@ export class ScriptDebugger {
           }
         } else {
           // No history yet - we're at the very start
-          // Return a step with programCounter = -1 so highlighting shows instruction 0
+          // Return a step pointing to instruction 0 (ready to execute)
           return {
-            stepNumber: -1,
+            stepNumber: 0,
             context: beforeState.context,
-            programCounter: -1,
+            programCounter: 0,
             opcode: 0,
             opcodeName: 'START',
             opcodeHex: '0x00',
@@ -138,27 +138,31 @@ export class ScriptDebugger {
       this.ignoreBreakpointOnce = undefined
       this.pausedAt = undefined
 
+      // Get absolute index of instruction about to execute
+      const beforeAbsoluteIndex = this.getAbsoluteIndex(beforeState.context, beforeState.programCounter)
+      const beforeChunk = this.getChunkAtAbsoluteIndex(beforeAbsoluteIndex)
+
       // Execute one step
       const hasMore = this.spend.step()
 
       const afterState = this.captureState()
 
-      // Get the opcode that was just executed
-      // Use beforeState to get the chunk from the correct script
-      const chunk = beforeState.programCounter < script.chunks.length
-        ? script.chunks[beforeState.programCounter]
-        : null
-      const opcode = chunk?.op ?? 0
-      const data = Array.isArray(chunk?.data) ? chunk.data : undefined
+      // Get absolute index of next instruction
+      const afterAbsoluteIndex = this.getAbsoluteIndex(afterState.context, afterState.programCounter)
+      const afterChunk = this.getChunkAtAbsoluteIndex(afterAbsoluteIndex)
+
+      // Get opcode from the instruction we just executed
+      const opcode = beforeChunk.chunk?.op ?? 0
+      const data = Array.isArray(beforeChunk.chunk?.data) ? beforeChunk.chunk.data : undefined
 
       // Calculate stack diff
       const stackDiff = this.calculateStackDiff(beforeState, afterState)
 
-      // Create execution step - use afterState.context to handle context transitions correctly
+      // Create execution step - uses afterAbsoluteIndex for positioning (what to highlight next)
       const step: ExecutionStep = {
-        stepNumber: this.history.length,
-        context: afterState.context,
-        programCounter: beforeState.programCounter,
+        stepNumber: afterAbsoluteIndex,
+        context: afterChunk.context,
+        programCounter: afterChunk.pc,
         opcode: opcode,
         opcodeName: this.getOpcodeName(opcode),
         opcodeHex: `0x${opcode.toString(16).padStart(2, '0')}`,
@@ -171,7 +175,7 @@ export class ScriptDebugger {
         description: this.generateDescription(opcode, data, beforeState, afterState),
         stackDiff: stackDiff,
         success: true,
-        isComplete: !hasMore // Mark if this is the final step
+        isComplete: !hasMore
       }
 
       this.history.push(step)
@@ -353,6 +357,43 @@ export class ScriptDebugger {
 
     const lastStep = this.history[this.history.length - 1]
     return lastStep && (!lastStep.success || lastStep.isComplete === true)
+  }
+
+  /**
+   * Helper to get chunk at absolute index across concatenated scripts
+   * Absolute index treats unlocking + locking as one continuous array
+   */
+  private getChunkAtAbsoluteIndex(absoluteIndex: number): {
+    context: 'UnlockingScript' | 'LockingScript'
+    pc: number
+    chunk: any
+  } {
+    const unlockingLen = this.spend.unlockingScript.chunks.length
+
+    if (absoluteIndex < unlockingLen) {
+      return {
+        context: 'UnlockingScript',
+        pc: absoluteIndex,
+        chunk: this.spend.unlockingScript.chunks[absoluteIndex]
+      }
+    } else {
+      return {
+        context: 'LockingScript',
+        pc: absoluteIndex - unlockingLen,
+        chunk: this.spend.lockingScript.chunks[absoluteIndex - unlockingLen]
+      }
+    }
+  }
+
+  /**
+   * Calculate absolute index from context and PC
+   */
+  private getAbsoluteIndex(context: 'UnlockingScript' | 'LockingScript', pc: number): number {
+    if (context === 'UnlockingScript') {
+      return pc
+    } else {
+      return this.spend.unlockingScript.chunks.length + pc
+    }
   }
 
   /**
