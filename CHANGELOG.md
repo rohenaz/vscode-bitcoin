@@ -2,6 +2,65 @@
 
 ## [Unreleased]
 
+## [v0.1.2] - 2025-01-16
+
+### Added
+- Script Debugger improvements:
+  - Linear script highlighting across unlocking and locking scripts
+  - Fixed step counting to show correct progress (e.g., 7/7 instead of 8/7)
+  - Initial instruction highlighting in ready state
+  - Improved context handling during script transitions
+- Transaction management:
+  - Transaction deletion feature in decode history
+  - Enhanced transaction caching with input/output metadata
+  - Improved transaction decoding from JungleBus and WhatOnChain
+- Token functionality:
+  - NFT and BSV21 token minting support
+  - Enhanced token transfer interface with improved type safety
+
+### Changed
+- Script Debugger refactoring:
+  - Simplified absolute index tracking for script execution
+  - Removed complex +1/-1 offset calculations
+  - Consolidated script boundary logic into helper functions
+- Wallet state management improvements:
+  - Better clarity and performance in state handling
+  - Streamlined code with removal of unused methods
+- UI enhancements:
+  - Improved dropdown menu interaction in decode history
+  - Better component organization and structure
+
+### Fixed
+- Script Debugger highlighting issues during context transitions
+- Transaction metadata not updating for cached transactions
+- Debug Script button opening wrong panel
+- Step counter showing incorrect total steps
+
+## [v0.1.1] - 2025-01-15
+
+### Added
+- Wallet functionality:
+  - Full wallet integration with key management
+  - Ordinals key selection and management
+  - Support for multiple backup types for imports
+- Key Vault enhancements:
+  - Designated keys panel for better key management
+  - Improved key generation dialogs with validation
+  - Enhanced UI components with better organization
+- Script execution:
+  - Improved script execution handling
+  - Better transaction decoder and script editor
+
+### Changed
+- Updated bitcoin-backup dependency to version 0.0.3
+- Refactored KeyVault webview to use proper TypeScript files
+- Major UI updates across all components
+- Enhanced wallet state management and UI interactions
+
+### Fixed
+- .vscodeignore to properly include keyVault webview dist files
+- Script editor and transaction decoder UI issues
+
 ## [v0.1.0] - 2025-01-15
 
 ### Added
@@ -70,11 +129,10 @@
   - Streamlined test setup with mocked VS Code API
 - Improved file operations:
   - Better file naming strategy for sensitive data
-  - Enhanced content type detection
+  - Content type detection
   - Smarter format detection and conversion
   - Simplified output configuration
 - Code quality improvements:
-  - Enhanced error messages
   - Standardized command structure
   - Better type safety
   - Cleaner API design
@@ -114,8 +172,10 @@
 ### Added
 - Raw transaction decoder
 
-[Unreleased]: https://github.com/rohenaz/vscode-bitcoin/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/rohenaz/vscode-bitcoin/compare/v0.0.15...v0.1.0
+[Unreleased]: https://github.com/rohenaz/vscode-bitcoin/compare/v0.1.2...HEAD
+[v0.1.2]: https://github.com/rohenaz/vscode-bitcoin/compare/v0.1.1...v0.1.2
+[v0.1.1]: https://github.com/rohenaz/vscode-bitcoin/compare/v0.1.0...v0.1.1
+[v0.1.0]: https://github.com/rohenaz/vscode-bitcoin/compare/v0.0.15...v0.1.0
 [0.0.15]: https://github.com/rohenaz/vscode-bitcoin/compare/v0.0.14...v0.0.15
 [0.0.14]: https://github.com/rohenaz/vscode-bitcoin/compare/v0.0.13...v0.0.14
 [0.0.13]: https://github.com/rohenaz/vscode-bitcoin/releases/tag/v0.0.13

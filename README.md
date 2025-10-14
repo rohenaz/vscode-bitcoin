@@ -19,7 +19,7 @@ A comprehensive Bitcoin development toolkit for VS Code, powered by the modern `
 - Color-coded key organization
 - One-click key operations
 
-![Key Vault](https://raw.githubusercontent.com/rohenaz/vscode-bitcoin/refs/heads/v0.1.0-beta/images/key_vault.png)
+![Key Vault](https://raw.githubusercontent.com/rohenaz/vscode-bitcoin/refs/heads/master/images/key_vault.png)
 
 ### Address Operations
 - Generate addresses from any key format  
@@ -39,8 +39,19 @@ A comprehensive Bitcoin development toolkit for VS Code, powered by the modern `
 ![](https://raw.githubusercontent.com/rohenaz/vscode-bitcoin/refs/heads/v0.1.0-beta/images/p2pkh_tooltip.png)
 
 ### Transaction Operations
-- Fetch and decode transactions  
-- Multiple output formats: raw, BOB, BMAP, JSON  
+- Fetch and decode transactions
+- Multiple output formats: raw, BOB, BMAP, JSON
+
+![Transaction Decoder](https://raw.githubusercontent.com/rohenaz/vscode-bitcoin/refs/heads/master/images/transaction_decoder.png)
+
+### Script Debugger
+- Step-by-step script execution visualization
+- Breakpoint support
+- Stack inspection at each step
+- Context transitions between unlocking and locking scripts
+- Interactive stepping controls
+
+![Script Debugger](https://raw.githubusercontent.com/rohenaz/vscode-bitcoin/refs/heads/master/images/script_debugger.png)
 
 ### Data Conversion
 - Advanced converter with:  
