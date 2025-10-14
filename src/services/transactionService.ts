@@ -1,5 +1,5 @@
-import { Transaction, PrivateKey, P2PKH, ARC, Script } from '@bsv/sdk';
-import type { Utxo } from 'js-1sat-ord';
+import { Transaction, PrivateKey, ARC } from '@bsv/sdk';
+import { sendUtxos, type Payment, type Utxo } from 'js-1sat-ord';
 
 export interface SendBsvParams {
   recipientAddress: string;
@@ -36,9 +36,13 @@ class TransactionService {
   private readonly DUST_LIMIT = 1; // 1 sat minimum output
 
   /**
-   * Build and sign a BSV payment transaction
+   * Build and sign a BSV payment transaction using js-1sat-ord's sendUtxos
+   * (matches 1sat-website implementation)
+   *
+   * NOTE: sendUtxos does NOT support identity signing - regular BSV sends
+   * will not have SIGMA signatures (same as 1sat-website behavior)
    */
-  buildSendBsvTransaction(params: SendBsvParams): SendBsvResult {
+  async buildSendBsvTransaction(params: SendBsvParams): Promise<SendBsvResult> {
     const { recipientAddress, satoshis, wif, utxos, changeAddress, satsPerKb = this.DEFAULT_SATS_PER_KB } = params;
 
     // Validate inputs
@@ -49,150 +53,59 @@ class TransactionService {
     }
 
     // Convert WIF to private key
-    let privateKey: PrivateKey;
+    let paymentPk: PrivateKey;
     try {
-      privateKey = PrivateKey.fromWif(wif);
+      paymentPk = PrivateKey.fromWif(wif);
     } catch (error) {
       throw new TransactionError('Invalid WIF key', 'INVALID_WIF');
     }
 
-    // Select UTXOs with coin selection
-    const { selectedUtxos, totalInput } = this.selectUtxos(utxos, satoshis, satsPerKb);
-
-    // Estimate fee with selected UTXOs
-    const estimatedFee = this.estimateFee(selectedUtxos.length, 2, satsPerKb); // 2 outputs (recipient + change)
-    const totalNeeded = satoshis + estimatedFee;
-
-    if (totalInput < totalNeeded) {
-      throw new TransactionError(
-        `Insufficient funds. Need ${totalNeeded} sats (${satoshis} + ${estimatedFee} fee), have ${totalInput} sats`,
-        'INSUFFICIENT_FUNDS'
-      );
-    }
-
-    // Calculate change
-    const changeAmount = totalInput - satoshis - estimatedFee;
-
-    // Build transaction
-    const tx = new Transaction();
-
-    // Add inputs from selected UTXOs
-    for (const utxo of selectedUtxos) {
-      // Decode base64 script if needed
-      let scriptBuffer: number[];
-      if (typeof utxo.script === 'string') {
-        try {
-          // Try base64 first (default from js-1sat-ord)
-          scriptBuffer = Array.from(Buffer.from(utxo.script, 'base64'));
-        } catch {
-          // Fallback to hex
-          scriptBuffer = Array.from(Buffer.from(utxo.script, 'hex'));
-        }
-      } else {
-        scriptBuffer = utxo.script;
-      }
-
-      tx.addInput({
-        sourceTransaction: undefined, // Will be looked up if needed
-        sourceTXID: utxo.txid,
-        sourceOutputIndex: utxo.vout,
-        unlockingScriptTemplate: new P2PKH().unlock(privateKey),
-        sequence: 0xffffffff,
-      });
-    }
-
-    // Add recipient output
-    tx.addOutput({
-      satoshis,
-      lockingScript: new P2PKH().lock(recipientAddress),
-    });
-
-    // Add change output if above dust limit
-    if (changeAmount >= this.DUST_LIMIT) {
-      tx.addOutput({
-        satoshis: changeAmount,
-        lockingScript: new P2PKH().lock(changeAddress),
-      });
-    }
-
-    // Sign the transaction
-    try {
-      tx.sign();
-    } catch (error) {
-      throw new TransactionError(
-        `Failed to sign transaction: ${error instanceof Error ? error.message : 'Unknown error'}`,
-        'SIGNING_FAILED'
-      );
-    }
-
-    // Get final fee (may differ slightly from estimate)
-    const actualFee = totalInput - satoshis - changeAmount;
-
-    return {
-      tx,
-      txid: tx.id('hex') as string,
-      fee: actualFee,
-      changeAmount,
-      inputAmount: totalInput,
-    };
-  }
-
-  /**
-   * Select UTXOs for transaction using simple largest-first strategy
-   * Excludes 1-sat UTXOs (potential ordinals)
-   */
-  private selectUtxos(
-    utxos: Utxo[],
-    targetAmount: number,
-    satsPerKb: number
-  ): { selectedUtxos: Utxo[]; totalInput: number } {
     // Filter out 1-sat UTXOs (potential ordinals)
     const spendableUtxos = utxos.filter(u => u.satoshis > 1);
-
     if (spendableUtxos.length === 0) {
       throw new TransactionError('No spendable UTXOs available', 'NO_UTXOS');
     }
 
-    // Sort by value descending (largest first)
-    const sortedUtxos = [...spendableUtxos].sort((a, b) => b.satoshis - a.satoshis);
+    // Build payments array
+    const payments: Payment[] = [{
+      to: recipientAddress,
+      amount: satoshis
+    }];
 
-    const selectedUtxos: Utxo[] = [];
-    let totalInput = 0;
+    // Use js-1sat-ord's sendUtxos (same as 1sat-website)
+    try {
+      const { tx, spentOutpoints, payChange } = await sendUtxos({
+        utxos: spendableUtxos,
+        paymentPk,
+        payments,
+        satsPerKb,
+        changeAddress
+      });
 
-    // Keep adding UTXOs until we have enough (including estimated fees)
-    for (const utxo of sortedUtxos) {
-      selectedUtxos.push(utxo);
-      totalInput += utxo.satoshis;
+      const inputAmount = spentOutpoints.length > 0
+        ? spendableUtxos
+            .filter(u => spentOutpoints.includes(`${u.txid}_${u.vout}`))
+            .reduce((sum, u) => sum + u.satoshis, 0)
+        : 0;
 
-      // Estimate fee with current selection
-      const estimatedFee = this.estimateFee(selectedUtxos.length, 2, satsPerKb);
-      const needed = targetAmount + estimatedFee;
+      const changeAmount = payChange?.satoshis || 0;
+      const fee = tx.getFee();
 
-      if (totalInput >= needed) {
-        break;
-      }
+      return {
+        tx,
+        txid: tx.id('hex') as string,
+        fee,
+        changeAmount,
+        inputAmount,
+      };
+    } catch (error) {
+      throw new TransactionError(
+        `Failed to create transaction: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        'TX_BUILD_FAILED'
+      );
     }
-
-    return { selectedUtxos, totalInput };
   }
 
-  /**
-   * Estimate transaction fee based on size
-   * Formula: (numInputs * 148 + numOutputs * 34 + 10) bytes * satsPerKb / 1000
-   */
-  private estimateFee(numInputs: number, numOutputs: number, satsPerKb: number): number {
-    const estimatedSize = numInputs * 148 + numOutputs * 34 + 10;
-    const fee = Math.ceil((estimatedSize * satsPerKb) / 1000);
-    return fee;
-  }
-
-  /**
-   * Calculate exact fee for a built transaction
-   */
-  calculateFee(tx: Transaction, inputAmount: number): number {
-    const outputAmount = tx.outputs?.reduce((sum, out) => sum + (out.satoshis || 0), 0) || 0;
-    return inputAmount - outputAmount;
-  }
 
   /**
    * Validate Bitcoin address

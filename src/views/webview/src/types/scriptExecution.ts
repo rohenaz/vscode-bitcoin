@@ -19,6 +19,41 @@ export interface ExecutionStep {
   stackDiff: StackDiff // What changed in this step
   success: boolean // Whether the step executed successfully
   error?: string // Error message if failed
+  isComplete?: boolean // Whether this is the final step of execution
+  breakpointHit?: boolean // Whether a breakpoint was hit at this step
+}
+
+/**
+ * Breakpoint configuration
+ */
+export interface Breakpoint {
+  context: 'UnlockingScript' | 'LockingScript'
+  index: number
+  enabled: boolean
+}
+
+/**
+ * Helper to generate breakpoint key for fast lookup
+ * Format: "context:index" (e.g., "LockingScript:5")
+ */
+export function getBreakpointKey(context: 'UnlockingScript' | 'LockingScript', index: number): string {
+  return `${context}:${index}`
+}
+
+/**
+ * Parse breakpoint key back to components
+ */
+export function parseBreakpointKey(key: string): { context: 'UnlockingScript' | 'LockingScript'; index: number } | null {
+  const parts = key.split(':')
+  if (parts.length !== 2) return null
+
+  const context = parts[0] as 'UnlockingScript' | 'LockingScript'
+  const index = parseInt(parts[1], 10)
+
+  if (isNaN(index)) return null
+  if (context !== 'UnlockingScript' && context !== 'LockingScript') return null
+
+  return { context, index }
 }
 
 export interface StackDiff {

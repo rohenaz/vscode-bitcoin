@@ -19,6 +19,8 @@ export interface ExecutionStep {
   stackDiff: StackDiff // What changed in this step
   success: boolean // Whether the step executed successfully
   error?: string // Error message if failed
+  isComplete?: boolean // Whether this is the final step
+  breakpointHit?: boolean // Whether this step paused on a breakpoint
 }
 
 export interface StackDiff {

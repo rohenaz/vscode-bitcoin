@@ -10,37 +10,34 @@ import type {
 } from '../types/scriptExecution'
 
 /**
- * ScriptExecutor wraps the BSV SDK's Spend class to provide
+ * ScriptDebugger wraps the BSV SDK's Spend class to provide
  * step-by-step execution with full state history for debugging
  */
-export class ScriptExecutor {
+export class ScriptDebugger {
   private spend: typeof Spend
   private history: ExecutionStep[] = []
   private currentStepIndex: number = -1
   private initialState: ExecutionState
+  private breakpoints: Set<string> = new Set()
+  private pausedAt?: string // Location where we're currently paused (context:pc)
+  private ignoreBreakpointOnce?: string // One-shot disarm for resume/step
 
   constructor(params: SpendParams) {
     // Convert hex scripts to Script objects
     const lockingScript = LockingScript.fromHex(params.lockingScript)
     const unlockingScript = UnlockingScript.fromHex(params.unlockingScript)
 
-    // Convert input/output arrays to proper types
-    const otherInputs = params.otherInputs.map(input => {
-      const txInput = new TransactionInput({
-        sourceTXID: input.sourceTXID,
-        sourceOutputIndex: input.sourceOutputIndex,
-        sequence: input.sequence
-      })
-      return txInput
-    })
+    // Convert input/output arrays to proper types (TransactionInput/Output are interfaces, not classes)
+    const otherInputs: TransactionInput[] = params.otherInputs.map(input => ({
+      sourceTXID: input.sourceTXID,
+      sourceOutputIndex: input.sourceOutputIndex,
+      sequence: input.sequence
+    }))
 
-    const outputs = params.outputs.map(output => {
-      const txOutput = new TransactionOutput({
-        satoshis: output.satoshis,
-        lockingScript: LockingScript.fromHex(output.lockingScript)
-      })
-      return txOutput
-    })
+    const outputs: TransactionOutput[] = params.outputs.map(output => ({
+      satoshis: output.satoshis,
+      lockingScript: LockingScript.fromHex(output.lockingScript)
+    }))
 
     // Create Spend instance
     this.spend = new Spend({
@@ -66,16 +63,80 @@ export class ScriptExecutor {
    * Execute one step forward
    */
   stepForward(): ExecutionStep | null {
-    // If we're in the middle of history, just move forward
+    // If we're in the middle of history, just move forward (no breakpoint check)
     if (this.currentStepIndex < this.history.length - 1) {
       this.currentStepIndex++
       this.restoreStateFromHistory(this.currentStepIndex)
       return this.history[this.currentStepIndex]
     }
 
-    // Otherwise, execute a new step
+    // Check if we're already at the end
+    if (this.isAtEnd()) {
+      return null
+    }
+
+    // Execute a new step
     try {
       const beforeState = this.captureState()
+
+      // Create location key for breakpoint checking
+      const locKey = `${beforeState.context}:${beforeState.programCounter}`
+
+      // Get the current script for opcode info
+      const script = beforeState.context === 'UnlockingScript'
+        ? this.spend.unlockingScript
+        : this.spend.lockingScript
+
+      // BREAKPOINT CHECK: Check if we should pause at this location
+      // Skip if this is the one-shot disarm location
+      if (beforeState.programCounter < script.chunks.length &&
+          this.hasBreakpoint(beforeState.context, beforeState.programCounter) &&
+          this.ignoreBreakpointOnce !== locKey) {
+
+        // Mark this location as paused and arm the one-shot disarm
+        this.pausedAt = locKey
+        this.ignoreBreakpointOnce = locKey
+
+        // Return the LAST executed step (from history) with breakpointHit flag
+        // This way the UI shows the last instruction that ran, and highlights the next (breakpoint) instruction
+        const lastStep = this.getCurrentStep()
+        if (lastStep) {
+          // Return a copy of the last step with breakpointHit flag
+          return {
+            ...lastStep,
+            breakpointHit: true
+          }
+        } else {
+          // No history yet - we're at the very start
+          // Return a step with programCounter = -1 so highlighting shows instruction 0
+          return {
+            stepNumber: -1,
+            context: beforeState.context,
+            programCounter: -1,
+            opcode: 0,
+            opcodeName: 'START',
+            opcodeHex: '0x00',
+            data: undefined,
+            stack: this.deepCopyStack(beforeState.stack),
+            altStack: this.deepCopyStack(beforeState.altStack),
+            ifStack: [...beforeState.ifStack],
+            stackMem: beforeState.stackMem,
+            altStackMem: beforeState.altStackMem,
+            description: 'Paused at breakpoint before execution',
+            stackDiff: {
+              mainStackChanges: [],
+              altStackChanges: [],
+              ifStackChanges: []
+            },
+            success: true,
+            breakpointHit: true
+          }
+        }
+      }
+
+      // Clear the one-shot disarm after we've passed the breakpoint check
+      this.ignoreBreakpointOnce = undefined
+      this.pausedAt = undefined
 
       // Execute one step
       const hasMore = this.spend.step()
@@ -83,11 +144,10 @@ export class ScriptExecutor {
       const afterState = this.captureState()
 
       // Get the opcode that was just executed
-      const script = beforeState.context === 'UnlockingScript'
-        ? this.spend.unlockingScript
-        : this.spend.lockingScript
-
-      const chunk = script.chunks[beforeState.programCounter]
+      // Use beforeState to get the chunk from the correct script
+      const chunk = beforeState.programCounter < script.chunks.length
+        ? script.chunks[beforeState.programCounter]
+        : null
       const opcode = chunk?.op ?? 0
       const data = Array.isArray(chunk?.data) ? chunk.data : undefined
 
@@ -110,7 +170,8 @@ export class ScriptExecutor {
         altStackMem: afterState.altStackMem,
         description: this.generateDescription(opcode, data, beforeState, afterState),
         stackDiff: stackDiff,
-        success: true
+        success: true,
+        isComplete: !hasMore // Mark if this is the final step
       }
 
       this.history.push(step)
@@ -157,6 +218,10 @@ export class ScriptExecutor {
       return null
     }
 
+    // Clear breakpoint state when navigating history
+    this.pausedAt = undefined
+    this.ignoreBreakpointOnce = undefined
+
     this.currentStepIndex--
     this.restoreStateFromHistory(this.currentStepIndex)
     return this.history[this.currentStepIndex]
@@ -189,6 +254,47 @@ export class ScriptExecutor {
     this.spend.reset()
     this.history = []
     this.currentStepIndex = -1
+    this.pausedAt = undefined
+    this.ignoreBreakpointOnce = undefined
+    // Note: breakpoints are NOT cleared on reset (by design)
+  }
+
+  /**
+   * Set a breakpoint at specific location
+   */
+  setBreakpoint(context: 'UnlockingScript' | 'LockingScript', pc: number): void {
+    const key = `${context}:${pc}`
+    this.breakpoints.add(key)
+  }
+
+  /**
+   * Remove a breakpoint
+   */
+  removeBreakpoint(context: 'UnlockingScript' | 'LockingScript', pc: number): void {
+    const key = `${context}:${pc}`
+    this.breakpoints.delete(key)
+  }
+
+  /**
+   * Check if a breakpoint exists at location
+   */
+  hasBreakpoint(context: 'UnlockingScript' | 'LockingScript', pc: number): boolean {
+    const key = `${context}:${pc}`
+    return this.breakpoints.has(key)
+  }
+
+  /**
+   * Clear all breakpoints
+   */
+  clearAllBreakpoints(): void {
+    this.breakpoints.clear()
+  }
+
+  /**
+   * Get all breakpoints
+   */
+  getBreakpoints(): string[] {
+    return Array.from(this.breakpoints)
   }
 
   /**
@@ -233,7 +339,20 @@ export class ScriptExecutor {
    * Check if at the end
    */
   isAtEnd(): boolean {
-    return this.currentStepIndex >= this.history.length - 1
+    // If no history yet, we're not at the end
+    if (this.history.length === 0) {
+      return false
+    }
+
+    // We're only at the end if:
+    // 1. We're caught up with history (currentStepIndex === history.length - 1)
+    // 2. AND the last step indicates completion or failure
+    if (this.currentStepIndex < this.history.length - 1) {
+      return false // Still replaying history
+    }
+
+    const lastStep = this.history[this.history.length - 1]
+    return lastStep && (!lastStep.success || lastStep.isComplete === true)
   }
 
   /**
@@ -375,7 +494,18 @@ export class ScriptExecutor {
    * Get opcode name from opcode number
    */
   private getOpcodeName(opcode: number): string {
-    return OP[opcode] as string || `OP_UNKNOWN_${opcode}`
+    // Opcodes 1-75 are implicit data pushes - just show the data, not an opcode name
+    if (opcode >= 1 && opcode <= 75) {
+      return `<${opcode} bytes>`
+    }
+
+    // Find the opcode name by searching through OP object keys
+    for (const [key, value] of Object.entries(OP)) {
+      if (value === opcode) {
+        return key
+      }
+    }
+    return `OP_UNKNOWN_${opcode}`
   }
 
   /**

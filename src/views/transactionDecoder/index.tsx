@@ -1,5 +1,6 @@
 import * as vscode from 'vscode'
 import fetch from 'node-fetch'
+import { DecodeHistoryService } from '../../services/decodeHistoryService'
 
 interface CachedTransaction {
   decodedTx: any
@@ -11,6 +12,7 @@ interface CachedTransaction {
 
 export class TransactionDecoderPanel {
   public static currentPanel: TransactionDecoderPanel | undefined
+  private static historyService: DecodeHistoryService | undefined
   private readonly _panel: vscode.WebviewPanel
   private readonly _extensionUri: vscode.Uri
   private _disposables: vscode.Disposable[] = []
@@ -192,6 +194,19 @@ export class TransactionDecoderPanel {
           timestamp: Date.now()
         })
 
+        // Save to decode history
+        if (TransactionDecoderPanel.historyService) {
+          TransactionDecoderPanel.historyService.addEntry({
+            txid,
+            rawTx,
+            size,
+            inputCount: tx.inputs.length,
+            outputCount: tx.outputs.length
+          }).catch(err => {
+            console.error('Failed to save decode history:', err)
+          })
+        }
+
         // Check if transaction exists on chain
         this.checkTransactionOnChain(txid, network)
 
@@ -243,16 +258,25 @@ export class TransactionDecoderPanel {
     } else if (message.type === 'transaction:executeScript') {
       // Fetch source transaction to get locking script, then open script executor
       try {
-        const { sourceTXID, sourceOutputIndex, unlockingScript } = message.data
+        const {
+          sourceTXID,
+          sourceOutputIndex,
+          unlockingScript,
+          inputIndex,
+          spendingTxInputs,
+          spendingTxOutputs,
+          transactionVersion,
+          transactionLockTime
+        } = message.data
 
         if (!sourceTXID || sourceTXID === '0000000000000000000000000000000000000000000000000000000000000000') {
           // Coinbase transaction or no valid source - prompt for manual entry
           vscode.window.showWarningMessage(
-            'Cannot fetch source transaction (coinbase or not on chain). Please use the Script Executor to manually enter the locking script.',
-            'Open Script Executor'
+            'Cannot fetch source transaction (coinbase or not on chain). Please use the Script Debugger to manually enter the locking script.',
+            'Open Script Debugger'
           ).then(selection => {
-            if (selection === 'Open Script Executor') {
-              vscode.commands.executeCommand('bitcoin.openScriptExecutor')
+            if (selection === 'Open Script Debugger') {
+              vscode.commands.executeCommand('bitcoin.openScriptDebugger')
             }
           })
           return
@@ -270,11 +294,11 @@ export class TransactionDecoderPanel {
           // Transaction not found on chain
           vscode.window.showWarningMessage(
             `Source transaction ${sourceTXID.slice(0, 8)}... not found on chain. The locking script cannot be retrieved automatically.`,
-            'Open Script Executor',
+            'Open Script Debugger',
             'Enter Scripts Manually'
           ).then(selection => {
-            if (selection === 'Open Script Executor') {
-              vscode.commands.executeCommand('bitcoin.openScriptExecutor')
+            if (selection === 'Open Script Debugger') {
+              vscode.commands.executeCommand('bitcoin.openScriptDebugger')
             } else if (selection === 'Enter Scripts Manually') {
               // Open with just the unlocking script pre-filled
               const partialParams = {
@@ -290,7 +314,7 @@ export class TransactionDecoderPanel {
                 inputIndex: 0,
                 lockTime: 0,
               }
-              vscode.commands.executeCommand('bitcoin.openScriptExecutor', partialParams)
+              vscode.commands.executeCommand('bitcoin.openScriptDebugger', partialParams)
             }
           })
           return
@@ -304,26 +328,67 @@ export class TransactionDecoderPanel {
           throw new Error(`Source output ${sourceOutputIndex} not found`)
         }
 
+        if (!sourceOutput.lockingScript) {
+          throw new Error('Source output has no locking script')
+        }
+
+        const lockingScriptHex = sourceOutput.lockingScript.toHex()
+        if (!lockingScriptHex) {
+          throw new Error('Failed to convert locking script to hex')
+        }
+
+        // Build otherInputs from spending transaction (all inputs except the current one)
+        const otherInputs = spendingTxInputs
+          .filter((_: { index: number }, i: number) => i !== inputIndex)
+          .map((input: { sourceTXID: string; sourceOutputIndex: number; sequence: number }) => ({
+            sourceTXID: input.sourceTXID,
+            sourceOutputIndex: input.sourceOutputIndex,
+            sequence: input.sequence
+          }))
+
+        // Build outputs from spending transaction
+        const outputs = spendingTxOutputs.map((output: { satoshis: number; lockingScript: string }) => ({
+          satoshis: output.satoshis,
+          lockingScript: output.lockingScript
+        }))
+
+        // Get sequence from the input being executed
+        const inputSequence = spendingTxInputs[inputIndex].sequence
+
         const spendParams = {
           sourceTXID,
           sourceOutputIndex,
           sourceSatoshis: sourceOutput.satoshis || 1000,
-          lockingScript: sourceOutput.lockingScript.toHex(),
-          transactionVersion: 1,
-          otherInputs: [],
-          outputs: [],
+          lockingScript: lockingScriptHex,
+          transactionVersion,
+          otherInputs,
+          outputs,
           unlockingScript,
-          inputSequence: 0xffffffff,
-          inputIndex: 0,
-          lockTime: 0,
+          inputSequence,
+          inputIndex,
+          lockTime: transactionLockTime,
         }
 
-        vscode.commands.executeCommand('bitcoin.openScriptExecutor', spendParams)
+        console.log('[TransactionDecoder] Built spendParams:', {
+          hasLockingScript: !!spendParams.lockingScript,
+          lockingScriptLength: spendParams.lockingScript?.length,
+          hasUnlockingScript: !!spendParams.unlockingScript,
+          otherInputsCount: otherInputs.length,
+          outputsCount: outputs.length
+        })
+
+        console.log('[TransactionDecoder] Calling bitcoin.openScriptDebugger command')
+        vscode.commands.executeCommand('bitcoin.openScriptDebugger', spendParams)
+        console.log('[TransactionDecoder] Command executed')
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : 'Unknown error'
         vscode.window.showErrorMessage(`Failed to execute script: ${errorMessage}`)
       }
     }
+  }
+
+  public static initialize(context: vscode.ExtensionContext) {
+    TransactionDecoderPanel.historyService = new DecodeHistoryService(context)
   }
 
   public static show(extensionUri: vscode.Uri, rawTxHex?: string) {
@@ -384,7 +449,7 @@ export class TransactionDecoderPanel {
         return // Transaction not on chain, no spending info available
       }
 
-      const txData = await response.json()
+      const txData = await response.json() as { vout?: Array<{ spentTxId?: string; spentIndex?: number }> }
       const spending: { [outputIndex: number]: { txid: string; vout: number } } = {}
 
       // WhatOnChain API returns vout array with spending txid

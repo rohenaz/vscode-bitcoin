@@ -2,6 +2,7 @@ import {
   type CreateOrdinalsConfig,
   type Destination,
   type Inscription,
+  type LocalSigner,
   type PreMAP,
   type Utxo,
   createOrdinals,
@@ -20,6 +21,7 @@ export interface MintNftConfig {
   paymentUtxos: Utxo[];
   paymentPk: PrivateKey;
   ordAddress: string;
+  signer?: LocalSigner;
 }
 
 export interface MintBsv21Config {
@@ -31,6 +33,7 @@ export interface MintBsv21Config {
   paymentUtxos: Utxo[];
   paymentPk: PrivateKey;
   ordAddress: string;
+  signer?: LocalSigner;
 }
 
 export interface MintResult {
@@ -52,7 +55,8 @@ class MintService {
       metadata,
       paymentUtxos,
       paymentPk,
-      ordAddress
+      ordAddress,
+      signer
     } = config;
 
     // Build inscription
@@ -79,12 +83,13 @@ class MintService {
       }
     ];
 
-    // Create ordinals
+    // Create ordinals with optional identity signer
     const ordinalsConfig: CreateOrdinalsConfig = {
       utxos: paymentUtxos,
       destinations,
       paymentPk,
-      metaData
+      metaData,
+      signer
     };
 
     const { tx, spentOutpoints, payChange } = await createOrdinals(ordinalsConfig);
@@ -99,6 +104,10 @@ class MintService {
 
   /**
    * Deploy a BSV21 token
+   *
+   * NOTE: js-1sat-ord's deployBsv21Token does NOT currently support identity signing.
+   * The signer parameter is accepted in the config for API consistency but cannot be used
+   * until the library adds support for it. BSV21 deployments will not have SIGMA signatures.
    */
   async mintBsv21(config: MintBsv21Config): Promise<MintResult> {
     const {
@@ -110,6 +119,7 @@ class MintService {
       paymentUtxos,
       paymentPk,
       ordAddress
+      // Note: signer destructured here but not used - library doesn't support it yet
     } = config;
 
     // Build icon
@@ -124,7 +134,7 @@ class MintService {
       tokens: maxSupply
     };
 
-    // Deploy token
+    // Deploy token (no signer support in DeployBsv21TokenConfig)
     const deployConfig: DeployBsv21TokenConfig = {
       paymentPk,
       symbol,

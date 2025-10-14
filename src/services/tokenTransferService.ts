@@ -1,5 +1,6 @@
 import {
   type Distribution,
+  type LocalSigner,
   type Payment,
   TokenInputMode,
   TokenSelectionStrategy,
@@ -33,6 +34,7 @@ export interface TransferTokenConfig {
   ordPk: PrivateKey;
   changeAddress: string;
   ordAddress: string;
+  signer?: LocalSigner;
 }
 
 export interface BurnTokenConfig {
@@ -44,6 +46,7 @@ export interface BurnTokenConfig {
   ordPk: PrivateKey;
   changeAddress: string;
   ordAddress: string;
+  signer?: LocalSigner;
 }
 
 export interface TransferResult {
@@ -105,7 +108,8 @@ class TokenTransferService {
       paymentPk,
       ordPk,
       changeAddress,
-      ordAddress
+      ordAddress,
+      signer
     } = config;
 
     // Create distribution for recipient
@@ -134,7 +138,7 @@ class TokenTransferService {
       }
     );
 
-    // Build transfer configuration
+    // Build transfer configuration with optional identity signer
     const transferConfig: TransferOrdTokensConfig = {
       protocol: tokenInfo.protocol === 'BSV20' ? TokenType.BSV20 : TokenType.BSV21,
       tokenID: tokenInfo.tokenId,
@@ -148,6 +152,7 @@ class TokenTransferService {
       additionalPayments,
       decimals: tokenInfo.decimals,
       inputMode: TokenInputMode.Needed,
+      signer,
       splitConfig: {
         outputs: inputTokens.length === 1 ? 2 : 1,
         threshold: amount,
@@ -179,12 +184,15 @@ class TokenTransferService {
 
   /**
    * Estimate fee for token transfer
+   * Note: signer parameter accepted but not used in estimation
+   * (would need to build full transaction for accurate size with SIGMA)
    */
   async estimateTransferFee(
     tokenInfo: TokenInfo,
     amount: number,
     tokenUtxos: TokenUtxo[],
-    paymentUtxos: Utxo[]
+    paymentUtxos: Utxo[],
+    signer?: LocalSigner
   ): Promise<FeeEstimate> {
     try {
       // Select token UTXOs to estimate

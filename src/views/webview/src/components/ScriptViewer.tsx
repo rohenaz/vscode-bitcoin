@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
+import { ScrollArea } from '@/components/ui/scroll-area'
 import { Copy } from 'lucide-react'
 import { hexToChunked, asmToSasm, tokenizeAsm, type ScriptToken } from '../utils/scriptFormatter'
 import { getVscode } from '../vscode'
@@ -86,35 +87,43 @@ export function ScriptViewer({ scriptHex, scriptAsm, label, className = '' }: Sc
 
         <div className="p-3">
           <TabsContent value="asm" className="mt-0">
-            <div className="rounded bg-[#0d1117] p-3 overflow-x-auto">
-              <code className="whitespace-pre-wrap break-all">
-                {renderTokens(tokens)}
-              </code>
-            </div>
+            <ScrollArea className="h-48 w-full rounded-md border border-border">
+              <div className="rounded bg-[#0d1117] p-3">
+                <code className="whitespace-pre-wrap break-all">
+                  {renderTokens(tokens)}
+                </code>
+              </div>
+            </ScrollArea>
           </TabsContent>
 
           <TabsContent value="hex" className="mt-0">
-            <div className="rounded bg-[#0d1117] p-3 overflow-x-auto">
-              <code className="font-mono text-xs text-green-400 whitespace-pre-wrap break-all">
-                {scriptHex}
-              </code>
-            </div>
+            <ScrollArea className="h-48 w-full rounded-md border border-border">
+              <div className="rounded bg-[#0d1117] p-3">
+                <code className="font-mono text-xs text-green-400 whitespace-pre-wrap break-all">
+                  {scriptHex}
+                </code>
+              </div>
+            </ScrollArea>
           </TabsContent>
 
           <TabsContent value="chunked" className="mt-0">
-            <div className="rounded bg-[#0d1117] p-3 overflow-x-auto">
-              <code className="font-mono text-xs text-green-400 whitespace-pre-wrap">
-                {chunkedHex}
-              </code>
-            </div>
+            <ScrollArea className="h-48 w-full rounded-md border border-border">
+              <div className="rounded bg-[#0d1117] p-3">
+                <code className="font-mono text-xs text-green-400 whitespace-pre-wrap">
+                  {chunkedHex}
+                </code>
+              </div>
+            </ScrollArea>
           </TabsContent>
 
           <TabsContent value="sasm" className="mt-0">
-            <div className="rounded bg-[#0d1117] p-3 overflow-x-auto">
-              <code className="font-mono text-xs text-purple-400 whitespace-pre-wrap break-all">
-                {sasm}
-              </code>
-            </div>
+            <ScrollArea className="h-48 w-full rounded-md border border-border">
+              <div className="rounded bg-[#0d1117] p-3">
+                <code className="font-mono text-xs text-purple-400 whitespace-pre-wrap break-all">
+                  {sasm}
+                </code>
+              </div>
+            </ScrollArea>
           </TabsContent>
         </div>
       </Tabs>

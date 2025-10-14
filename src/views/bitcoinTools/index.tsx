@@ -13,19 +13,26 @@ import { PrivateKey, Script, Transaction, LockingScript, UnlockingScript } from 
 import type { VaultBackup } from 'bitcoin-backup';
 import { encryptBackup, decryptBackup } from 'bitcoin-backup';
 import { detectFormat, convertData } from '../../utils';
-import { ScriptExecutor } from '../../utils/scriptExecutor';
+import { ScriptDebugger } from '../../utils/scriptDebugger';
 import { BapService } from '../../bapService';
 import { BapPanel } from '../../bapPanel';
+import { MARKET_API_HOST } from '../../constants';
+import { createIdentitySigner } from '../../utils/identitySigner';
+import type { LocalSigner } from 'js-1sat-ord';
+import { DecodeHistoryService } from '../../services/decodeHistoryService';
 
 export class BitcoinToolsViewProvider implements vscode.WebviewViewProvider {
   public static readonly viewType = 'bitcoin.toolsView';
   private _view?: vscode.WebviewView;
-  private scriptExecutors: Map<string, any> = new Map(); // Will hold ScriptExecutor instances
+  private scriptDebuggers: Map<string, any> = new Map(); // Will hold ScriptDebugger instances
+  private _historyService?: DecodeHistoryService;
 
   constructor(
     private readonly _extensionUri: vscode.Uri,
-    private readonly _vault: KeyVault
+    private readonly _vault: KeyVault,
+    private readonly _context: vscode.ExtensionContext
   ) {
+    this._historyService = new DecodeHistoryService(_context);
     // Listen for vault unlock events to update vault stats
     this._vault.onDidUnlock(() => {
       if (this._view) {
@@ -40,6 +47,26 @@ export class BitcoinToolsViewProvider implements vscode.WebviewViewProvider {
         this.handleGetVaultStats(this._view);
       }
     });
+  }
+
+  /**
+   * Get identity signer if identity key is available in vault
+   * SECURITY: This method retrieves the identity key from vault and creates a LocalSigner
+   * The private key never leaves the backend - this runs server-side only
+   */
+  private async getIdentitySigner(): Promise<LocalSigner | undefined> {
+    try {
+      const identityKey = await this._vault.getIdentityKey();
+      if (!identityKey || identityKey.type !== 'wif') {
+        return undefined;
+      }
+
+      const identityPk = PrivateKey.fromWif(identityKey.value);
+      return createIdentitySigner(identityPk);
+    } catch (error) {
+      console.warn('[BitcoinToolsView] Failed to get identity signer:', error);
+      return undefined;
+    }
   }
 
   public resolveWebviewView(
@@ -144,6 +171,16 @@ export class BitcoinToolsViewProvider implements vscode.WebviewViewProvider {
           return;
         }
 
+        // Handle market messages
+        if (message.type.startsWith('market:')) {
+          switch (message.type) {
+            case 'market:getListings':
+              await this.handleGetMarketListings(webviewView, message.data);
+              break;
+          }
+          return;
+        }
+
         // Handle BAP identity messages
         if (message.type === 'getIdentities') {
           await this.handleGetIdentities(webviewView);
@@ -183,6 +220,16 @@ export class BitcoinToolsViewProvider implements vscode.WebviewViewProvider {
           return;
         }
 
+        // Handle decode history messages
+        if (message.type === 'decodeHistory:get') {
+          const history = this._historyService?.getHistory() || [];
+          webviewView.webview.postMessage({
+            type: 'decodeHistory:data',
+            data: history
+          });
+          return;
+        }
+
         // Handle transaction broadcast messages
         if (message.type === 'transaction:broadcast') {
           await this.handleTransactionBroadcast(webviewView, message.data);
@@ -201,8 +248,8 @@ export class BitcoinToolsViewProvider implements vscode.WebviewViewProvider {
         }
 
         // Handle script executor lifecycle messages
-        if (message.type.startsWith('scriptExecutor:')) {
-          await this.handleScriptExecutorMessage(webviewView, message);
+        if (message.type.startsWith('scriptDebugger:')) {
+          await this.handleScriptDebuggerMessage(webviewView, message);
           return;
         }
 
@@ -288,7 +335,7 @@ export class BitcoinToolsViewProvider implements vscode.WebviewViewProvider {
       }
 
       // Build transaction (this will estimate fee)
-      const result = transactionService.buildSendBsvTransaction({
+      const result = await transactionService.buildSendBsvTransaction({
         recipientAddress: data.recipientAddress,
         satoshis: data.satoshis,
         wif: fundingKey.value,
@@ -342,7 +389,7 @@ export class BitcoinToolsViewProvider implements vscode.WebviewViewProvider {
       }
 
       // Build transaction
-      const result = transactionService.buildSendBsvTransaction({
+      const result = await transactionService.buildSendBsvTransaction({
         recipientAddress: data.recipientAddress,
         satoshis: data.satoshis,
         wif: fundingKey.value,
@@ -463,12 +510,16 @@ export class BitcoinToolsViewProvider implements vscode.WebviewViewProvider {
         throw new Error('No token UTXOs available');
       }
 
+      // Get identity signer if available for SIGMA signing
+      const signer = await this.getIdentitySigner();
+
       // Estimate fee
       const estimate = await tokenTransferService.estimateTransferFee(
         tokenInfo,
         data.amount,
         tokenUtxos,
-        paymentUtxos
+        paymentUtxos,
+        signer
       );
 
       // Send estimate back to webview
@@ -535,6 +586,9 @@ export class BitcoinToolsViewProvider implements vscode.WebviewViewProvider {
         throw new Error('No token UTXOs available');
       }
 
+      // Get identity signer if available for SIGMA signing
+      const signer = await this.getIdentitySigner();
+
       // Build transfer config
       const transferConfig = {
         tokenInfo,
@@ -546,6 +600,7 @@ export class BitcoinToolsViewProvider implements vscode.WebviewViewProvider {
         ordPk: PrivateKey.fromWif(ordinalsKey.value),
         changeAddress: payAddress,
         ordAddress,
+        signer,
       };
 
       // Execute transfer
@@ -628,6 +683,9 @@ export class BitcoinToolsViewProvider implements vscode.WebviewViewProvider {
         throw new Error('No payment UTXOs available');
       }
 
+      // Get identity signer if available for SIGMA signing
+      const signer = await this.getIdentitySigner();
+
       // Build mint config
       const mintConfig = {
         fileData: data.fileData,
@@ -636,6 +694,7 @@ export class BitcoinToolsViewProvider implements vscode.WebviewViewProvider {
         paymentUtxos,
         paymentPk: PrivateKey.fromWif(fundingKey.value),
         ordAddress,
+        signer,
       };
 
       // Mint NFT
@@ -715,6 +774,10 @@ export class BitcoinToolsViewProvider implements vscode.WebviewViewProvider {
         throw new Error('No payment UTXOs available');
       }
 
+      // Get identity signer if available for SIGMA signing
+      // NOTE: deployBsv21Token does not currently support signer (library limitation)
+      const signer = await this.getIdentitySigner();
+
       // Build mint config
       const mintConfig = {
         symbol: data.symbol,
@@ -725,6 +788,7 @@ export class BitcoinToolsViewProvider implements vscode.WebviewViewProvider {
         paymentUtxos,
         paymentPk: PrivateKey.fromWif(fundingKey.value),
         ordAddress,
+        signer,
       };
 
       // Mint BSV21 token
@@ -770,6 +834,57 @@ export class BitcoinToolsViewProvider implements vscode.WebviewViewProvider {
   }
 
   /**
+   * Handle market listings request
+   */
+  private async handleGetMarketListings(
+    webviewView: vscode.WebviewView,
+    data: {
+      assetType: 'ordinals' | 'bsv20' | 'bsv21';
+      limit?: number;
+      offset?: number;
+      sort?: string;
+      dir?: 'asc' | 'desc';
+    }
+  ) {
+    try {
+      const params = new URLSearchParams();
+      if (data.limit) params.append('limit', String(data.limit));
+      if (data.offset) params.append('offset', String(data.offset));
+      if (data.sort) params.append('sort', data.sort);
+      if (data.dir) params.append('dir', data.dir);
+
+      const url = `${MARKET_API_HOST}/market/${data.assetType}?${params.toString()}`;
+
+      const response = await fetch(url);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch market listings: ${response.statusText}`);
+      }
+
+      const listings = await response.json();
+
+      webviewView.webview.postMessage({
+        type: 'market:listings',
+        data: {
+          assetType: data.assetType,
+          listings
+        }
+      });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+
+      webviewView.webview.postMessage({
+        type: 'market:error',
+        data: {
+          assetType: data.assetType,
+          error: errorMessage
+        }
+      });
+
+      vscode.window.showErrorMessage(`Failed to fetch market data: ${errorMessage}`);
+    }
+  }
+
+  /**
    * Handle ordinal transfer estimate request
    */
   private async handleTransferOrdinalEstimate(
@@ -800,6 +915,9 @@ export class BitcoinToolsViewProvider implements vscode.WebviewViewProvider {
       // Convert NFTs to Utxo format
       const ordinals = data.nfts.map(nft => ordinalTransferService.nftToUtxo(nft));
 
+      // Get identity signer if available for SIGMA signing
+      const signer = await this.getIdentitySigner();
+
       // Estimate fee
       const estimate = await ordinalTransferService.estimateTransferFee({
         ordinals,
@@ -808,6 +926,7 @@ export class BitcoinToolsViewProvider implements vscode.WebviewViewProvider {
         ordPk: PrivateKey.fromWif(ordinalsKey.value),
         recipientAddress: data.recipientAddress,
         changeAddress: payAddress,
+        signer,
       });
 
       // Send estimate back to webview
@@ -858,6 +977,9 @@ export class BitcoinToolsViewProvider implements vscode.WebviewViewProvider {
       // Convert NFTs to Utxo format
       const ordinals = data.nfts.map(nft => ordinalTransferService.nftToUtxo(nft));
 
+      // Get identity signer if available for SIGMA signing
+      const signer = await this.getIdentitySigner();
+
       // Execute transfer
       const result = await ordinalTransferService.transferOrdinals({
         ordinals,
@@ -866,6 +988,7 @@ export class BitcoinToolsViewProvider implements vscode.WebviewViewProvider {
         ordPk: PrivateKey.fromWif(ordinalsKey.value),
         recipientAddress: data.recipientAddress,
         changeAddress: payAddress,
+        signer,
       });
 
       // Get raw transaction hex
@@ -1057,6 +1180,10 @@ export class BitcoinToolsViewProvider implements vscode.WebviewViewProvider {
       unlockingScript: string;
       sourceTXID: string;
       sourceOutputIndex: number;
+      spendingTxInputs: Array<{ sourceTXID: string; sourceOutputIndex: number; sequence: number }>;
+      spendingTxOutputs: Array<{ satoshis: number; lockingScript: string }>;
+      transactionVersion: number;
+      transactionLockTime: number;
     }
   ) {
     try {
@@ -1083,17 +1210,41 @@ export class BitcoinToolsViewProvider implements vscode.WebviewViewProvider {
       const lockingScriptAsm = sourceOutput.lockingScript.toASM();
       const satoshis = sourceOutput.satoshis || 0;
 
-      // Send script execution data to webview
+      // Build otherInputs from spending transaction (all inputs except the current one)
+      const otherInputs = data.spendingTxInputs
+        .filter((_, i) => i !== data.inputIndex)
+        .map(input => ({
+          sourceTXID: input.sourceTXID,
+          sourceOutputIndex: input.sourceOutputIndex,
+          sequence: input.sequence
+        }));
+
+      // Build outputs from spending transaction
+      const outputs = data.spendingTxOutputs.map(output => ({
+        satoshis: output.satoshis,
+        lockingScript: output.lockingScript
+      }));
+
+      // Get sequence from the input being executed
+      const inputSequence = data.spendingTxInputs[data.inputIndex].sequence;
+
+      // Send complete script execution data to webview
       webviewView.webview.postMessage({
-        type: 'scriptExecutor:show',
+        type: 'scriptDebugger:show',
         data: {
-          inputIndex: data.inputIndex,
-          unlockingScript: data.unlockingScript,
-          lockingScript: lockingScript,
-          lockingScriptAsm: lockingScriptAsm,
-          sourceTXID: data.sourceTXID,
-          sourceOutputIndex: data.sourceOutputIndex,
-          satoshis: satoshis
+          spendParams: {
+            sourceTXID: data.sourceTXID,
+            sourceOutputIndex: data.sourceOutputIndex,
+            sourceSatoshis: satoshis,
+            lockingScript: lockingScript,
+            transactionVersion: data.transactionVersion,
+            otherInputs,
+            outputs,
+            unlockingScript: data.unlockingScript,
+            inputSequence,
+            inputIndex: data.inputIndex,
+            lockTime: data.transactionLockTime
+          }
         }
       });
 
@@ -1105,7 +1256,7 @@ export class BitcoinToolsViewProvider implements vscode.WebviewViewProvider {
       vscode.window.showErrorMessage(`Failed to execute script: ${errorMessage}`);
 
       webviewView.webview.postMessage({
-        type: 'scriptExecutor:error',
+        type: 'scriptDebugger:error',
         data: { error: errorMessage }
       });
     }
@@ -1114,7 +1265,7 @@ export class BitcoinToolsViewProvider implements vscode.WebviewViewProvider {
   /**
    * Handle script executor lifecycle messages
    */
-  private async handleScriptExecutorMessage(
+  private async handleScriptDebuggerMessage(
     webviewView: vscode.WebviewView,
     message: any
   ) {
@@ -1123,28 +1274,28 @@ export class BitcoinToolsViewProvider implements vscode.WebviewViewProvider {
       const { id } = data;
 
       switch (type) {
-        case 'scriptExecutor:init':
-          await this.initScriptExecutor(webviewView, id, data.spendParams);
+        case 'scriptDebugger:init':
+          await this.initScriptDebugger(webviewView, id, data.spendParams);
           break;
 
-        case 'scriptExecutor:stepForward':
+        case 'scriptDebugger:stepForward':
           await this.stepExecutorForward(webviewView, id);
           break;
 
-        case 'scriptExecutor:stepBackward':
+        case 'scriptDebugger:stepBackward':
           await this.stepExecutorBackward(webviewView, id);
           break;
 
-        case 'scriptExecutor:runToEnd':
+        case 'scriptDebugger:runToEnd':
           await this.runExecutorToEnd(webviewView, id);
           break;
 
-        case 'scriptExecutor:reset':
+        case 'scriptDebugger:reset':
           await this.resetExecutor(webviewView, id);
           break;
 
-        case 'scriptExecutor:destroy':
-          this.scriptExecutors.delete(id);
+        case 'scriptDebugger:destroy':
+          this.scriptDebuggers.delete(id);
           break;
       }
     } catch (error) {
@@ -1156,15 +1307,15 @@ export class BitcoinToolsViewProvider implements vscode.WebviewViewProvider {
   /**
    * Initialize a new script executor instance
    */
-  private async initScriptExecutor(
+  private async initScriptDebugger(
     webviewView: vscode.WebviewView,
     id: string,
     spendParams: any
   ) {
     try {
       // Create new executor instance
-      const executor = new ScriptExecutor(spendParams);
-      this.scriptExecutors.set(id, executor);
+      const executor = new ScriptDebugger(spendParams);
+      this.scriptDebuggers.set(id, executor);
 
       // Parse scripts to get chunks for display
       const unlockingScript = UnlockingScript.fromHex(spendParams.unlockingScript);
@@ -1182,7 +1333,7 @@ export class BitcoinToolsViewProvider implements vscode.WebviewViewProvider {
 
       // Send back initialization success with script chunks
       webviewView.webview.postMessage({
-        type: 'scriptExecutor:initialized',
+        type: 'scriptDebugger:initialized',
         data: {
           id,
           unlockingScript: { chunks: unlockingChunks },
@@ -1192,7 +1343,7 @@ export class BitcoinToolsViewProvider implements vscode.WebviewViewProvider {
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       webviewView.webview.postMessage({
-        type: 'scriptExecutor:error',
+        type: 'scriptDebugger:error',
         data: { id, error: errorMessage }
       });
     }
@@ -1202,7 +1353,7 @@ export class BitcoinToolsViewProvider implements vscode.WebviewViewProvider {
    * Step executor forward one opcode
    */
   private async stepExecutorForward(webviewView: vscode.WebviewView, id: string) {
-    const executor = this.scriptExecutors.get(id);
+    const executor = this.scriptDebuggers.get(id);
     if (!executor) {
       return;
     }
@@ -1212,14 +1363,14 @@ export class BitcoinToolsViewProvider implements vscode.WebviewViewProvider {
 
       if (step) {
         webviewView.webview.postMessage({
-          type: 'scriptExecutor:step',
+          type: 'scriptDebugger:step',
           data: { id, step }
         });
       }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       webviewView.webview.postMessage({
-        type: 'scriptExecutor:error',
+        type: 'scriptDebugger:error',
         data: { id, error: errorMessage }
       });
     }
@@ -1229,7 +1380,7 @@ export class BitcoinToolsViewProvider implements vscode.WebviewViewProvider {
    * Step executor backward one opcode
    */
   private async stepExecutorBackward(webviewView: vscode.WebviewView, id: string) {
-    const executor = this.scriptExecutors.get(id);
+    const executor = this.scriptDebuggers.get(id);
     if (!executor) {
       return;
     }
@@ -1239,14 +1390,14 @@ export class BitcoinToolsViewProvider implements vscode.WebviewViewProvider {
 
       if (step) {
         webviewView.webview.postMessage({
-          type: 'scriptExecutor:step',
+          type: 'scriptDebugger:step',
           data: { id, step }
         });
       }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       webviewView.webview.postMessage({
-        type: 'scriptExecutor:error',
+        type: 'scriptDebugger:error',
         data: { id, error: errorMessage }
       });
     }
@@ -1256,7 +1407,7 @@ export class BitcoinToolsViewProvider implements vscode.WebviewViewProvider {
    * Run executor to completion
    */
   private async runExecutorToEnd(webviewView: vscode.WebviewView, id: string) {
-    const executor = this.scriptExecutors.get(id);
+    const executor = this.scriptDebuggers.get(id);
     if (!executor) {
       return;
     }
@@ -1265,13 +1416,13 @@ export class BitcoinToolsViewProvider implements vscode.WebviewViewProvider {
       const steps = executor.runToEnd();
 
       webviewView.webview.postMessage({
-        type: 'scriptExecutor:runComplete',
+        type: 'scriptDebugger:runComplete',
         data: { id, steps }
       });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       webviewView.webview.postMessage({
-        type: 'scriptExecutor:error',
+        type: 'scriptDebugger:error',
         data: { id, error: errorMessage }
       });
     }
@@ -1281,7 +1432,7 @@ export class BitcoinToolsViewProvider implements vscode.WebviewViewProvider {
    * Reset executor to initial state
    */
   private async resetExecutor(webviewView: vscode.WebviewView, id: string) {
-    const executor = this.scriptExecutors.get(id);
+    const executor = this.scriptDebuggers.get(id);
     if (!executor) {
       return;
     }
@@ -1290,13 +1441,13 @@ export class BitcoinToolsViewProvider implements vscode.WebviewViewProvider {
       executor.reset();
 
       webviewView.webview.postMessage({
-        type: 'scriptExecutor:reset',
+        type: 'scriptDebugger:reset',
         data: { id }
       });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       webviewView.webview.postMessage({
-        type: 'scriptExecutor:error',
+        type: 'scriptDebugger:error',
         data: { id, error: errorMessage }
       });
     }

@@ -1,14 +1,19 @@
 import { useState, useEffect } from 'react'
-import { ScriptExecutor } from '../components/ScriptExecutor'
-import { ScriptExecutorInput } from '../components/ScriptExecutorInput'
+import { ScriptDebugger } from '../components/ScriptDebugger'
+import { ScriptDebuggerInput } from '../components/ScriptDebuggerInput'
 import type { SpendParams } from '../types/scriptExecution'
+import { getVscode } from '../vscode'
 import '../App.css'
 
-export function ScriptExecutorPanel() {
+export function ScriptDebuggerPanel() {
+  console.log('[ScriptDebuggerPanel] Component rendering')
   const [spendParams, setSpendParams] = useState<SpendParams | null>(null)
   const [initialUnlockingScript, setInitialUnlockingScript] = useState<string>('')
 
   useEffect(() => {
+    console.log('[ScriptDebuggerPanel] useEffect running')
+    const vscode = getVscode()
+
     document.documentElement.classList.add('dark')
     const loader = document.getElementById('initial-loader')
     if (loader) {
@@ -18,8 +23,11 @@ export function ScriptExecutorPanel() {
     }
 
     const handleMessage = (event: MessageEvent) => {
+      console.log('[ScriptDebuggerPanel] Message received:', event)
       const message = event.data
+      console.log('[ScriptDebuggerPanel] Message data:', message)
       if (message.type === 'script:populate' && message.data?.spendParams) {
+        console.log('[ScriptDebuggerPanel] script:populate received!')
         // If the locking script is empty, show the input form with unlocking script pre-filled
         if (!message.data.spendParams.lockingScript) {
           setInitialUnlockingScript(message.data.spendParams.unlockingScript)
@@ -29,8 +37,18 @@ export function ScriptExecutorPanel() {
       }
     }
 
+    console.log('[ScriptDebuggerPanel] Adding message listener')
     window.addEventListener('message', handleMessage)
-    return () => window.removeEventListener('message', handleMessage)
+    console.log('[ScriptDebuggerPanel] Message listener added')
+
+    // Signal to backend that webview is ready
+    console.log('[ScriptDebuggerPanel] Sending webview:ready')
+    vscode.postMessage({ type: 'webview:ready' })
+
+    return () => {
+      console.log('[ScriptDebuggerPanel] Removing message listener')
+      window.removeEventListener('message', handleMessage)
+    }
   }, [])
 
   const handleExecute = (params: SpendParams) => {
@@ -45,7 +63,7 @@ export function ScriptExecutorPanel() {
     <div className="h-screen flex flex-col bg-background">
       {/* Sticky Header */}
       <div className="sticky top-0 z-10 bg-background border-b border-border p-4 flex items-center justify-between">
-        <h1 className="text-lg font-semibold">Script Execution Visualizer</h1>
+        <h1 className="text-lg font-semibold">Script Debugger</h1>
         {spendParams && (
           <button
             onClick={handleReset}
@@ -57,12 +75,12 @@ export function ScriptExecutorPanel() {
       </div>
 
       {/* Main Content */}
-      <div className="flex-1 overflow-hidden p-4">
+      <div className="flex-1 overflow-hidden px-4">
         {!spendParams ? (
-          <ScriptExecutorInput onExecute={handleExecute} initialUnlockingScript={initialUnlockingScript} />
+          <ScriptDebuggerInput onExecute={handleExecute} initialUnlockingScript={initialUnlockingScript} />
         ) : (
           <div className="h-full">
-            <ScriptExecutor spendParams={spendParams} />
+            <ScriptDebugger spendParams={spendParams} />
           </div>
         )}
       </div>

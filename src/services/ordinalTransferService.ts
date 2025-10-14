@@ -1,5 +1,5 @@
 import { PrivateKey, Transaction } from '@bsv/sdk';
-import { sendOrdinals, type SendOrdinalsConfig, type Utxo, type Destination } from 'js-1sat-ord';
+import { sendOrdinals, type SendOrdinalsConfig, type Utxo, type Destination, type LocalSigner } from 'js-1sat-ord';
 
 export interface OrdinalTransferConfig {
   ordinals: Utxo[];          // Array of ordinal UTXOs to send
@@ -9,6 +9,7 @@ export interface OrdinalTransferConfig {
   recipientAddress: string;  // Destination address
   changeAddress: string;     // Change address
   satsPerKb?: number;       // Fee rate (optional)
+  signer?: LocalSigner;      // Optional identity signer for SIGMA
 }
 
 export interface OrdinalTransferResult {
@@ -31,7 +32,7 @@ class OrdinalTransferService {
    */
   async estimateTransferFee(config: OrdinalTransferConfig): Promise<OrdinalTransferEstimate> {
     try {
-      const { ordinals, paymentUtxos, paymentPk, ordPk, recipientAddress, changeAddress, satsPerKb } = config;
+      const { ordinals, paymentUtxos, paymentPk, ordPk, recipientAddress, changeAddress, satsPerKb, signer } = config;
 
       // Build destinations array - one for each ordinal to same address
       const destinations: Destination[] = ordinals.map(() => ({
@@ -46,6 +47,7 @@ class OrdinalTransferService {
         destinations,
         changeAddress,
         satsPerKb,
+        signer
       };
 
       // Build transaction to estimate fee
@@ -72,7 +74,7 @@ class OrdinalTransferService {
    * Transfer ordinals to a recipient address
    */
   async transferOrdinals(config: OrdinalTransferConfig): Promise<OrdinalTransferResult> {
-    const { ordinals, paymentUtxos, paymentPk, ordPk, recipientAddress, changeAddress, satsPerKb } = config;
+    const { ordinals, paymentUtxos, paymentPk, ordPk, recipientAddress, changeAddress, satsPerKb, signer } = config;
 
     // Build destinations array - one for each ordinal to same address
     const destinations: Destination[] = ordinals.map(() => ({
@@ -87,6 +89,7 @@ class OrdinalTransferService {
       destinations,
       changeAddress,
       satsPerKb,
+      signer
     };
 
     const { tx, spentOutpoints, payChange } = await sendOrdinals(sendConfig);

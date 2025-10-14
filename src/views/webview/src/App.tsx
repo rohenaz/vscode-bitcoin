@@ -3,7 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { KeyVaultPanel } from './panels/KeyVaultPanel'
 import { BitcoinToolsPanel } from './panels/BitcoinToolsPanel'
 import { TransactionDecoderPanel } from './panels/TransactionDecoderPanel'
-import { ScriptExecutorPanel } from './panels/ScriptExecutorPanel'
+import { ScriptDebuggerPanel } from './panels/ScriptDebuggerPanel'
 
 // Declare global panel type
 declare global {
@@ -38,7 +38,7 @@ function App() {
       case 'transaction-decoder':
         return <TransactionDecoderPanel />
       case 'script-executor':
-        return <ScriptExecutorPanel />
+        return <ScriptDebuggerPanel />
       default:
         return <BitcoinToolsPanel />
     }

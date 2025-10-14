@@ -14,7 +14,7 @@ import {
 } from '@/components/ui/context-menu'
 import {
   Wallet, RefreshCw, Send, Download, Copy,
-  MapPin, Image, Coins, Flame, FolderOpen, Loader2, X, ExternalLink, Check, FileText, Play, Sparkles
+  MapPin, Image, Coins, Flame, FolderOpen, Loader2, X, ExternalLink, Check, FileText, Play, Sparkles, Store
 } from 'lucide-react'
 import { getVscode } from '../vscode'
 import { useVault } from '../contexts/VaultContext'
@@ -23,6 +23,7 @@ import { ReceiveDialog } from './ReceiveDialog'
 import { TransferTokenDialog } from './TransferTokenDialog'
 import { TransferOrdinalDialog } from './TransferOrdinalDialog'
 import { MintNftDialog } from './MintNftDialog'
+import { MarketTab } from './MarketTab'
 import { MintBsv21Dialog } from './MintBsv21Dialog'
 
 interface Collection {
@@ -842,6 +843,19 @@ export default function WalletTab({ isActive }: WalletTabProps) {
                     </AccordionItem>
                   </Accordion>
                 )}
+              </AccordionContent>
+            </AccordionItem>
+
+            {/* Market Section */}
+            <AccordionItem value="market">
+              <AccordionTrigger className="text-xs">
+                <div className="flex items-center gap-2">
+                  <Store className="h-3 w-3" />
+                  Market
+                </div>
+              </AccordionTrigger>
+              <AccordionContent>
+                <MarketTab />
               </AccordionContent>
             </AccordionItem>
 

@@ -1,10 +1,11 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion'
 import { Item, ItemActions, ItemContent, ItemTitle, ItemDescription } from '@/components/ui/item'
-import { Search, Eye, ArrowRightLeft } from 'lucide-react'
+import { Search, Eye, ArrowRightLeft, History } from 'lucide-react'
 import { getVscode } from '../vscode'
 import { DecodeTransaction } from './DecodeTransaction'
+import { DecodeHistory, type DecodeHistoryEntry } from './DecodeHistory'
 
 interface TransactionsTabProps {
   openItems: string[]
@@ -14,9 +15,33 @@ interface TransactionsTabProps {
 export default function TransactionsTab({ openItems, onOpenChange }: TransactionsTabProps) {
   const vscode = getVscode()
   const [rawTxHex, setRawTxHex] = useState('')
+  const [history, setHistory] = useState<DecodeHistoryEntry[]>([])
 
   const execute = (command: string) => {
     vscode.postMessage({ command })
+  }
+
+  // Load history on mount
+  useEffect(() => {
+    vscode.postMessage({ type: 'decodeHistory:get' })
+
+    const handleMessage = (event: MessageEvent) => {
+      const { type, data } = event.data
+      if (type === 'decodeHistory:data') {
+        setHistory(data)
+      }
+    }
+
+    window.addEventListener('message', handleMessage)
+    return () => window.removeEventListener('message', handleMessage)
+  }, [])
+
+  const handleDecodeFromHistory = (entry: DecodeHistoryEntry) => {
+    setRawTxHex(entry.rawTx)
+    // Open the decode accordion if not already open
+    if (!openItems.includes('decode')) {
+      onOpenChange([...openItems, 'decode'])
+    }
   }
 
   return (
@@ -67,6 +92,24 @@ export default function TransactionsTab({ openItems, onOpenChange }: Transaction
         </AccordionContent>
       </AccordionItem>
 
+      <AccordionItem value="history">
+        <AccordionTrigger className="text-xs">
+          <div className="flex items-center gap-2">
+            <History className="h-3 w-3" />
+            Decode History
+            {history.length > 0 && (
+              <span className="ml-auto text-muted-foreground">({history.length})</span>
+            )}
+          </div>
+        </AccordionTrigger>
+        <AccordionContent>
+          <DecodeHistory
+            history={history}
+            onDecode={handleDecodeFromHistory}
+          />
+        </AccordionContent>
+      </AccordionItem>
+
       <AccordionItem value="decode">
         <AccordionTrigger className="text-xs">
           <div className="flex items-center gap-2">
@@ -89,7 +132,7 @@ export default function TransactionsTab({ openItems, onOpenChange }: Transaction
                   <ItemDescription>Step through script execution</ItemDescription>
                 </ItemContent>
                 <ItemActions>
-                  <Button variant="outline" size="sm" onClick={() => execute('bitcoin.openScriptExecutor')}>
+                  <Button variant="outline" size="sm" onClick={() => execute('bitcoin.openScriptDebugger')}>
                     Open
                   </Button>
                 </ItemActions>

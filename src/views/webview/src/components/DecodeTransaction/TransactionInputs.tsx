@@ -1,9 +1,10 @@
 import { useState } from 'react'
 import { Hash, ChevronDown, ChevronUp, Play, AlertCircle, CheckCircle, Loader2 } from 'lucide-react'
-import type { DecodedTransactionInput } from '../../types/decodedTransaction'
+import type { DecodedTransactionInput, DecodedTransactionOutput } from '../../types/decodedTransaction'
 import { Identicon } from '../Identicon'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { ScrollArea } from '@/components/ui/scroll-area'
 import { formatSatoshis, truncateTxid, extractP2PKHAddress, detectScriptType } from '../../utils/scriptParser'
 import { getVscode } from '../../vscode'
 import {
@@ -15,10 +16,13 @@ import {
 
 interface TransactionInputsProps {
   inputs: DecodedTransactionInput[]
+  outputs: DecodedTransactionOutput[]
+  transactionVersion: number
+  transactionLockTime: number
   network?: string
 }
 
-export function TransactionInputs({ inputs, network = 'mainnet' }: TransactionInputsProps) {
+export function TransactionInputs({ inputs, outputs, transactionVersion, transactionLockTime, network = 'mainnet' }: TransactionInputsProps) {
   const vscode = getVscode()
   const [expandedIndex, setExpandedIndex] = useState<number | null>(null)
   const [encodingView, setEncodingView] = useState<{ [key: number]: string }>({})
@@ -43,7 +47,12 @@ export function TransactionInputs({ inputs, network = 'mainnet' }: TransactionIn
         inputIndex: input.index,
         unlockingScript: input.unlockingScript,
         sourceTXID: input.sourceTXID,
-        sourceOutputIndex: input.sourceOutputIndex
+        sourceOutputIndex: input.sourceOutputIndex,
+        // Pass full transaction context for proper script execution
+        spendingTxInputs: inputs,
+        spendingTxOutputs: outputs,
+        transactionVersion,
+        transactionLockTime
       }
     })
   }
@@ -81,22 +90,28 @@ export function TransactionInputs({ inputs, network = 'mainnet' }: TransactionIn
     switch (view) {
       case 'ascii':
         return (
-          <pre className="text-[10px] font-mono whitespace-pre-wrap break-all bg-black/30 p-2 rounded">
-            {hexToAscii(script)}
-          </pre>
+          <ScrollArea className="h-48 w-full rounded-md border border-border">
+            <pre className="text-[10px] font-mono whitespace-pre-wrap break-all bg-black/30 p-2">
+              {hexToAscii(script)}
+            </pre>
+          </ScrollArea>
         )
       case 'script':
         return (
-          <pre className="text-[10px] font-mono whitespace-pre-wrap break-all bg-black/30 p-2 rounded">
-            {scriptAsm}
-          </pre>
+          <ScrollArea className="h-48 w-full rounded-md border border-border">
+            <pre className="text-[10px] font-mono whitespace-pre-wrap break-all bg-black/30 p-2">
+              {scriptAsm}
+            </pre>
+          </ScrollArea>
         )
       case 'hex':
       default:
         return (
-          <pre className="text-[10px] font-mono whitespace-pre-wrap break-all bg-black/30 p-2 rounded">
-            {script}
-          </pre>
+          <ScrollArea className="h-48 w-full rounded-md border border-border">
+            <pre className="text-[10px] font-mono whitespace-pre-wrap break-all bg-black/30 p-2">
+              {script}
+            </pre>
+          </ScrollArea>
         )
     }
   }

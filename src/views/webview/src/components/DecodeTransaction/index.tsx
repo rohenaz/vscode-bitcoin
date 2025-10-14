@@ -1,12 +1,18 @@
 import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
+import { ButtonGroup } from '@/components/ui/button-group'
 import { Textarea } from '@/components/ui/textarea'
 import { Card } from '@/components/ui/card'
+import {
+  ResizableHandle,
+  ResizablePanel,
+  ResizablePanelGroup,
+} from '@/components/ui/resizable'
 import { Copy, Loader2, Edit, Radio, ExternalLink } from 'lucide-react'
 import type { DecodedTransaction } from '../../types/decodedTransaction'
 import { TransactionInputs } from './TransactionInputs'
 import { TransactionOutputs } from './TransactionOutputs'
-import { ScriptExecutor } from '../ScriptExecutor'
+import { ScriptDebugger } from '../ScriptDebugger'
 import type { SpendParams } from '../../types/scriptExecution'
 import { formatBytes, truncateTxid } from '../../utils/scriptParser'
 import { getVscode } from '../../vscode'
@@ -23,8 +29,8 @@ export function DecodeTransaction({ rawTxHex, onRawTxHexChange, openInWindow = f
   const [isDecoding, setIsDecoding] = useState(false)
   const [isBroadcasting, setIsBroadcasting] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [showScriptExecutor, setShowScriptExecutor] = useState(false)
-  const [scriptExecutorData, setScriptExecutorData] = useState<any>(null)
+  const [showScriptDebugger, setShowScriptDebugger] = useState(false)
+  const [scriptDebuggerData, setScriptDebuggerData] = useState<any>(null)
   const [showInput, setShowInput] = useState(true)
   const [onChain, setOnChain] = useState<boolean | null>(null)
   const [network, setNetwork] = useState<string>('mainnet')
@@ -141,10 +147,10 @@ export function DecodeTransaction({ rawTxHex, onRawTxHexChange, openInWindow = f
       } else if (message.type === 'transaction:onChainStatus') {
         setOnChain(message.data.onChain)
         setNetwork(message.data.network || 'mainnet')
-      } else if (message.type === 'scriptExecutor:show') {
-        setScriptExecutorData(message.data)
-        setShowScriptExecutor(true)
-      } else if (message.type === 'scriptExecutor:error') {
+      } else if (message.type === 'scriptDebugger:show') {
+        setScriptDebuggerData(message.data)
+        setShowScriptDebugger(true)
+      } else if (message.type === 'scriptDebugger:error') {
         setError(`Script execution failed: ${message.data.error}`)
       } else if (message.type === 'transaction:broadcast:result') {
         setIsBroadcasting(false)
@@ -164,27 +170,27 @@ export function DecodeTransaction({ rawTxHex, onRawTxHexChange, openInWindow = f
     return () => window.removeEventListener('message', handleMessage)
   }, [decodedTx, vscode])
 
-  // Create SpendParams from scriptExecutorData
-  const spendParams: SpendParams | null = scriptExecutorData ? {
-    sourceTXID: scriptExecutorData.sourceTXID,
-    sourceOutputIndex: scriptExecutorData.sourceOutputIndex,
-    sourceSatoshis: scriptExecutorData.satoshis,
-    lockingScript: scriptExecutorData.lockingScript,
+  // Create SpendParams from scriptDebuggerData
+  const spendParams: SpendParams | null = scriptDebuggerData ? {
+    sourceTXID: scriptDebuggerData.sourceTXID,
+    sourceOutputIndex: scriptDebuggerData.sourceOutputIndex,
+    sourceSatoshis: scriptDebuggerData.satoshis,
+    lockingScript: scriptDebuggerData.lockingScript,
     transactionVersion: 1,
     otherInputs: [],
     outputs: [],
-    unlockingScript: scriptExecutorData.unlockingScript,
+    unlockingScript: scriptDebuggerData.unlockingScript,
     inputSequence: 0xffffffff,
-    inputIndex: scriptExecutorData.inputIndex,
+    inputIndex: scriptDebuggerData.inputIndex,
     lockTime: 0,
     memoryLimit: 10000000
   } : null
 
   return (
     <div className="space-y-4">
-      {/* Script Executor */}
-      {showScriptExecutor && spendParams && (
-        <ScriptExecutor
+      {/* Script Debugger */}
+      {showScriptDebugger && spendParams && (
+        <ScriptDebugger
           spendParams={spendParams}
         />
       )}
@@ -196,7 +202,7 @@ export function DecodeTransaction({ rawTxHex, onRawTxHexChange, openInWindow = f
             placeholder="Paste raw transaction hex..."
             value={rawTxHex}
             onChange={(e) => onRawTxHexChange(e.target.value)}
-            className="font-mono text-xs min-h-[100px] max-h-[400px]"
+            className="font-mono text-xs min-h-[100px] max-h-[160px]"
           />
           <Button
             onClick={handleDecode}
@@ -224,128 +230,150 @@ export function DecodeTransaction({ rawTxHex, onRawTxHexChange, openInWindow = f
 
       {/* Decoded Transaction Display */}
       {decodedTx && !showInput && (
-        <div className="space-y-4">
-          {/* Transaction Summary */}
-          <Card className="p-4 space-y-2 bg-[#1a1a1a]">
-            <div className="flex justify-between items-center text-xs">
-              <span className="text-muted-foreground">Transaction ID</span>
-              <div className="flex items-center gap-2">
-                <code className="font-mono text-[10px]">{truncateTxid(decodedTx.txid)}</code>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-6 w-6 p-0"
-                  onClick={() => handleCopy(decodedTx.txid, 'Transaction ID')}
-                >
-                  <Copy className="h-3 w-3" />
-                </Button>
-              </div>
-            </div>
-
-            <div className="flex justify-between text-xs">
-              <span className="text-muted-foreground">Size</span>
-              <span className="font-mono">{formatBytes(decodedTx.size)}</span>
-            </div>
-
-            <div className="flex justify-between text-xs">
-              <span className="text-muted-foreground">Version</span>
-              <span className="font-mono">{decodedTx.version}</span>
-            </div>
-
-            <div className="flex justify-between text-xs">
-              <span className="text-muted-foreground">Lock Time</span>
-              <span className="font-mono">{decodedTx.lockTime}</span>
-            </div>
-
-            <div className="pt-2 border-t border-border space-y-2">
-              {onChain === true && (
-                <div className="text-xs text-green-500 flex items-center gap-2">
-                  <span>✓</span>
-                  <span>Transaction found on chain</span>
+        <ResizablePanelGroup direction="vertical" className="h-[calc(100vh-200px)] min-h-[600px]">
+          {/* Transaction Summary Panel */}
+          <ResizablePanel defaultSize={25} minSize={15}>
+            <div className="p-4 space-y-2 h-full overflow-auto">
+              <div className="flex justify-between items-center text-xs">
+                <span className="text-muted-foreground">Transaction ID</span>
+                <div className="flex items-center gap-2">
+                  <code className="font-mono text-[10px]">{truncateTxid(decodedTx.txid)}</code>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 w-6 p-0"
+                    onClick={() => handleCopy(decodedTx.txid, 'Transaction ID')}
+                  >
+                    <Copy className="h-3 w-3" />
+                  </Button>
                 </div>
-              )}
-              <div className="flex gap-2 flex-wrap">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="flex-1 text-xs"
-                  onClick={() => handleCopy(rawTxHex, 'Raw Transaction')}
-                >
-                  <Copy className="mr-2 h-3 w-3" />
-                  Copy Raw
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="flex-1 text-xs"
-                  onClick={handleEdit}
-                >
-                  <Edit className="mr-2 h-3 w-3" />
-                  Edit
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="flex-1 text-xs"
-                  onClick={() => {
-                    const baseUrl = network === 'testnet'
-                      ? 'https://test.whatsonchain.com'
-                      : 'https://whatsonchain.com'
-                    vscode.postMessage({
-                      type: 'openExternal',
-                      url: `${baseUrl}/tx/${decodedTx.txid}`
-                    })
-                  }}
-                >
-                  <ExternalLink className="mr-2 h-3 w-3" />
-                  View
-                </Button>
-                <Button
-                  variant="default"
-                  size="sm"
-                  className="flex-1 text-xs"
-                  onClick={handleBroadcast}
-                  disabled={isBroadcasting || onChain === true}
-                  title={onChain === true ? 'Transaction already on chain' : 'Broadcast to network'}
-                >
-                  {isBroadcasting ? (
-                    <>
-                      <Loader2 className="mr-2 h-3 w-3 animate-spin" />
-                      Broadcasting...
-                    </>
-                  ) : (
-                    <>
-                      <Radio className="mr-2 h-3 w-3" />
-                      Broadcast
-                    </>
-                  )}
-                </Button>
+              </div>
+
+              <div className="flex justify-between text-xs">
+                <span className="text-muted-foreground">Size</span>
+                <span className="font-mono">{formatBytes(decodedTx.size)}</span>
+              </div>
+
+              <div className="flex justify-between text-xs">
+                <span className="text-muted-foreground">Version</span>
+                <span className="font-mono">{decodedTx.version}</span>
+              </div>
+
+              <div className="flex justify-between text-xs">
+                <span className="text-muted-foreground">Lock Time</span>
+                <span className="font-mono">{decodedTx.lockTime}</span>
+              </div>
+
+              <div className="pt-2 border-t border-border space-y-2">
+                {onChain === true && (
+                  <div className="text-xs text-green-500 flex items-center gap-2">
+                    <span>✓</span>
+                    <span>Transaction found on chain</span>
+                  </div>
+                )}
+                <ButtonGroup className="w-full">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="text-xs"
+                    onClick={() => handleCopy(rawTxHex, 'Raw Transaction')}
+                  >
+                    <Copy className="mr-2 h-3 w-3" />
+                    Copy Raw
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="text-xs"
+                    onClick={handleEdit}
+                  >
+                    <Edit className="mr-2 h-3 w-3" />
+                    Edit
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="text-xs"
+                    onClick={() => {
+                      const baseUrl = network === 'testnet'
+                        ? 'https://test.whatsonchain.com'
+                        : 'https://whatsonchain.com'
+                      vscode.postMessage({
+                        type: 'openExternal',
+                        url: `${baseUrl}/tx/${decodedTx.txid}`
+                      })
+                    }}
+                  >
+                    <ExternalLink className="mr-2 h-3 w-3" />
+                    View
+                  </Button>
+                  <Button
+                    variant="default"
+                    size="sm"
+                    className="text-xs"
+                    onClick={handleBroadcast}
+                    disabled={isBroadcasting || onChain === true}
+                    title={onChain === true ? 'Transaction already on chain' : 'Broadcast to network'}
+                  >
+                    {isBroadcasting ? (
+                      <>
+                        <Loader2 className="mr-2 h-3 w-3 animate-spin" />
+                        Broadcasting...
+                      </>
+                    ) : (
+                      <>
+                        <Radio className="mr-2 h-3 w-3" />
+                        Broadcast
+                      </>
+                    )}
+                  </Button>
+                </ButtonGroup>
               </div>
             </div>
-          </Card>
+          </ResizablePanel>
 
-          {/* Inputs and Outputs */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Inputs */}
-            <div className="space-y-2">
-              <h3 className="font-mono font-semibold text-sm">
-                Inputs ({decodedTx.inputs.length})
-              </h3>
-              <TransactionInputs inputs={decodedTx.inputs} network={network} />
-            </div>
+          <ResizableHandle withHandle />
 
-            {/* Outputs */}
-            <div className="space-y-2">
-              <h3 className="font-mono font-semibold text-sm">
-                Outputs ({decodedTx.outputs.length})
-              </h3>
-              <TransactionOutputs
-                outputs={decodedTx.outputs}
-                network={network}
-              />
-            </div>
-          </div>
-        </div>
+          {/* Inputs and Outputs Panel */}
+          <ResizablePanel defaultSize={75} minSize={40}>
+            <ResizablePanelGroup direction="horizontal">
+              {/* Inputs Panel */}
+              <ResizablePanel defaultSize={50} minSize={30}>
+                <div className="h-full flex flex-col">
+                  <h3 className="font-mono font-semibold text-sm p-2 bg-background border-b">
+                    Inputs ({decodedTx.inputs.length})
+                  </h3>
+                  <div className="flex-1 overflow-auto p-2">
+                    <TransactionInputs
+                      inputs={decodedTx.inputs}
+                      outputs={decodedTx.outputs}
+                      transactionVersion={decodedTx.version}
+                      transactionLockTime={decodedTx.lockTime}
+                      network={network}
+                    />
+                  </div>
+                </div>
+              </ResizablePanel>
+
+              <ResizableHandle withHandle />
+
+              {/* Outputs Panel */}
+              <ResizablePanel defaultSize={50} minSize={30}>
+                <div className="h-full flex flex-col">
+                  <h3 className="font-mono font-semibold text-sm p-2 bg-background border-b">
+                    Outputs ({decodedTx.outputs.length})
+                  </h3>
+                  <div className="flex-1 overflow-auto p-2">
+                    <TransactionOutputs
+                      outputs={decodedTx.outputs}
+                      network={network}
+                    />
+                  </div>
+                </div>
+              </ResizablePanel>
+            </ResizablePanelGroup>
+          </ResizablePanel>
+        </ResizablePanelGroup>
       )}
     </div>
   )

@@ -31,7 +31,7 @@ import { API_HOST } from './constants';
 import { EncryptionService } from './encryption';
 import { KeyPanel } from './views/keyVault/index';
 import { TransactionDecoderPanel } from './views/transactionDecoder/index';
-import { ScriptExecutorPanel } from './views/scriptExecutor/index';
+import { ScriptDebuggerPanel } from './views/scriptDebugger/index';
 import { KeyVault } from './keyVault';
 import { OutputManager } from './output';
 import { DataFormat, convertData, detectFormat } from './utils';
@@ -274,7 +274,7 @@ export async function activate(context: ExtensionContext) {
   };
 
   // Register Bitcoin Tools view provider (with tabs for Quick Actions, Data Conversion, Help)
-  const bitcoinToolsViewProvider = new BitcoinToolsViewProvider(context.extensionUri, keyVault);
+  const bitcoinToolsViewProvider = new BitcoinToolsViewProvider(context.extensionUri, keyVault, context);
   context.subscriptions.push(
     vsApi.window.registerWebviewViewProvider(
       BitcoinToolsViewProvider.viewType,
@@ -340,6 +340,9 @@ export async function activate(context: ExtensionContext) {
   );
   context.subscriptions.push(showKeyVaultAndImportCommand);
 
+  // Initialize transaction decoder history service
+  TransactionDecoderPanel.initialize(context);
+
   // Register transaction decoder panel command
   const openTransactionDecoderCommand = vsApi.commands.registerCommand(
     'bitcoin.openTransactionDecoder',
@@ -350,13 +353,15 @@ export async function activate(context: ExtensionContext) {
   context.subscriptions.push(openTransactionDecoderCommand);
 
   // Register script executor panel command
-  const openScriptExecutorCommand = vsApi.commands.registerCommand(
-    'bitcoin.openScriptExecutor',
+  const openScriptDebuggerCommand = vsApi.commands.registerCommand(
+    'bitcoin.openScriptDebugger',
     async (spendParams?: any) => {
-      ScriptExecutorPanel.show(context.extensionUri, spendParams);
+      console.log('[Extension] openScriptDebugger command called with spendParams:', !!spendParams);
+      ScriptDebuggerPanel.show(context.extensionUri, spendParams);
+      console.log('[Extension] ScriptDebuggerPanel.show() called');
     },
   );
-  context.subscriptions.push(openScriptExecutorCommand);
+  context.subscriptions.push(openScriptDebuggerCommand);
 
   // Register detect and convert command
   registerCommand(context, outputManager, 'bitcoin.decodeFile', async () =>
