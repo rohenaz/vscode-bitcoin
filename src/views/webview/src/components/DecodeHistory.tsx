@@ -137,14 +137,13 @@ export function DecodeHistory({ history, onDecode, onDebug }: DecodeHistoryProps
                 {formatBytes(entry.size)} • {entry.inputCount} in / {entry.outputCount} out • {formatTimestamp(entry.timestamp)}
               </ItemDescription>
             </ItemContent>
-            <ItemActions>
+            <ItemActions onClick={(e) => e.stopPropagation()}>
               <DropdownMenu modal={false}>
                 <DropdownMenuTrigger asChild>
                   <Button
                     variant="ghost"
                     size="sm"
                     className="h-7 w-7 p-0"
-                    onClick={(e) => e.stopPropagation()}
                   >
                     <MoreHorizontal className="h-3 w-3" />
                   </Button>

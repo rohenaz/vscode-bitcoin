@@ -154,10 +154,10 @@ export class ScriptDebugger {
       // Calculate stack diff
       const stackDiff = this.calculateStackDiff(beforeState, afterState)
 
-      // Create execution step
+      // Create execution step - use afterState.context to handle context transitions correctly
       const step: ExecutionStep = {
         stepNumber: this.history.length,
-        context: beforeState.context,
+        context: afterState.context,
         programCounter: beforeState.programCounter,
         opcode: opcode,
         opcodeName: this.getOpcodeName(opcode),
