@@ -36,7 +36,7 @@ export function DecodeTransaction({ rawTxHex, onRawTxHexChange, openInWindow = f
   const [network, setNetwork] = useState<string>('mainnet')
 
   const handleDecode = () => {
-    if (!rawTxHex.trim()) {
+    if (!rawTxHex || !rawTxHex.trim()) {
       setError('Please enter a transaction hex')
       return
     }
@@ -74,7 +74,7 @@ export function DecodeTransaction({ rawTxHex, onRawTxHexChange, openInWindow = f
   }
 
   const handleBroadcast = () => {
-    if (!rawTxHex.trim()) {
+    if (!rawTxHex || !rawTxHex.trim()) {
       setError('No transaction to broadcast')
       return
     }
@@ -206,7 +206,7 @@ export function DecodeTransaction({ rawTxHex, onRawTxHexChange, openInWindow = f
           />
           <Button
             onClick={handleDecode}
-            disabled={isDecoding || !rawTxHex.trim()}
+            disabled={isDecoding || !rawTxHex || !rawTxHex.trim()}
             className="w-full"
           >
             {isDecoding ? (

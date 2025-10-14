@@ -29,19 +29,31 @@ export default function TransactionsTab({ openItems, onOpenChange }: Transaction
       const { type, data } = event.data
       if (type === 'decodeHistory:data') {
         setHistory(data)
+      } else if (type === 'decodeHistory:rawTx') {
+        // Received raw tx from cache - populate and open decode
+        if (data.rawTx) {
+          setRawTxHex(data.rawTx)
+          if (!openItems.includes('decode')) {
+            onOpenChange([...openItems, 'decode'])
+          }
+        }
       }
     }
 
     window.addEventListener('message', handleMessage)
     return () => window.removeEventListener('message', handleMessage)
-  }, [])
+  }, [openItems, onOpenChange])
 
   const handleDecodeFromHistory = (entry: DecodeHistoryEntry) => {
-    setRawTxHex(entry.rawTx)
-    // Open the decode accordion if not already open
-    if (!openItems.includes('decode')) {
-      onOpenChange([...openItems, 'decode'])
-    }
+    // Request raw tx from backend (txCache)
+    vscode.postMessage({
+      type: 'decodeHistory:getRawTx',
+      data: {
+        txid: entry.txid,
+        action: 'decode',
+        network: entry.network || 'mainnet'
+      }
+    })
   }
 
   return (

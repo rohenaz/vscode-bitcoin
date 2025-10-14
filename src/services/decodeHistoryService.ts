@@ -4,11 +4,12 @@ import * as fs from 'fs/promises';
 
 export interface DecodeHistoryEntry {
   txid: string;
-  rawTx: string;
+  // rawTx removed - get from txCache.get(txid) when needed
   timestamp: number;
   size: number;
   inputCount: number;
   outputCount: number;
+  network?: string; // Track which network this tx is from
 }
 
 export class DecodeHistoryService {
@@ -31,7 +32,13 @@ export class DecodeHistoryService {
 
       // Try to read existing history
       const data = await fs.readFile(this.historyFile, 'utf-8');
-      this.history = JSON.parse(data);
+      const loaded: DecodeHistoryEntry[] = JSON.parse(data);
+
+      // Remove rawTx field from old entries (migration)
+      this.history = loaded.map(entry => {
+        const { rawTx, ...rest } = entry as any;
+        return rest;
+      });
     } catch (error) {
       // If file doesn't exist or is invalid, start with empty history
       this.history = [];

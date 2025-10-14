@@ -2,19 +2,17 @@ import { useState, useEffect } from 'react'
 import { ScriptDebugger } from '../components/ScriptDebugger'
 import { ScriptDebuggerInput } from '../components/ScriptDebuggerInput'
 import type { SpendParams } from '../types/scriptExecution'
-import { getVscode } from '../vscode'
 import '../App.css'
 
 export function ScriptDebuggerPanel() {
   console.log('[ScriptDebuggerPanel] Component rendering')
   const [spendParams, setSpendParams] = useState<SpendParams | null>(null)
-  const [initialUnlockingScript, setInitialUnlockingScript] = useState<string>('')
 
   useEffect(() => {
     console.log('[ScriptDebuggerPanel] useEffect running')
-    const vscode = getVscode()
-
     document.documentElement.classList.add('dark')
+
+    // Remove initial loading spinner
     const loader = document.getElementById('initial-loader')
     if (loader) {
       loader.style.opacity = '0'
@@ -22,40 +20,23 @@ export function ScriptDebuggerPanel() {
       setTimeout(() => loader.remove(), 300)
     }
 
-    const handleMessage = (event: MessageEvent) => {
-      console.log('[ScriptDebuggerPanel] Message received:', event)
-      const message = event.data
-      console.log('[ScriptDebuggerPanel] Message data:', message)
-      if (message.type === 'script:populate' && message.data?.spendParams) {
-        console.log('[ScriptDebuggerPanel] script:populate received!')
-        // If the locking script is empty, show the input form with unlocking script pre-filled
-        if (!message.data.spendParams.lockingScript) {
-          setInitialUnlockingScript(message.data.spendParams.unlockingScript)
-        } else {
-          setSpendParams(message.data.spendParams)
-        }
-      }
-    }
-
-    console.log('[ScriptDebuggerPanel] Adding message listener')
-    window.addEventListener('message', handleMessage)
-    console.log('[ScriptDebuggerPanel] Message listener added')
-
-    // Signal to backend that webview is ready
-    console.log('[ScriptDebuggerPanel] Sending webview:ready')
-    vscode.postMessage({ type: 'webview:ready' })
-
-    return () => {
-      console.log('[ScriptDebuggerPanel] Removing message listener')
-      window.removeEventListener('message', handleMessage)
+    // Load spendParams from INITIAL_DATA if available
+    const initialData = window.INITIAL_DATA
+    if (initialData?.spendParams) {
+      console.log('[ScriptDebuggerPanel] Loading spendParams from INITIAL_DATA')
+      setSpendParams(initialData.spendParams)
+    } else {
+      console.log('[ScriptDebuggerPanel] No INITIAL_DATA, showing input form')
     }
   }, [])
 
   const handleExecute = (params: SpendParams) => {
+    console.log('[ScriptDebuggerPanel] Manual execution with params')
     setSpendParams(params)
   }
 
   const handleReset = () => {
+    console.log('[ScriptDebuggerPanel] Resetting to input form')
     setSpendParams(null)
   }
 
@@ -77,7 +58,7 @@ export function ScriptDebuggerPanel() {
       {/* Main Content */}
       <div className="flex-1 overflow-hidden px-4">
         {!spendParams ? (
-          <ScriptDebuggerInput onExecute={handleExecute} initialUnlockingScript={initialUnlockingScript} />
+          <ScriptDebuggerInput onExecute={handleExecute} initialUnlockingScript="" />
         ) : (
           <div className="h-full">
             <ScriptDebugger spendParams={spendParams} />

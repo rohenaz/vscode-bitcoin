@@ -1,6 +1,7 @@
 import * as vscode from 'vscode'
 import fetch from 'node-fetch'
 import { DecodeHistoryService } from '../../services/decodeHistoryService'
+import { txCache } from '../../services/txCache'
 
 interface CachedTransaction {
   decodedTx: any
@@ -16,14 +17,12 @@ export class TransactionDecoderPanel {
   private readonly _panel: vscode.WebviewPanel
   private readonly _extensionUri: vscode.Uri
   private _disposables: vscode.Disposable[] = []
-  private _pendingRawTxHex?: string
   private _txCache: Map<string, CachedTransaction> = new Map()
 
-  private constructor(panel: vscode.WebviewPanel, extensionUri: vscode.Uri, rawTxHex?: string) {
+  private constructor(panel: vscode.WebviewPanel, extensionUri: vscode.Uri, txid?: string) {
     this._panel = panel
     this._extensionUri = extensionUri
-    this._pendingRawTxHex = rawTxHex
-    this._panel.webview.html = this._getHtmlForWebview(this._panel.webview)
+    this._panel.webview.html = this._getHtmlForWebview(this._panel.webview, txid)
     this._panel.onDidDispose(() => this.dispose(), null, this._disposables)
 
     // Handle messages from webview
@@ -48,18 +47,6 @@ export class TransactionDecoderPanel {
 
   private async handleMessage(message: any) {
     const { Transaction } = await import('@bsv/sdk')
-
-    // Handle webview ready signal
-    if (message.type === 'webview:ready') {
-      if (this._pendingRawTxHex) {
-        this._panel.webview.postMessage({
-          type: 'transaction:populate',
-          data: { rawTxHex: this._pendingRawTxHex }
-        })
-        this._pendingRawTxHex = undefined
-      }
-      return
-    }
 
     // Handle external link opening
     if (message.type === 'openExternal' && message.url) {
@@ -194,14 +181,14 @@ export class TransactionDecoderPanel {
           timestamp: Date.now()
         })
 
-        // Save to decode history
+        // Save to decode history (rawTx is stored in txCache, not duplicated here)
         if (TransactionDecoderPanel.historyService) {
           TransactionDecoderPanel.historyService.addEntry({
             txid,
-            rawTx,
             size,
             inputCount: tx.inputs.length,
-            outputCount: tx.outputs.length
+            outputCount: tx.outputs.length,
+            network
           }).catch(err => {
             console.error('Failed to save decode history:', err)
           })
@@ -223,30 +210,13 @@ export class TransactionDecoderPanel {
         })
       }
     } else if (message.type === 'transaction:loadByTxid') {
-      // Load a transaction by its txid from WhatOnChain
+      // Load a transaction by its txid
       try {
         const { txid, network = 'mainnet' } = message.data
 
-        const response = await fetch(this.getWhatOnChainUrl(network, `/tx/${txid}/hex`))
+        // Use unified txCache with automatic fallback
+        const rawTxHex = await txCache.fetch(txid, network)
 
-        if (!response.ok) {
-          // Try the other network if not found
-          const altNetwork = network === 'testnet' ? 'mainnet' : 'testnet'
-          const altResponse = await fetch(this.getWhatOnChainUrl(altNetwork, `/tx/${txid}/hex`))
-
-          if (!altResponse.ok) {
-            throw new Error(`Transaction ${txid} not found on chain`)
-          }
-
-          const rawTxHex = await altResponse.text()
-          this._panel.webview.postMessage({
-            type: 'transaction:populate',
-            data: { rawTxHex }
-          })
-          return
-        }
-
-        const rawTxHex = await response.text()
         this._panel.webview.postMessage({
           type: 'transaction:populate',
           data: { rawTxHex }
@@ -282,15 +252,11 @@ export class TransactionDecoderPanel {
           return
         }
 
-        // Try mainnet first
-        let response = await fetch(this.getWhatOnChainUrl('mainnet', `/tx/${sourceTXID}/hex`))
-
-        // If not found, try testnet
-        if (response.status === 404) {
-          response = await fetch(this.getWhatOnChainUrl('testnet', `/tx/${sourceTXID}/hex`))
-        }
-
-        if (!response.ok) {
+        // Use unified txCache with automatic fallback
+        let sourceRawTx: string
+        try {
+          sourceRawTx = await txCache.fetch(sourceTXID)
+        } catch (error) {
           // Transaction not found on chain
           vscode.window.showWarningMessage(
             `Source transaction ${sourceTXID.slice(0, 8)}... not found on chain. The locking script cannot be retrieved automatically.`,
@@ -320,7 +286,6 @@ export class TransactionDecoderPanel {
           return
         }
 
-        const sourceRawTx = await response.text()
         const sourceTx = Transaction.fromHex(sourceRawTx)
 
         const sourceOutput = sourceTx.outputs[sourceOutputIndex]
@@ -391,14 +356,30 @@ export class TransactionDecoderPanel {
     TransactionDecoderPanel.historyService = new DecodeHistoryService(context)
   }
 
-  public static show(extensionUri: vscode.Uri, rawTxHex?: string) {
+  public static async show(extensionUri: vscode.Uri, rawTxHex?: string) {
+    let txid: string | undefined
+
+    // If raw hex is provided, decode and save to storage
+    if (rawTxHex) {
+      try {
+        const { Transaction } = await import('@bsv/sdk')
+        const tx = Transaction.fromHex(rawTxHex)
+        txid = tx.id('hex') as string
+
+        // Save to storage
+        txCache.set(txid, rawTxHex)
+        console.log(`[TransactionDecoderPanel] Saved transaction ${txid} to storage`)
+      } catch (error) {
+        console.error('[TransactionDecoderPanel] Failed to decode/save transaction:', error)
+      }
+    }
+
     if (TransactionDecoderPanel.currentPanel) {
       TransactionDecoderPanel.currentPanel._panel.reveal(vscode.ViewColumn.One)
-      if (rawTxHex) {
-        TransactionDecoderPanel.currentPanel._panel.webview.postMessage({
-          type: 'transaction:populate',
-          data: { rawTxHex }
-        })
+      if (txid) {
+        // Reload with new txid
+        TransactionDecoderPanel.currentPanel._panel.webview.html =
+          TransactionDecoderPanel.currentPanel._getHtmlForWebview(TransactionDecoderPanel.currentPanel._panel.webview, txid)
       }
       return
     }
@@ -414,7 +395,8 @@ export class TransactionDecoderPanel {
       }
     )
 
-    TransactionDecoderPanel.currentPanel = new TransactionDecoderPanel(panel, extensionUri, rawTxHex)
+    const instance = new TransactionDecoderPanel(panel, extensionUri, txid)
+    TransactionDecoderPanel.currentPanel = instance
   }
 
   private async checkTransactionOnChain(txid: string, network: string) {
@@ -501,26 +483,11 @@ export class TransactionDecoderPanel {
         return
       }
 
-      // Fetch all source transactions in parallel
+      // Fetch all source transactions in parallel using txCache
       const sourcePromises = Array.from(uniqueSources).map(async (sourceTxid) => {
         try {
-          console.log(`Fetching source tx ${sourceTxid} from ${network}...`)
-          // Try specified network first
-          let response = await fetch(this.getWhatOnChainUrl(network, `/tx/${sourceTxid}/hex`))
-
-          // Try alternate network if not found
-          if (!response.ok) {
-            console.log(`Not found on ${network}, trying alternate network...`)
-            const altNetwork = network === 'testnet' ? 'mainnet' : 'testnet'
-            response = await fetch(this.getWhatOnChainUrl(altNetwork, `/tx/${sourceTxid}/hex`))
-          }
-
-          if (!response.ok) {
-            console.warn(`Source tx ${sourceTxid} not found on chain (status: ${response.status})`)
-            return { txid: sourceTxid, tx: null }
-          }
-
-          const rawHex = await response.text()
+          console.log(`Fetching source tx ${sourceTxid}...`)
+          const rawHex = await txCache.fetch(sourceTxid, network)
           console.log(`Successfully fetched source tx ${sourceTxid}`)
           const tx = Transaction.fromHex(rawHex)
           return { txid: sourceTxid, tx }
@@ -592,27 +559,9 @@ export class TransactionDecoderPanel {
 
   private async handleFetchTransactionHex(txid: string, network: string) {
     try {
-      const response = await fetch(this.getWhatOnChainUrl(network, `/tx/${txid}/hex`))
+      // Use unified txCache with automatic fallback
+      const rawTxHex = await txCache.fetch(txid, network)
 
-      if (!response.ok) {
-        // Try alternate network
-        const altNetwork = network === 'testnet' ? 'mainnet' : 'testnet'
-        const altResponse = await fetch(this.getWhatOnChainUrl(altNetwork, `/tx/${txid}/hex`))
-
-        if (!altResponse.ok) {
-          throw new Error(`Transaction ${txid} not found on chain`)
-        }
-
-        const rawTxHex = await altResponse.text()
-        this._panel.webview.postMessage({
-          type: 'whatsonchain:transactionHex:success',
-          txid,
-          data: rawTxHex
-        })
-        return
-      }
-
-      const rawTxHex = await response.text()
       this._panel.webview.postMessage({
         type: 'whatsonchain:transactionHex:success',
         txid,
@@ -683,21 +632,10 @@ export class TransactionDecoderPanel {
         }
       })
 
-      // Fetch all source transactions in parallel
+      // Fetch all source transactions in parallel using txCache
       const sourcePromises = Array.from(uniqueSources).map(async (sourceTxid) => {
         try {
-          let response = await fetch(this.getWhatOnChainUrl(network, `/tx/${sourceTxid}/hex`))
-
-          if (!response.ok) {
-            const altNetwork = network === 'testnet' ? 'mainnet' : 'testnet'
-            response = await fetch(this.getWhatOnChainUrl(altNetwork, `/tx/${sourceTxid}/hex`))
-          }
-
-          if (!response.ok) {
-            return { txid: sourceTxid, tx: null }
-          }
-
-          const rawHex = await response.text()
+          const rawHex = await txCache.fetch(sourceTxid, network)
           const tx = Transaction.fromHex(rawHex)
           return { txid: sourceTxid, tx }
         } catch (error) {
@@ -799,7 +737,7 @@ export class TransactionDecoderPanel {
     }
   }
 
-  private _getHtmlForWebview(webview: vscode.Webview) {
+  private _getHtmlForWebview(webview: vscode.Webview, txid?: string) {
     const scriptUri = webview.asWebviewUri(
       vscode.Uri.joinPath(this._extensionUri, 'src', 'views', 'webview', 'dist', 'assets', 'index.js')
     )
@@ -807,6 +745,15 @@ export class TransactionDecoderPanel {
       vscode.Uri.joinPath(this._extensionUri, 'src', 'views', 'webview', 'dist', 'assets', 'index.css')
     )
     const nonce = getNonce()
+
+    // Build INITIAL_DATA if txid is provided - include rawTxHex for immediate access
+    let initialDataScript = ''
+    if (txid) {
+      const rawTxHex = txCache.get(txid)
+      if (rawTxHex) {
+        initialDataScript = `window.INITIAL_DATA = ${JSON.stringify({ txid, rawTxHex })};`
+      }
+    }
 
     return `<!DOCTYPE html>
       <html lang="en">
@@ -845,6 +792,7 @@ export class TransactionDecoderPanel {
         <div id="root"></div>
         <script nonce="${nonce}">
           window.PANEL_TYPE = 'transaction-decoder';
+          ${initialDataScript}
         </script>
         <script type="module" nonce="${nonce}" src="${scriptUri}"></script>
       </body>

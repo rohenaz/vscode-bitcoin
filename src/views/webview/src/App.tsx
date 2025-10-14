@@ -1,14 +1,17 @@
 import './App.css'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { KeyVaultPanel } from './panels/KeyVaultPanel'
-import { BitcoinToolsPanel } from './panels/BitcoinToolsPanel'
-import { TransactionDecoderPanel } from './panels/TransactionDecoderPanel'
-import { ScriptDebuggerPanel } from './panels/ScriptDebuggerPanel'
+import { MemoryRouter } from 'react-router-dom'
+import { AppRoutes, getInitialRouterEntry } from './router'
 
-// Declare global panel type
+// Declare global panel type and initial data
 declare global {
   interface Window {
     PANEL_TYPE?: 'key-vault' | 'bitcoin-tools' | 'transaction-decoder' | 'script-executor';
+    INITIAL_DATA?: {
+      txid?: string;
+      inputIndex?: number;
+      [key: string]: any;
+    };
   }
 }
 
@@ -25,28 +28,14 @@ const queryClient = new QueryClient({
 })
 
 function App() {
-  // Determine which panel to show based on context
-  const panelType = window.PANEL_TYPE || 'bitcoin-tools'
-
-  // Route to the appropriate panel
-  const panel = (() => {
-    switch (panelType) {
-      case 'key-vault':
-        return <KeyVaultPanel />
-      case 'bitcoin-tools':
-        return <BitcoinToolsPanel />
-      case 'transaction-decoder':
-        return <TransactionDecoderPanel />
-      case 'script-executor':
-        return <ScriptDebuggerPanel />
-      default:
-        return <BitcoinToolsPanel />
-    }
-  })()
+  // Get the initial route based on panel type and initial data
+  const initialEntry = getInitialRouterEntry()
 
   return (
     <QueryClientProvider client={queryClient}>
-      {panel}
+      <MemoryRouter initialEntries={[initialEntry]}>
+        <AppRoutes />
+      </MemoryRouter>
     </QueryClientProvider>
   )
 }

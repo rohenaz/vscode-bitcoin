@@ -14,11 +14,12 @@ import { formatBytes, truncateTxid } from '../utils/scriptParser'
 
 export interface DecodeHistoryEntry {
   txid: string
-  rawTx: string
+  // rawTx removed - fetched from txCache when needed
   timestamp: number
   size: number
   inputCount: number
   outputCount: number
+  network?: string
 }
 
 interface DecodeHistoryProps {
@@ -29,11 +30,11 @@ interface DecodeHistoryProps {
 export function DecodeHistory({ history, onDecode }: DecodeHistoryProps) {
   const vscode = getVscode()
 
-  const handleCopy = (rawTx: string, txid: string) => {
-    vscode.postMessage({ type: 'copy', value: rawTx })
+  const handleCopy = (txid: string) => {
+    // Request raw tx from backend (txCache) - backend will copy to clipboard
     vscode.postMessage({
-      type: 'showInfo',
-      data: { message: `Raw transaction copied for ${truncateTxid(txid)}` }
+      type: 'decodeHistory:getRawTx',
+      data: { txid, action: 'copy' }
     })
   }
 
@@ -82,7 +83,7 @@ export function DecodeHistory({ history, onDecode }: DecodeHistoryProps) {
               size="sm"
               variant="ghost"
               className="h-7 w-7 p-0"
-              onClick={() => handleCopy(entry.rawTx, entry.txid)}
+              onClick={() => handleCopy(entry.txid)}
               title="Copy raw transaction"
             >
               <Copy className="h-3 w-3" />

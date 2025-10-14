@@ -77,22 +77,19 @@ export async function handleGetTxCommand(
   if (!format) {
     return undefined;
   }
-  // https://junglebus.gorillapool.io/v1/transaction/get/a8bc344411926cd7fca25da319a0a79c10431a11c96228417bb8970b12439f49
-  // fetch the raw transaction
-  const url = `${JUNGLEBUS_API_HOST}/transaction/get/${txid}`;
-  console.log({ url });
-  const tx = await fetch(url);
-  const txData = await tx.json();
-  console.log({ txData });
+  // Fetch transaction using unified txCache (tries cache → JungleBus → WhatOnChain)
+  const { txCache } = await import('../../services/txCache');
+  const rawTx = await txCache.fetch(txid);
 
   if (format.value === 'base64') {
+    // Convert hex back to base64 for base64 format
+    const base64 = Buffer.from(rawTx, 'hex').toString('base64');
     return {
-      data: txData.transaction,
+      data: base64,
       type: 'transactions',
       name: txid,
     };
   }
-  const rawTx = toHex(toArray(txData.transaction, 'base64'));
 
   // if the format is hex, return the raw transaction
   if (format.value === 'hex') {

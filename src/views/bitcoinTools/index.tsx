@@ -230,6 +230,38 @@ export class BitcoinToolsViewProvider implements vscode.WebviewViewProvider {
           return;
         }
 
+        // Handle request for raw tx from decode history
+        if (message.type === 'decodeHistory:getRawTx') {
+          const { txid, action } = message.data;
+          const { txCache } = await import('../../services/txCache');
+
+          try {
+            // Try to get from cache first, if not found, fetch from network
+            let rawTx = txCache.get(txid);
+            if (!rawTx) {
+              // Fetch from network and cache it
+              const network = message.data.network || 'mainnet';
+              rawTx = await txCache.fetch(txid, network);
+            }
+
+            if (action === 'decode') {
+              // Send to frontend for decoding
+              webviewView.webview.postMessage({
+                type: 'decodeHistory:rawTx',
+                data: { txid, rawTx }
+              });
+            } else {
+              // Copy to clipboard
+              await vscode.env.clipboard.writeText(rawTx);
+              vscode.window.showInformationMessage(`Raw transaction ${txid.slice(0, 8)}... copied to clipboard`);
+            }
+          } catch (error) {
+            const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+            vscode.window.showErrorMessage(`Failed to fetch transaction ${txid.slice(0, 8)}...: ${errorMsg}`);
+          }
+          return;
+        }
+
         // Handle transaction broadcast messages
         if (message.type === 'transaction:broadcast') {
           await this.handleTransactionBroadcast(webviewView, message.data);
@@ -1191,13 +1223,9 @@ export class BitcoinToolsViewProvider implements vscode.WebviewViewProvider {
         `Fetching source transaction ${data.sourceTXID.slice(0, 8)}... to execute script`
       );
 
-      // Fetch the source transaction to get the locking script
-      const response = await fetch(`https://api.whatsonchain.com/v1/bsv/main/tx/${data.sourceTXID}/hex`);
-      if (!response.ok) {
-        throw new Error(`Failed to fetch transaction: ${response.statusText}`);
-      }
-
-      const sourceRawTx = await response.text();
+      // Fetch the source transaction to get the locking script using unified txCache
+      const { txCache } = await import('../../services/txCache');
+      const sourceRawTx = await txCache.fetch(data.sourceTXID);
       const sourceTx = Transaction.fromHex(sourceRawTx);
 
       // Get the locking script from the source output

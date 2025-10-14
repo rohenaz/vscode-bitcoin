@@ -1,16 +1,14 @@
 import { useState, useEffect, useRef } from 'react'
+import { useParams } from 'react-router-dom'
 import { DecodeTransaction } from '../components/DecodeTransaction'
 import { getVscode } from '../vscode'
-import { ArrowLeft } from 'lucide-react'
-import { Button } from '@/components/ui/button'
 import '../App.css'
 
 export function TransactionDecoderPanel() {
   const vscode = getVscode()
-  const [currentTxid, setCurrentTxid] = useState<string | null>(null)
+  const { txid: txidParam } = useParams<{ txid?: string }>()
   const [rawTxHex, setRawTxHex] = useState('')
   const shouldAutoDecode = useRef(false)
-  const initialLoad = useRef(true)
 
   // Initial setup - run once on mount
   useEffect(() => {
@@ -23,72 +21,32 @@ export function TransactionDecoderPanel() {
       loader.style.transition = 'opacity 0.3s'
       setTimeout(() => loader.remove(), 300)
     }
+  }, [])
 
-    // Check if there's a txid in the hash on initial load
-    const hash = window.location.hash
-    if (hash.startsWith('#/tx/')) {
-      const txidFromHash = hash.substring(5)
-      if (txidFromHash) {
-        // Load transaction from chain by txid
-        vscode.postMessage({
-          type: 'transaction:loadByTxid',
-          data: { txid: txidFromHash, network: 'mainnet' }
-        })
-      }
-    }
-
-    // Signal that webview is ready
-    vscode.postMessage({ type: 'webview:ready' })
-  }, [vscode])
-
-  // Message and navigation handlers
+  // Load transaction from INITIAL_DATA or route params
   useEffect(() => {
-    // Listen for messages from extension
-    const handleMessage = (event: MessageEvent) => {
-      const message = event.data
-      if (message.type === 'transaction:populate' && message.data?.rawTxHex) {
-        const newTxHex = message.data.rawTxHex
-        setRawTxHex(newTxHex)
-        shouldAutoDecode.current = true
-      } else if (message.type === 'transaction:decoded' && message.data?.txid) {
-        const txid = message.data.txid
-
-        // Only push state if it's not the initial load and txid changed
-        if (!initialLoad.current && txid !== currentTxid) {
-          window.history.pushState({ txid, rawTxHex }, '', `#/tx/${txid}`)
-          setCurrentTxid(txid)
-        } else if (initialLoad.current) {
-          // On initial load, replace state instead of push
-          window.history.replaceState({ txid, rawTxHex }, '', `#/tx/${txid}`)
-          setCurrentTxid(txid)
-          initialLoad.current = false
-        }
-      }
+    // Check if we have INITIAL_DATA with rawTxHex (new architecture)
+    const initialData = window.INITIAL_DATA
+    if (initialData?.rawTxHex) {
+      console.log('[TransactionDecoderPanel] Loading from INITIAL_DATA:', initialData.txid)
+      setRawTxHex(initialData.rawTxHex)
+      shouldAutoDecode.current = true
+    } else if (txidParam) {
+      // If we have a txid in the route but no INITIAL_DATA, we need to fetch it
+      // This shouldn't normally happen in the new architecture, but handle it gracefully
+      console.log('[TransactionDecoderPanel] Route has txid but no INITIAL_DATA, requesting load:', txidParam)
+      vscode.postMessage({
+        type: 'transaction:loadByTxid',
+        data: { txid: txidParam, network: 'mainnet' }
+      })
     }
+  }, [txidParam, vscode])
 
-    // Handle browser back/forward buttons
-    const handlePopState = (event: PopStateEvent) => {
-      if (event.state?.txid && event.state?.rawTxHex) {
-        setCurrentTxid(event.state.txid)
-        setRawTxHex(event.state.rawTxHex)
-        shouldAutoDecode.current = true
-      }
-    }
-
-    window.addEventListener('message', handleMessage)
-    window.addEventListener('popstate', handlePopState)
-
-    return () => {
-      window.removeEventListener('message', handleMessage)
-      window.removeEventListener('popstate', handlePopState)
-    }
-  }, [currentTxid, rawTxHex])
-
-  // Auto-decode when hex is populated from extension
+  // Auto-decode when hex is populated
   useEffect(() => {
     if (shouldAutoDecode.current && rawTxHex) {
       shouldAutoDecode.current = false
-      // Trigger decode
+      console.log('[TransactionDecoderPanel] Auto-decoding transaction')
       vscode.postMessage({
         type: 'transaction:decode',
         data: { rawTx: rawTxHex }
@@ -96,48 +54,35 @@ export function TransactionDecoderPanel() {
     }
   }, [rawTxHex, vscode])
 
-  const handleOpenSidePanel = () => {
-    // Request to open the side panel's decode section
-    vscode.postMessage({
-      type: 'openSidePanel',
-      data: { section: 'tools', accordion: 'decode' }
-    })
-  }
+  // Handle messages from backend (decode results, etc)
+  useEffect(() => {
+    const handleMessage = (event: MessageEvent) => {
+      const message = event.data
 
-  const handleBack = () => {
-    window.history.back()
-  }
+      // Handle transaction loaded by txid
+      if (message.type === 'transaction:decoded' && message.data?.rawTx) {
+        console.log('[TransactionDecoderPanel] Received decoded transaction')
+        setRawTxHex(message.data.rawTx)
+        shouldAutoDecode.current = true
+      }
+    }
 
-  const canGoBack = window.history.length > 1
+    window.addEventListener('message', handleMessage)
+    return () => window.removeEventListener('message', handleMessage)
+  }, [])
+
+  const handleRawTxHexChange = (value: string) => {
+    setRawTxHex(value)
+  }
 
   return (
     <div className="h-screen flex flex-col bg-background">
-      {/* Sticky Header */}
-      <div className="sticky top-0 z-10 bg-background border-b border-border p-4 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={handleBack}
-            disabled={!canGoBack}
-            title="Go back"
-            className="h-7 w-7 p-0"
-          >
-            <ArrowLeft className="h-4 w-4" />
-          </Button>
-          <h1 className="text-lg font-semibold ml-2">Transaction Decoder</h1>
-        </div>
-        <button
-          onClick={handleOpenSidePanel}
-          className="text-xs text-muted-foreground hover:text-foreground px-3 py-1 rounded hover:bg-accent"
-        >
-          Edit in Side Panel →
-        </button>
-      </div>
-
       {/* Main Content */}
-      <div className="flex-1 overflow-auto p-4">
-        <DecodeTransaction rawTxHex={rawTxHex} onRawTxHexChange={setRawTxHex} />
+      <div className="flex-1 overflow-hidden">
+        <DecodeTransaction
+          rawTxHex={rawTxHex}
+          onRawTxHexChange={handleRawTxHexChange}
+        />
       </div>
     </div>
   )

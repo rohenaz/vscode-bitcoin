@@ -1,6 +1,7 @@
 import * as vscode from 'vscode'
 import { LockingScript, UnlockingScript, Transaction } from '@bsv/sdk'
 import { ScriptDebugger } from '../../utils/scriptDebugger'
+import { txCache } from '../../services/txCache'
 import fetch from 'node-fetch'
 
 export class ScriptDebuggerPanel {
@@ -10,10 +11,10 @@ export class ScriptDebuggerPanel {
   private _disposables: vscode.Disposable[] = []
   private scriptDebuggers: Map<string, ScriptDebugger> = new Map()
 
-  private constructor(panel: vscode.WebviewPanel, extensionUri: vscode.Uri) {
+  private constructor(panel: vscode.WebviewPanel, extensionUri: vscode.Uri, spendParams?: any) {
     this._panel = panel
     this._extensionUri = extensionUri
-    this._panel.webview.html = this._getHtmlForWebview(this._panel.webview)
+    this._panel.webview.html = this._getHtmlForWebview(this._panel.webview, spendParams)
     this._panel.onDidDispose(() => this.dispose(), null, this._disposables)
 
     // Handle messages from webview
@@ -24,19 +25,22 @@ export class ScriptDebuggerPanel {
     )
   }
 
+  public static initialize(context: vscode.ExtensionContext) {
+    // TxCache is a singleton, no initialization needed
+  }
+
   public static show(extensionUri: vscode.Uri, spendParams?: any) {
     console.log('[ScriptDebuggerPanel.show] Called, spendParams:', !!spendParams)
 
     if (ScriptDebuggerPanel.currentPanel) {
-      console.log('[ScriptDebuggerPanel.show] Reusing existing panel')
+      console.log('[ScriptDebuggerPanel.show] Reusing existing panel, recreating with new data')
       ScriptDebuggerPanel.currentPanel._panel.reveal(vscode.ViewColumn.One)
-      if (spendParams) {
-        console.log('[ScriptDebuggerPanel.show] Sending to existing panel')
-        ScriptDebuggerPanel.currentPanel._panel.webview.postMessage({
-          type: 'script:populate',
-          data: { spendParams }
-        })
-      }
+      // Recreate HTML with new spendParams
+      ScriptDebuggerPanel.currentPanel._panel.webview.html =
+        ScriptDebuggerPanel.currentPanel._getHtmlForWebview(
+          ScriptDebuggerPanel.currentPanel._panel.webview,
+          spendParams
+        )
       return
     }
 
@@ -53,20 +57,8 @@ export class ScriptDebuggerPanel {
     )
 
     console.log('[ScriptDebuggerPanel.show] Creating panel instance')
-    ScriptDebuggerPanel.currentPanel = new ScriptDebuggerPanel(panel, extensionUri)
+    ScriptDebuggerPanel.currentPanel = new ScriptDebuggerPanel(panel, extensionUri, spendParams)
     console.log('[ScriptDebuggerPanel.show] Panel instance created')
-
-    if (spendParams) {
-      console.log('[ScriptDebuggerPanel.show] Scheduling postMessage in 100ms')
-      setTimeout(() => {
-        console.log('[ScriptDebuggerPanel.show] Sending postMessage NOW')
-        const result = ScriptDebuggerPanel.currentPanel?._panel.webview.postMessage({
-          type: 'script:populate',
-          data: { spendParams }
-        })
-        console.log('[ScriptDebuggerPanel.show] postMessage returned:', result)
-      }, 100)
-    }
   }
 
   private async handleMessage(message: any) {
@@ -290,24 +282,13 @@ export class ScriptDebuggerPanel {
 
   private async handleLoadByTxid(txid: string, network: string) {
     try {
-      console.log('[ScriptDebuggerPanel] Fetching transaction from WhatOnChain:', txid, network)
+      console.log('[ScriptDebuggerPanel] Fetching transaction:', txid, network)
 
-      // WhatOnChain API uses 'main' and 'test' only
-      let response = await fetch(`https://api.whatsonchain.com/v1/bsv/${network}/tx/${txid}/hex`)
-      console.log('[ScriptDebuggerPanel] First fetch response status:', response.status)
+      // Use unified txCache with automatic fallback
+      // Normalize network: WhatOnChain uses 'main'/'test', txCache uses 'mainnet'/'testnet'
+      const normalizedNetwork = network === 'main' ? 'mainnet' : network === 'test' ? 'testnet' : network
+      const rawTxHex = await txCache.fetch(txid, normalizedNetwork)
 
-      if (!response.ok) {
-        const altNetwork = network === 'main' ? 'test' : 'main'
-        console.log('[ScriptDebuggerPanel] Trying alternate network:', altNetwork)
-        response = await fetch(`https://api.whatsonchain.com/v1/bsv/${altNetwork}/tx/${txid}/hex`)
-        console.log('[ScriptDebuggerPanel] Alternate fetch response status:', response.status)
-      }
-
-      if (!response.ok) {
-        throw new Error(`Transaction ${txid} not found on chain`)
-      }
-
-      const rawTxHex = await response.text()
       console.log('[ScriptDebuggerPanel] Fetched raw transaction, length:', rawTxHex.length)
       await this.handleDecodeTransaction(rawTxHex)
     } catch (error) {
@@ -390,18 +371,15 @@ export class ScriptDebuggerPanel {
         return
       }
 
-      let response = await fetch(`https://api.whatsonchain.com/v1/bsv/main/tx/${sourceTXID}/hex`)
-
-      if (response.status === 404) {
-        response = await fetch(`https://api.whatsonchain.com/v1/bsv/test/tx/${sourceTXID}/hex`)
-      }
-
-      if (!response.ok) {
+      // Use unified txCache with automatic fallback
+      let sourceRawTx: string
+      try {
+        sourceRawTx = await txCache.fetch(sourceTXID)
+      } catch (error) {
         vscode.window.showWarningMessage(`Source transaction ${sourceTXID.slice(0, 8)}... not found on chain.`)
         return
       }
 
-      const sourceRawTx = await response.text()
       const sourceTx = Transaction.fromHex(sourceRawTx)
 
       const sourceOutput = sourceTx.outputs[sourceOutputIndex]
@@ -440,10 +418,9 @@ export class ScriptDebuggerPanel {
         lockTime: transactionLockTime,
       }
 
-      this._panel.webview.postMessage({
-        type: 'script:populate',
-        data: { spendParams }
-      })
+      // Reload the panel with the new spendParams
+      console.log('[ScriptDebuggerPanel] Reloading panel with spendParams')
+      this._panel.webview.html = this._getHtmlForWebview(this._panel.webview, spendParams)
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error'
       vscode.window.showErrorMessage(`Failed to execute script: ${errorMessage}`)
@@ -460,7 +437,7 @@ export class ScriptDebuggerPanel {
     }
   }
 
-  private _getHtmlForWebview(webview: vscode.Webview) {
+  private _getHtmlForWebview(webview: vscode.Webview, spendParams?: any) {
     const scriptUri = webview.asWebviewUri(
       vscode.Uri.joinPath(this._extensionUri, 'src', 'views', 'webview', 'dist', 'assets', 'index.js')
     )
@@ -468,6 +445,11 @@ export class ScriptDebuggerPanel {
       vscode.Uri.joinPath(this._extensionUri, 'src', 'views', 'webview', 'dist', 'assets', 'index.css')
     )
     const nonce = getNonce()
+
+    // Build INITIAL_DATA with spendParams for immediate frontend access
+    const initialDataScript = spendParams
+      ? `window.INITIAL_DATA = ${JSON.stringify({ spendParams })};`
+      : ''
 
     return `<!DOCTYPE html>
       <html lang="en">
@@ -506,6 +488,7 @@ export class ScriptDebuggerPanel {
         <div id="root"></div>
         <script nonce="${nonce}">
           window.PANEL_TYPE = 'script-executor';
+          ${initialDataScript}
         </script>
         <script type="module" nonce="${nonce}" src="${scriptUri}"></script>
       </body>
