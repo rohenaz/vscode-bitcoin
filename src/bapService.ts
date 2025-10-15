@@ -255,6 +255,14 @@ export class BapService {
   }
 
   /**
+   * Export IDs (for master keys only)
+   */
+  exportIds(): string | null {
+    if (!this.bap || !this.isMasterKey) return null;
+    return this.bap.exportIds();
+  }
+
+  /**
    * Generate initial ID transaction for a new identity
    */
   getInitialIdTransaction(idKey: string): number[][] | null {

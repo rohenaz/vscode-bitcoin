@@ -9,7 +9,7 @@ import { ordinalsService } from '../../services/ordinalsService';
 import { tokenTransferService } from '../../services/tokenTransferService';
 import { ordinalTransferService } from '../../services/ordinalTransferService';
 import { mintService } from '../../services/mintService';
-import { PrivateKey, Script, Transaction, LockingScript, UnlockingScript } from '@bsv/sdk';
+import { PrivateKey, Script, Transaction, LockingScript, UnlockingScript, Utils, OP, P2PKH } from '@bsv/sdk';
 import type { VaultBackup } from 'bitcoin-backup';
 import { encryptBackup, decryptBackup } from 'bitcoin-backup';
 import { detectFormat, convertData } from '../../utils';
@@ -20,6 +20,7 @@ import { MARKET_API_HOST } from '../../constants';
 import { createIdentitySigner } from '../../utils/identitySigner';
 import type { LocalSigner } from 'js-1sat-ord';
 import { txCache } from '../../services/txCache';
+import { fetchPayUtxos } from '../../commands/sendTransaction';
 
 export class BitcoinToolsViewProvider implements vscode.WebviewViewProvider {
   public static readonly viewType = 'bitcoin.toolsView';
@@ -1205,6 +1206,46 @@ export class BitcoinToolsViewProvider implements vscode.WebviewViewProvider {
   }
 
   /**
+   * Build proper ASM from script chunks
+   * Fixes BSV SDK bug where OP_0 OP_RETURN scripts merge pushdatas into one blob
+   */
+  private buildAsmFromChunks(script: LockingScript | UnlockingScript): string {
+    const chunks = script.chunks;
+    const parts: string[] = [];
+
+    for (const chunk of chunks) {
+      // Handle opcodes
+      if (chunk.op === 0) {
+        parts.push('OP_0');
+      } else if (chunk.op === 106) {
+        // OP_RETURN - check if data field has merged pushdatas
+        parts.push('OP_RETURN');
+        if (chunk.data && chunk.data.length > 0) {
+          // Parse the merged data field to extract individual pushdatas
+          let i = 0;
+          while (i < chunk.data.length) {
+            const len = chunk.data[i];
+            i++;
+            if (len > 0 && i + len <= chunk.data.length) {
+              const data = chunk.data.slice(i, i + len);
+              parts.push(Utils.toHex(data));
+              i += len;
+            }
+          }
+        }
+      } else if (chunk.data) {
+        // Regular data push
+        parts.push(Utils.toHex(chunk.data));
+      } else {
+        // Other opcodes
+        parts.push(`OP_${chunk.op}`);
+      }
+    }
+
+    return parts.join(' ');
+  }
+
+  /**
    * Handle transaction decode request
    */
   private async handleTransactionDecode(
@@ -1234,12 +1275,22 @@ export class BitcoinToolsViewProvider implements vscode.WebviewViewProvider {
           unlockingScriptAsm: input.unlockingScript?.toASM() || '',
           sequence: input.sequence
         })),
-        outputs: tx.outputs.map((output, index) => ({
-          index,
-          satoshis: output.satoshis || 0,
-          lockingScript: output.lockingScript.toHex(),
-          lockingScriptAsm: output.lockingScript.toASM()
-        }))
+        outputs: tx.outputs.map((output, index) => {
+          const hex = output.lockingScript.toHex();
+          let asm = output.lockingScript.toASM();
+
+          // Only use custom parser for OP_RETURN scripts (starts with 006a or 6a)
+          if (hex.startsWith('006a') || hex.startsWith('6a')) {
+            asm = this.buildAsmFromChunks(output.lockingScript);
+          }
+
+          return {
+            index,
+            satoshis: output.satoshis || 0,
+            lockingScript: hex,
+            lockingScriptAsm: asm
+          };
+        })
       };
 
       webviewView.webview.postMessage({
@@ -1753,8 +1804,8 @@ export class BitcoinToolsViewProvider implements vscode.WebviewViewProvider {
       // Create VaultBackup object
       const vaultBackup: VaultBackup = {
         encryptedVault: vaultData.encryptedVault,
-        keyCount: vaultData.keyCount,
         label: 'VSCode Bitcoin Vault',
+        scheme: 'vscode-bitcoin-v1',
       };
 
       // Encrypt with bitcoin-backup (second encryption layer)
@@ -1839,13 +1890,12 @@ export class BitcoinToolsViewProvider implements vscode.WebviewViewProvider {
       // Step 5: Show import preview with vault info
       const currentStats = this._vault.getVaultStats();
       const existingKeyCount = currentStats?.totalKeys ?? 0;
-      const importedKeyCount = vaultBackup.keyCount ?? 0;
 
       // Step 6: Warning - this will REPLACE the vault
       const action = await vscode.window.showWarningMessage(
         `⚠️  VAULT IMPORT WARNING\n\n` +
         `Backup: ${vaultBackup.label || 'Unnamed'}\n` +
-        `Keys to import: ${importedKeyCount}\n` +
+        `Scheme: ${vaultBackup.scheme || 'Unknown'}\n` +
         `Current vault keys: ${existingKeyCount}\n\n` +
         `This will REPLACE your current vault entirely.\n` +
         `All existing keys will be lost unless you have a backup.\n\n` +
@@ -2051,12 +2101,16 @@ export class BitcoinToolsViewProvider implements vscode.WebviewViewProvider {
       const allIdentities = bapService.getLocalIdentities();
       const isMasterKey = bapService.isMaster();
 
-      webviewView.webview.postMessage({
-        type: 'identitiesUpdated',
-        identities: allIdentities,
-        hasIdentityKey: true,
-        isMasterKey
-      });
+      // Update vault metadata with discovered identities
+      if (discovered.length > 0) {
+        const updatedIds = bapService.exportIds();
+        if (updatedIds) {
+          await this._vault.updateKeyMetadata(identityKey.id, { bapIds: updatedIds });
+        }
+      }
+
+      // Trigger full enrichment to load profile data
+      await this.handleGetIdentities(webviewView);
 
       webviewView.webview.postMessage({
         type: 'discoveryComplete'
@@ -2276,7 +2330,6 @@ export class BitcoinToolsViewProvider implements vscode.WebviewViewProvider {
           }
 
           // Initialize BAP service
-          const BapService = (await import('../../bapService')).BapService;
           const bapService = new BapService();
           await bapService.initializeWithKey(identityKeyEntry);
 
@@ -2288,25 +2341,6 @@ export class BitcoinToolsViewProvider implements vscode.WebviewViewProvider {
             throw new Error('Failed to create ALIAS transaction');
           }
 
-          // Convert signed OP_RETURN data to Script
-          const { Script } = await import('@bsv/sdk');
-
-          // Build OP_RETURN script from signed data
-          let scriptChunks: Buffer[] = [Buffer.from([0x6a])]; // OP_RETURN opcode
-          for (const chunk of signedOpReturn) {
-            const buf = Buffer.from(chunk);
-            // Add pushdata opcode based on size
-            if (buf.length < 76) {
-              scriptChunks.push(Buffer.from([buf.length]));
-            } else if (buf.length < 256) {
-              scriptChunks.push(Buffer.from([0x4c, buf.length]));
-            } else {
-              scriptChunks.push(Buffer.from([0x4d, buf.length & 0xff, (buf.length >> 8) & 0xff]));
-            }
-            scriptChunks.push(buf);
-          }
-          const opReturnScript = Script.fromBinary(Buffer.concat(scriptChunks).toJSON().data);
-
           progress.report({ message: 'Building transaction' });
 
           // Get funding key for creating the transaction
@@ -2315,13 +2349,21 @@ export class BitcoinToolsViewProvider implements vscode.WebviewViewProvider {
             throw new Error('No funding key available');
           }
 
-          // Import transaction building utilities
-          const { Transaction, PrivateKey, P2PKH } = await import('@bsv/sdk');
-          const { fetchPayUtxos } = await import('../../commands/sendTransaction');
-
           const privateKey = PrivateKey.fromWif(fundingKey.value);
           const publicKey = privateKey.toPublicKey();
           const address = publicKey.toAddress();
+
+          // Build OP_RETURN script using chunk format (like ts-templates OpReturn)
+          const scriptChunks: Array<{ op: number; data?: number[] }> = [
+            { op: OP.OP_FALSE },
+            { op: OP.OP_RETURN }
+          ];
+
+          for (const chunk of signedOpReturn) {
+            scriptChunks.push({ op: chunk.length, data: chunk });
+          }
+
+          const opReturnScript = new Script(scriptChunks);
 
           // Create transaction
           const tx = new Transaction();
@@ -2354,15 +2396,32 @@ export class BitcoinToolsViewProvider implements vscode.WebviewViewProvider {
             throw new Error(`Insufficient funds. Required: ${estimatedFee}, Available: ${selectedAmount}`);
           }
 
-          // Add inputs with source transaction details for signing
+          // Fetch source transactions for each UTXO
+          progress.report({ message: 'Fetching source transactions' });
+          const sourceTransactions = new Map<string, Transaction>();
+
           for (const utxo of selectedUtxos) {
-            const lockingScript = Script.fromHex(utxo.script);
+            if (!sourceTransactions.has(utxo.txid)) {
+              // Fetch the source transaction
+              const txRes = await fetch(`https://api.whatsonchain.com/v1/bsv/main/tx/${utxo.txid}/hex`);
+              if (!txRes.ok) {
+                throw new Error(`Failed to fetch source transaction ${utxo.txid}`);
+              }
+              const txHex = await txRes.text();
+              const sourceTx = Transaction.fromHex(txHex);
+              sourceTransactions.set(utxo.txid, sourceTx);
+            }
+          }
+
+          // Add inputs with source transactions
+          for (const utxo of selectedUtxos) {
+            const sourceTransaction = sourceTransactions.get(utxo.txid);
             tx.addInput({
               sourceTXID: utxo.txid,
               sourceOutputIndex: utxo.vout,
-              sourceSatoshis: utxo.satoshis,
-              lockingScript: lockingScript,
-              unlockingScriptTemplate: new P2PKH().unlock(privateKey)
+              sourceTransaction: sourceTransaction,
+              unlockingScriptTemplate: new P2PKH().unlock(privateKey),
+              sequence: 0xffffffff
             });
           }
 
@@ -2375,7 +2434,7 @@ export class BitcoinToolsViewProvider implements vscode.WebviewViewProvider {
             });
           }
 
-          // Sign transaction
+          // Sign all inputs
           await tx.sign();
 
           const rawTx = tx.toHex();
@@ -2398,8 +2457,6 @@ export class BitcoinToolsViewProvider implements vscode.WebviewViewProvider {
           progress.report({ message: 'Broadcasting transaction' });
 
           // Broadcast transaction
-          const { TransactionService } = await import('../../services/transactionService');
-          const transactionService = new TransactionService();
           const broadcastResult = await transactionService.broadcastTransaction(rawTx);
 
           if (broadcastResult.status === 'success') {
