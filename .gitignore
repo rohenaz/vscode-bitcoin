@@ -61,3 +61,6 @@ pnpm-lock.yaml
 
 # Cursor rules
 .cursorrules
+
+# Documentation (internal use only)
+docs/
