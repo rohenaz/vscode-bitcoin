@@ -1,13 +1,65 @@
 import { useState, useEffect } from 'react';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
-import { Avatar, AvatarImage, AvatarFallback } from './ui/avatar';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from './ui/accordion';
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from './ui/empty';
 import { Item, ItemGroup, ItemContent, ItemTitle, ItemDescription, ItemMedia, ItemActions } from './ui/item';
-import { UserCircle, Search, Plus, Eye, RefreshCw } from 'lucide-react';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from './ui/dropdown-menu';
+import { UserCircle, Search, Plus, RefreshCw, Edit, Send, Loader2, MoreHorizontal } from 'lucide-react';
 import { getVscode } from '../vscode';
-import { normalizeImageUrl } from '../utils/imageUtils';
+
+/**
+ * Normalize image URLs to ordfs.network format
+ */
+function normalizeImageUrl(url: string | undefined): string | null {
+  if (!url || typeof url !== 'string' || url.trim() === '') {
+    return null;
+  }
+
+  const trimmedUrl = url.trim();
+
+  // Data URI - return as-is
+  if (trimmedUrl.startsWith('data:')) {
+    return trimmedUrl;
+  }
+
+  // Full HTTPS URL - return as-is
+  if (trimmedUrl.startsWith('https://') || trimmedUrl.startsWith('http://')) {
+    return trimmedUrl;
+  }
+
+  // b:// protocol
+  if (trimmedUrl.startsWith('b://')) {
+    const path = trimmedUrl.slice(4);
+    return path ? `https://ordfs.network/${path}` : null;
+  }
+
+  // ord:// protocol
+  if (trimmedUrl.startsWith('ord://')) {
+    const path = trimmedUrl.slice(6);
+    return path ? `https://ordfs.network/${path}` : null;
+  }
+
+  // Relative path starting with /
+  if (trimmedUrl.startsWith('/')) {
+    const path = trimmedUrl.slice(1);
+    return path ? `https://ordfs.network/${path}` : null;
+  }
+
+  // Just a txid or txid_vout
+  if (trimmedUrl.match(/^[a-f0-9]{64}(_\d+)?$/i)) {
+    return `https://ordfs.network/${trimmedUrl}`;
+  }
+
+  // Fallback - prepend ordfs
+  return `https://ordfs.network/${trimmedUrl}`;
+}
 
 const vscode = getVscode();
 
@@ -17,34 +69,15 @@ interface LocalIdentity {
   counter: number;
   rootAddress?: string;
   hasOnChainProfile: boolean;
-}
-
-interface BapIdentity {
-  '@context': string;
-  '@type': string;
-  alternateName?: string;
-  banner?: string;
-  description?: string;
-  homeLocation?: {
-    '@type': string;
-    name: string;
-  };
+  hasDraft?: boolean;
+  hasUnsavedChanges?: boolean;
+  isLoading?: boolean;
+  displayName?: string;
   image?: string;
-  paymail?: string;
-  url?: string;
-}
-
-interface BapProfile {
-  idKey: string;
-  firstSeen: number;
-  rootAddress: string;
-  currentAddress: string;
-  identity: BapIdentity;
 }
 
 export function IdentityTab() {
   const [identities, setIdentities] = useState<LocalIdentity[]>([]);
-  const [selectedProfile, setSelectedProfile] = useState<BapProfile | null>(null);
   const [isDiscovering, setIsDiscovering] = useState(false);
   const [newIdentityName, setNewIdentityName] = useState('');
   const [hasIdentityKey, setHasIdentityKey] = useState(true);
@@ -63,8 +96,11 @@ export function IdentityTab() {
           setHasIdentityKey(message.hasIdentityKey ?? true);
           setIsMasterKey(message.isMasterKey ?? true);
           break;
-        case 'profileLoaded':
-          setSelectedProfile(message.profile);
+        case 'identityUpdated':
+          // Update a specific identity in the list
+          setIdentities(prev => prev.map(id =>
+            id.idKey === message.identity.idKey ? message.identity : id
+          ));
           break;
         case 'discoveryComplete':
           setIsDiscovering(false);
@@ -96,6 +132,23 @@ export function IdentityTab() {
 
   const handleSetAsIdentityKey = () => {
     vscode.postMessage({ command: 'bitcoin.showKeyVault' });
+  };
+
+  const handleEditProfile = (identity: LocalIdentity) => {
+    // Open edit panel in new window
+    vscode.postMessage({
+      type: 'getProfileForEdit',
+      idKey: identity.idKey,
+      displayName: identity.displayName || identity.name
+    });
+  };
+
+
+  const handlePublishProfile = (idKey: string) => {
+    vscode.postMessage({
+      type: 'publishProfile',
+      idKey
+    });
   };
 
   return (
@@ -213,157 +266,91 @@ export function IdentityTab() {
                 </Empty>
               ) : (
                 <ItemGroup>
-                  {identities.map((identity) => (
-                    <Item key={identity.idKey} size="sm" className="group">
-                      <ItemMedia>
-                        <UserCircle className="h-8 w-8 text-primary" />
-                      </ItemMedia>
-                      <ItemContent>
-                        <ItemTitle className="flex items-center gap-2">
-                          {identity.name}
-                          {identity.hasOnChainProfile && (
-                            <Badge variant="secondary" className="text-[10px] px-1 py-0">
-                              On-chain
-                            </Badge>
+                  {identities.map((identity) => {
+                    const normalizedImage = normalizeImageUrl(identity.image);
+                    return (
+                      <Item
+                        key={identity.idKey}
+                        size="sm"
+                        className="group cursor-pointer"
+                        onClick={() => !identity.isLoading && handleViewProfile(identity.idKey)}
+                      >
+                        <ItemMedia>
+                          {identity.isLoading ? (
+                            <Loader2 className="h-8 w-8 text-primary animate-spin" />
+                          ) : normalizedImage ? (
+                            <img
+                              src={normalizedImage}
+                              alt={identity.displayName || identity.name}
+                              className="h-8 w-8 rounded-full object-cover"
+                            />
+                          ) : (
+                            <UserCircle className="h-8 w-8 text-primary" />
                           )}
-                        </ItemTitle>
-                        <ItemDescription className="font-mono">
-                          {identity.idKey.slice(0, 20)}...
-                        </ItemDescription>
-                      </ItemContent>
-                      <ItemActions>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-7 w-7 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
-                          onClick={() => handleViewProfile(identity.idKey)}
-                          title="View profile"
-                        >
-                          <Eye className="h-3 w-3" />
-                        </Button>
-                      </ItemActions>
-                    </Item>
-                  ))}
+                        </ItemMedia>
+                        <ItemContent>
+                          <ItemTitle className="flex items-center gap-2">
+                            {identity.displayName || identity.name}
+                            {identity.isLoading && (
+                              <Badge variant="outline" className="text-[10px] px-1 py-0">
+                                Loading...
+                              </Badge>
+                            )}
+                            {identity.hasDraft && (
+                              <Badge variant="outline" className="text-[10px] px-1 py-0 bg-yellow-500/10 text-yellow-600 border-yellow-600/30">
+                                Draft
+                              </Badge>
+                            )}
+                            {identity.hasOnChainProfile && (
+                              <Badge variant="secondary" className="text-[10px] px-1 py-0">
+                                Published
+                              </Badge>
+                            )}
+                            {identity.hasUnsavedChanges && (
+                              <Badge variant="outline" className="text-[10px] px-1 py-0 bg-orange-500/10 text-orange-600 border-orange-600/30">
+                                Unsaved
+                              </Badge>
+                            )}
+                          </ItemTitle>
+                          <ItemDescription className="font-mono">
+                            {identity.idKey.slice(0, 20)}...
+                          </ItemDescription>
+                        </ItemContent>
+                        <ItemActions onClick={(e) => e.stopPropagation()}>
+                          <DropdownMenu modal={false}>
+                            <DropdownMenuTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-7 w-7 p-0"
+                                disabled={identity.isLoading}
+                              >
+                                <MoreHorizontal className="h-3 w-3" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent className="w-40" align="end">
+                              <DropdownMenuGroup>
+                                <DropdownMenuItem onSelect={() => handleEditProfile(identity)}>
+                                  <Edit className="h-3 w-3 mr-2" />
+                                  Edit Profile
+                                </DropdownMenuItem>
+                                {identity.hasDraft && identity.hasUnsavedChanges && (
+                                  <DropdownMenuItem onSelect={() => handlePublishProfile(identity.idKey)}>
+                                    <Send className="h-3 w-3 mr-2" />
+                                    Publish to Chain
+                                  </DropdownMenuItem>
+                                )}
+                              </DropdownMenuGroup>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </ItemActions>
+                      </Item>
+                    );
+                  })}
                 </ItemGroup>
               )}
             </AccordionContent>
           </AccordionItem>
-
-          {/* Profile Details Section */}
-          {selectedProfile && (
-            <AccordionItem value="profile">
-              <AccordionTrigger className="text-xs">
-                <div className="flex items-center gap-2">
-                  <Eye className="h-3 w-3" />
-                  Profile Details
-                </div>
-              </AccordionTrigger>
-              <AccordionContent>
-                <div className="space-y-3 p-2">
-                  {/* Avatar */}
-                  <div className="flex justify-center">
-                    <Avatar className="h-16 w-16">
-                      <AvatarImage
-                        src={normalizeImageUrl(selectedProfile.identity.image) || undefined}
-                        alt={selectedProfile.identity.alternateName || 'Profile'}
-                      />
-                      <AvatarFallback>
-                        <UserCircle className="h-10 w-10" />
-                      </AvatarFallback>
-                    </Avatar>
-                  </div>
-
-                  {/* Profile Fields */}
-                  {selectedProfile.identity.alternateName && (
-                    <div>
-                      <div className="text-xs font-medium mb-0.5">Name</div>
-                      <div className="text-xs text-muted-foreground">
-                        {selectedProfile.identity.alternateName}
-                      </div>
-                    </div>
-                  )}
-
-                  {selectedProfile.identity.description && (
-                    <div>
-                      <div className="text-xs font-medium mb-0.5">Description</div>
-                      <div className="text-xs text-muted-foreground">
-                        {selectedProfile.identity.description}
-                      </div>
-                    </div>
-                  )}
-
-                  {selectedProfile.identity.paymail && (
-                    <div>
-                      <div className="text-xs font-medium mb-0.5">Paymail</div>
-                      <div className="text-xs text-muted-foreground font-mono">
-                        {selectedProfile.identity.paymail}
-                      </div>
-                    </div>
-                  )}
-
-                  {selectedProfile.identity.url && (
-                    <div>
-                      <div className="text-xs font-medium mb-0.5">Website</div>
-                      <a
-                        href={selectedProfile.identity.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-xs text-primary hover:underline break-all"
-                      >
-                        {selectedProfile.identity.url}
-                      </a>
-                    </div>
-                  )}
-
-                  <div>
-                    <div className="text-xs font-medium mb-0.5">Identity Key</div>
-                    <div className="text-xs text-muted-foreground font-mono break-all">
-                      {selectedProfile.idKey}
-                    </div>
-                  </div>
-
-                  <div>
-                    <div className="text-xs font-medium mb-0.5">Root Address</div>
-                    <div className="text-xs text-muted-foreground font-mono break-all">
-                      {selectedProfile.rootAddress}
-                    </div>
-                  </div>
-
-                  <div>
-                    <div className="text-xs font-medium mb-0.5">Current Address</div>
-                    <div className="text-xs text-muted-foreground font-mono break-all">
-                      {selectedProfile.currentAddress}
-                    </div>
-                  </div>
-
-                  <div>
-                    <div className="text-xs font-medium mb-0.5">First Seen</div>
-                    <div className="text-xs text-muted-foreground">
-                      Block {selectedProfile.firstSeen}
-                    </div>
-                  </div>
-
-                  {selectedProfile.identity.image && (
-                    <div>
-                      <div className="text-xs font-medium mb-0.5">Image URL</div>
-                      <div className="text-xs text-muted-foreground font-mono break-all">
-                        {selectedProfile.identity.image}
-                      </div>
-                    </div>
-                  )}
-
-                  {selectedProfile.identity.banner && (
-                    <div>
-                      <div className="text-xs font-medium mb-0.5">Banner URL</div>
-                      <div className="text-xs text-muted-foreground font-mono break-all">
-                        {selectedProfile.identity.banner}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </AccordionContent>
-            </AccordionItem>
-          )}
         </Accordion>
       )}
     </div>

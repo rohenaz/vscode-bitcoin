@@ -3,7 +3,7 @@
   "displayName": "Bitcoin",
   "description": "Bitcoin utilities for VS Code",
   "publisher": "Satchmo",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "icon": "images/icon.png",
   "type": "commonjs",
   "engines": {

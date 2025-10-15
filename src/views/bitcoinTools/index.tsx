@@ -196,6 +196,18 @@ export class BitcoinToolsViewProvider implements vscode.WebviewViewProvider {
           await this.handleViewProfile(webviewView, message.idKey);
           return;
         }
+        if (message.type === 'getProfileForEdit') {
+          await this.handleGetProfileForEdit(webviewView, message.idKey, message.displayName);
+          return;
+        }
+        if (message.type === 'saveProfileDraft') {
+          await this.handleSaveProfileDraft(webviewView, message.idKey, message.identity);
+          return;
+        }
+        if (message.type === 'publishProfile') {
+          await this.handlePublishProfile(webviewView, message.idKey);
+          return;
+        }
         if (message.type === 'setIdentityKey') {
           vscode.commands.executeCommand('bitcoin.showKeyVault');
           return;
@@ -703,6 +715,30 @@ export class BitcoinToolsViewProvider implements vscode.WebviewViewProvider {
       // Get raw transaction hex
       const rawTx = result.tx.toHex();
 
+      // Check autoBroadcast setting
+      const autoBroadcast = vscode.workspace.getConfiguration('bitcoin.wallet').get('autoBroadcast', false);
+
+      if (!autoBroadcast) {
+        // Open in transaction decoder window instead of broadcasting
+        vscode.commands.executeCommand('bitcoin.openTransactionDecoder', rawTx);
+
+        const action = data.isBurn ? 'Token burn' : 'Token transfer';
+        vscode.window.showInformationMessage(
+          `${action} transaction created. Review in the Transaction Decoder and broadcast when ready.`
+        );
+
+        // Return success to close dialog
+        webviewView.webview.postMessage({
+          type: 'wallet:transferToken:success',
+          data: {
+            fee: result.fee,
+            tokenChange: result.tokenChange,
+            payChange: result.payChange,
+          },
+        });
+        return;
+      }
+
       // Broadcast transaction
       const broadcastResult = await transactionService.broadcastTransaction(rawTx);
 
@@ -794,6 +830,27 @@ export class BitcoinToolsViewProvider implements vscode.WebviewViewProvider {
 
       // Get raw transaction hex
       const rawTx = result.tx.toHex();
+
+      // Check autoBroadcast setting
+      const autoBroadcast = vscode.workspace.getConfiguration('bitcoin.wallet').get('autoBroadcast', false);
+
+      if (!autoBroadcast) {
+        // Open in transaction decoder window instead of broadcasting
+        vscode.commands.executeCommand('bitcoin.openTransactionDecoder', rawTx);
+
+        vscode.window.showInformationMessage(
+          'NFT mint transaction created. Review in the Transaction Decoder and broadcast when ready.'
+        );
+
+        // Return success to close dialog
+        webviewView.webview.postMessage({
+          type: 'wallet:mintNft:success',
+          data: {
+            fee: result.fee,
+          },
+        });
+        return;
+      }
 
       // Broadcast transaction
       const broadcastResult = await transactionService.broadcastTransaction(rawTx);
@@ -888,6 +945,27 @@ export class BitcoinToolsViewProvider implements vscode.WebviewViewProvider {
 
       // Get raw transaction hex
       const rawTx = result.tx.toHex();
+
+      // Check autoBroadcast setting
+      const autoBroadcast = vscode.workspace.getConfiguration('bitcoin.wallet').get('autoBroadcast', false);
+
+      if (!autoBroadcast) {
+        // Open in transaction decoder window instead of broadcasting
+        vscode.commands.executeCommand('bitcoin.openTransactionDecoder', rawTx);
+
+        vscode.window.showInformationMessage(
+          'BSV21 token deploy transaction created. Review in the Transaction Decoder and broadcast when ready.'
+        );
+
+        // Return success to close dialog
+        webviewView.webview.postMessage({
+          type: 'wallet:mintBsv21:success',
+          data: {
+            fee: result.fee,
+          },
+        });
+        return;
+      }
 
       // Broadcast transaction
       const broadcastResult = await transactionService.broadcastTransaction(rawTx);
@@ -1832,6 +1910,8 @@ export class BitcoinToolsViewProvider implements vscode.WebviewViewProvider {
   private async handleGetIdentities(webviewView: vscode.WebviewView) {
     try {
       const bapService = new BapService();
+      const { ProfileStorageService } = await import('../../profileStorage');
+      const profileStorage = new ProfileStorageService(this._context);
 
       // Get identity key from vault
       const identityKey = await this._vault.getIdentityKey();
@@ -1853,12 +1933,84 @@ export class BitcoinToolsViewProvider implements vscode.WebviewViewProvider {
       const identities = bapService.getLocalIdentities();
       const isMasterKey = bapService.isMaster();
 
+      // Send initial identities with isLoading: true
+      const initialIdentities = identities.map(identity => ({
+        ...identity,
+        isLoading: true,
+        hasDraft: false,
+        hasUnsavedChanges: false
+      }));
+
       webviewView.webview.postMessage({
         type: 'identitiesUpdated',
-        identities,
+        identities: initialIdentities,
         hasIdentityKey: true,
         isMasterKey
       });
+
+      // Enrich each identity progressively
+      for (const identity of identities) {
+        try {
+          const draft = await profileStorage.getDraft(identity.idKey);
+          const hasDraft = draft !== undefined;
+
+          let hasUnsavedChanges = false;
+          let displayName = identity.name;
+          let image: string | undefined;
+          let onChainProfile: any = null;
+
+          // Try to fetch on-chain profile
+          if (identity.hasOnChainProfile) {
+            try {
+              onChainProfile = await bapService.getProfile(identity.idKey);
+
+              // Use draft name/image if available, otherwise use on-chain data
+              if (draft) {
+                displayName = draft.identity.alternateName || onChainProfile.identity.alternateName || identity.name;
+                image = draft.identity.image || onChainProfile.identity.image;
+                hasUnsavedChanges = profileStorage.hasChanges(draft.identity, onChainProfile.identity);
+              } else {
+                displayName = onChainProfile.identity.alternateName || identity.name;
+                image = onChainProfile.identity.image;
+              }
+            } catch {
+              // If profile fetch fails but we have a draft
+              if (draft) {
+                displayName = draft.identity.alternateName || identity.name;
+                image = draft.identity.image;
+                hasUnsavedChanges = true;
+              }
+            }
+          } else if (draft) {
+            // New identity with draft only
+            displayName = draft.identity.alternateName || identity.name;
+            image = draft.identity.image;
+            hasUnsavedChanges = true;
+          }
+
+          // Send update for this specific identity
+          webviewView.webview.postMessage({
+            type: 'identityUpdated',
+            identity: {
+              ...identity,
+              hasDraft,
+              hasUnsavedChanges,
+              displayName,
+              image,
+              isLoading: false
+            }
+          });
+        } catch (error) {
+          // Still send the identity but mark it as not loading
+          webviewView.webview.postMessage({
+            type: 'identityUpdated',
+            identity: {
+              ...identity,
+              isLoading: false
+            }
+          });
+        }
+      }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       vscode.window.showErrorMessage(`Failed to load identities: ${errorMessage}`);
@@ -1952,16 +2104,8 @@ export class BitcoinToolsViewProvider implements vscode.WebviewViewProvider {
       // Update the identity key's metadata with new bapIds
       await this._vault.updateKeyMetadata(identityKey.id, { bapIds: updatedIds });
 
-      // Get updated list
-      const identities = bapService.getLocalIdentities();
-      const isMasterKey = bapService.isMaster();
-
-      webviewView.webview.postMessage({
-        type: 'identitiesUpdated',
-        identities,
-        hasIdentityKey: true,
-        isMasterKey
-      });
+      // Trigger full identity enrichment to load profile data
+      await this.handleGetIdentities(webviewView);
 
       vscode.window.showInformationMessage(`Created identity: ${name}`);
     } catch (error) {
@@ -1976,28 +2120,308 @@ export class BitcoinToolsViewProvider implements vscode.WebviewViewProvider {
   private async handleViewProfile(webviewView: vscode.WebviewView, idKey: string) {
     try {
       const bapService = new BapService();
+      const profileStorage = new (await import('../../profileStorage')).ProfileStorageService(this._context);
 
-      // Fetch profile from indexer
-      const profile = await vscode.window.withProgress(
-        {
-          location: vscode.ProgressLocation.Notification,
-          title: 'Loading BAP profile...',
-          cancellable: false
-        },
-        () => bapService.getProfile(idKey)
-      );
+      // Check for draft data first
+      const draft = await profileStorage.getDraft(idKey);
+
+      // Try to fetch profile from indexer
+      let profile: any = null;
+      try {
+        profile = await vscode.window.withProgress(
+          {
+            location: vscode.ProgressLocation.Notification,
+            title: 'Loading BAP profile...',
+            cancellable: false
+          },
+          () => bapService.getProfile(idKey)
+        );
+      } catch (error) {
+        // No on-chain profile - create empty profile structure
+        profile = {
+          idKey,
+          firstSeen: 0,
+          rootAddress: '',
+          currentAddress: '',
+          addresses: [],
+          identity: {
+            '@context': 'https://schema.org',
+            '@type': 'Person'
+          }
+        };
+      }
+
+      // Create enriched profile with draft data if available
+      const enrichedProfile = {
+        ...profile,
+        hasDraft: draft !== undefined,
+        draftIdentity: draft?.identity
+      };
 
       // Show profile in webview within the tools view
       webviewView.webview.postMessage({
         type: 'profileLoaded',
-        profile
+        profile: enrichedProfile
       });
 
-      // Also open in separate panel for detailed view
-      BapPanel.show(profile);
+      // Also open in separate panel for detailed view with enriched data
+      BapPanel.show(enrichedProfile);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       vscode.window.showErrorMessage(`Failed to load profile: ${errorMessage}`);
+    }
+  }
+
+  /**
+   * Handle getting profile data for editing
+   */
+  private async handleGetProfileForEdit(webviewView: vscode.WebviewView, idKey: string, displayName?: string) {
+    try {
+      const { EditProfilePanel } = await import('../../editProfilePanel');
+      const { ProfileStorageService } = await import('../../profileStorage');
+      const profileStorage = new ProfileStorageService(this._context);
+      const bapService = new BapService();
+
+      let identity: any = {};
+
+      // Check for draft first
+      const draft = await profileStorage.getDraft(idKey);
+      if (draft) {
+        identity = draft.identity;
+      } else {
+        // Try to fetch from chain
+        try {
+          const profile = await bapService.getProfile(idKey);
+          identity = profile.identity;
+        } catch {
+          // No profile on chain, use empty
+          identity = {};
+        }
+      }
+
+      // Open edit panel with save callback
+      EditProfilePanel.show(
+        {
+          idKey,
+          identity,
+          displayName
+        },
+        this._context.extensionUri,
+        async (savedIdKey: string, savedIdentity: any) => {
+          // Save the draft
+          await this.handleSaveProfileDraft(webviewView, savedIdKey, savedIdentity);
+        }
+      );
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      console.error(`Failed to open profile editor: ${errorMessage}`);
+      vscode.window.showErrorMessage(`Failed to open profile editor: ${errorMessage}`);
+    }
+  }
+
+  /**
+   * Handle saving profile draft locally
+   */
+  private async handleSaveProfileDraft(
+    webviewView: vscode.WebviewView,
+    idKey: string,
+    identity: any
+  ) {
+    try {
+      const { ProfileStorageService } = await import('../../profileStorage');
+      const profileStorage = new ProfileStorageService(this._context);
+
+      await profileStorage.saveDraft(idKey, identity);
+
+      vscode.window.showInformationMessage('Profile draft saved locally');
+
+      // Refresh identities to show draft badge
+      await this.handleGetIdentities(webviewView);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      vscode.window.showErrorMessage(`Failed to save draft: ${errorMessage}`);
+    }
+  }
+
+  /**
+   * Handle publishing profile to chain
+   */
+  private async handlePublishProfile(webviewView: vscode.WebviewView, idKey: string) {
+    try {
+      // Get draft profile
+      const { ProfileStorageService } = await import('../../profileStorage');
+      const profileStorage = new ProfileStorageService(this._context);
+      const draft = await profileStorage.getDraft(idKey);
+
+      if (!draft) {
+        vscode.window.showWarningMessage('No draft profile found to publish');
+        return;
+      }
+
+      // Show progress
+      await vscode.window.withProgress(
+        {
+          location: vscode.ProgressLocation.Notification,
+          title: 'Publishing BAP profile...',
+          cancellable: false
+        },
+        async (progress) => {
+          progress.report({ message: 'Initializing BAP service' });
+
+          // Get the BAP identity key from vault
+          await this._vault.checkUnlock();
+          const identityKeyEntry = await this._vault.getIdentityKey();
+          if (!identityKeyEntry) {
+            throw new Error('No identity key set. Please set one in the Key Vault first.');
+          }
+
+          // Initialize BAP service
+          const BapService = (await import('../../bapService')).BapService;
+          const bapService = new BapService();
+          await bapService.initializeWithKey(identityKeyEntry);
+
+          progress.report({ message: 'Creating ALIAS transaction' });
+
+          // Create ALIAS transaction
+          const signedOpReturn = bapService.createAliasTransaction(idKey, draft.identity);
+          if (!signedOpReturn) {
+            throw new Error('Failed to create ALIAS transaction');
+          }
+
+          // Convert signed OP_RETURN data to Script
+          const { Script } = await import('@bsv/sdk');
+
+          // Build OP_RETURN script from signed data
+          let scriptChunks: Buffer[] = [Buffer.from([0x6a])]; // OP_RETURN opcode
+          for (const chunk of signedOpReturn) {
+            const buf = Buffer.from(chunk);
+            // Add pushdata opcode based on size
+            if (buf.length < 76) {
+              scriptChunks.push(Buffer.from([buf.length]));
+            } else if (buf.length < 256) {
+              scriptChunks.push(Buffer.from([0x4c, buf.length]));
+            } else {
+              scriptChunks.push(Buffer.from([0x4d, buf.length & 0xff, (buf.length >> 8) & 0xff]));
+            }
+            scriptChunks.push(buf);
+          }
+          const opReturnScript = Script.fromBinary(Buffer.concat(scriptChunks).toJSON().data);
+
+          progress.report({ message: 'Building transaction' });
+
+          // Get funding key for creating the transaction
+          const fundingKey = await this._vault.getFundingKey();
+          if (!fundingKey || fundingKey.type !== 'wif') {
+            throw new Error('No funding key available');
+          }
+
+          // Import transaction building utilities
+          const { Transaction, PrivateKey, P2PKH } = await import('@bsv/sdk');
+          const { fetchPayUtxos } = await import('../../commands/sendTransaction');
+
+          const privateKey = PrivateKey.fromWif(fundingKey.value);
+          const publicKey = privateKey.toPublicKey();
+          const address = publicKey.toAddress();
+
+          // Create transaction
+          const tx = new Transaction();
+
+          // Add OP_RETURN output (0 satoshis)
+          tx.addOutput({
+            satoshis: 0,
+            lockingScript: opReturnScript
+          });
+
+          // Fetch UTXOs
+          const utxos = await fetchPayUtxos(address, 'hex');
+          if (utxos.length === 0) {
+            throw new Error('No UTXOs available for funding');
+          }
+
+          // Sort and select UTXOs
+          const sortedUtxos = utxos.sort((a, b) => b.satoshis - a.satoshis);
+          const estimatedFee = 500; // Estimate fee
+          let selectedAmount = 0;
+          const selectedUtxos = [];
+
+          for (const utxo of sortedUtxos) {
+            selectedUtxos.push(utxo);
+            selectedAmount += utxo.satoshis;
+            if (selectedAmount >= estimatedFee) break;
+          }
+
+          if (selectedAmount < estimatedFee) {
+            throw new Error(`Insufficient funds. Required: ${estimatedFee}, Available: ${selectedAmount}`);
+          }
+
+          // Add inputs with source transaction details for signing
+          for (const utxo of selectedUtxos) {
+            const lockingScript = Script.fromHex(utxo.script);
+            tx.addInput({
+              sourceTXID: utxo.txid,
+              sourceOutputIndex: utxo.vout,
+              sourceSatoshis: utxo.satoshis,
+              lockingScript: lockingScript,
+              unlockingScriptTemplate: new P2PKH().unlock(privateKey)
+            });
+          }
+
+          // Add change output
+          const change = selectedAmount - estimatedFee;
+          if (change > 0) {
+            tx.addOutput({
+              satoshis: change,
+              lockingScript: new P2PKH().lock(address)
+            });
+          }
+
+          // Sign transaction
+          await tx.sign();
+
+          const rawTx = tx.toHex();
+
+          progress.report({ message: 'Checking broadcast setting' });
+
+          // Check autoBroadcast setting
+          const autoBroadcast = vscode.workspace.getConfiguration('bitcoin.wallet').get('autoBroadcast', false);
+
+          if (!autoBroadcast) {
+            // Open in transaction decoder window instead of broadcasting
+            vscode.commands.executeCommand('bitcoin.openTransactionDecoder', rawTx);
+
+            vscode.window.showInformationMessage(
+              'Profile transaction created. Review in the Transaction Decoder and broadcast when ready.'
+            );
+            return;
+          }
+
+          progress.report({ message: 'Broadcasting transaction' });
+
+          // Broadcast transaction
+          const { TransactionService } = await import('../../services/transactionService');
+          const transactionService = new TransactionService();
+          const broadcastResult = await transactionService.broadcastTransaction(rawTx);
+
+          if (broadcastResult.status === 'success') {
+            // Clear the draft after successful publish
+            await profileStorage.deleteDraft(idKey);
+
+            vscode.window.showInformationMessage(
+              `Profile published successfully! ${broadcastResult.txid?.slice(0, 8)}...`
+            );
+
+            // Refresh the identities list
+            webviewView.webview.postMessage({
+              type: 'identity:refresh'
+            });
+          } else {
+            throw new Error(broadcastResult.message || 'Broadcast failed');
+          }
+        }
+      );
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      vscode.window.showErrorMessage(`Failed to publish profile: ${errorMessage}`);
     }
   }
 

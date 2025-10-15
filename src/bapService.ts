@@ -1,6 +1,7 @@
 import vsApi from './vsShim';
 import { BAP, MemberID } from 'bsv-bap';
 import type { KeyEntry } from './keyVault';
+import type { ProfileStorageService, DraftProfile } from './profileStorage';
 
 export interface BapIdentity {
   '@context': string;
@@ -43,6 +44,10 @@ export interface LocalIdentity {
   counter: number;
   rootAddress?: string;
   hasOnChainProfile: boolean;
+  hasDraft?: boolean;
+  hasUnsavedChanges?: boolean;
+  displayName?: string;
+  image?: string;
 }
 
 export class BapService {
@@ -51,12 +56,24 @@ export class BapService {
   private memberKey: any | null = null; // MemberID instance
   private isMasterKey: boolean = false;
   private localIdentities: Map<string, LocalIdentity> = new Map();
+  private profileStorage: ProfileStorageService | null = null;
 
-  constructor() {
+  constructor(profileStorage?: ProfileStorageService) {
     // Get the configured BAP indexer URL or use default
     this.baseUrl = vsApi.workspace
       .getConfiguration('bitcoin')
       .get('bapIndexerUrl', 'https://api.sigmaidentity.com');
+
+    if (profileStorage) {
+      this.profileStorage = profileStorage;
+    }
+  }
+
+  /**
+   * Set the profile storage service (called after construction)
+   */
+  setProfileStorage(profileStorage: ProfileStorageService): void {
+    this.profileStorage = profileStorage;
   }
 
   /**
@@ -321,6 +338,47 @@ export class BapService {
           error instanceof Error ? error.message : String(error)
         }`,
       );
+    }
+  }
+
+  /**
+   * Create ALIAS transaction (profile publishing)
+   * Returns the OP_RETURN data array signed with AIP
+   */
+  createAliasTransaction(idKey: string, profileData: Partial<BapIdentity>): number[][] | null {
+    if (!this.bap) {
+      throw new Error('BAP not initialized');
+    }
+
+    try {
+      const identity = this.bap.getId(idKey);
+      if (!identity) {
+        throw new Error('Identity not found');
+      }
+
+      // Create Schema.org formatted JSON
+      const aliasData = {
+        '@context': 'https://schema.org',
+        '@type': 'Person',
+        ...profileData
+      };
+
+      // Create OP_RETURN structure for ALIAS
+      // Format: OP_RETURN | BAP_ADDR | ALIAS | idKey | JSON
+      const opReturn: number[][] = [
+        Buffer.from('1BAPSuaPnfGnSBM3GLV9yhxUdYe4vGbdMT', 'utf8').toJSON().data,
+        Buffer.from('ALIAS', 'utf8').toJSON().data,
+        Buffer.from(idKey, 'utf8').toJSON().data,
+        Buffer.from(JSON.stringify(aliasData), 'utf8').toJSON().data
+      ];
+
+      // Sign with AIP
+      const signedOpReturn = identity.signOpReturnWithAIP(opReturn);
+
+      return signedOpReturn;
+    } catch (error) {
+      console.error('Error creating ALIAS transaction:', error);
+      throw error;
     }
   }
 }

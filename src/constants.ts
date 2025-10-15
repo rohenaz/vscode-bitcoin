@@ -2,6 +2,7 @@ export const API_HOST = 'https://ordinals.gorillapool.io/api';
 export const JUNGLEBUS_API_HOST = 'https://junglebus.gorillapool.io/v1';
 export const ORDFS_GATEWAY = 'https://ordfs.network';
 export const MARKET_API_HOST = 'https://api.1sat.market';
+export const BMAP_API_BASE_URL = 'https://bmap-api-production.up.railway.app';
 
 // Market fee configuration (EXACT match with 1sat-website/src/constants.ts)
 export const marketAddress = '15q8YQSqUa9uTh6gh4AVixxq29xkpBBP9z';
