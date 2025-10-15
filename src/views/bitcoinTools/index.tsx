@@ -1847,7 +1847,7 @@ export class BitcoinToolsViewProvider implements vscode.WebviewViewProvider {
       }
 
       // Initialize BAP with identity key
-      bapService.initializeWithKey(identityKey);
+      await bapService.initializeWithKey(identityKey);
 
       // Get local identities
       const identities = bapService.getLocalIdentities();
@@ -1883,7 +1883,7 @@ export class BitcoinToolsViewProvider implements vscode.WebviewViewProvider {
       }
 
       // Initialize BAP with identity key
-      bapService.initializeWithKey(identityKey);
+      await bapService.initializeWithKey(identityKey);
 
       // Discover identities (checks counters 0-9 by default)
       const discovered = await vscode.window.withProgress(
@@ -1939,7 +1939,7 @@ export class BitcoinToolsViewProvider implements vscode.WebviewViewProvider {
       }
 
       // Initialize BAP with identity key
-      bapService.initializeWithKey(identityKey);
+      await bapService.initializeWithKey(identityKey);
 
       // Create identity (master key only)
       const result = bapService.createIdentity(name);

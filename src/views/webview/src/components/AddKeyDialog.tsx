@@ -2,12 +2,13 @@ import { useState, useEffect } from 'react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
+import { Field, FieldLabel, FieldDescription } from '@/components/ui/field'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Separator } from '@/components/ui/separator'
 import { Textarea } from '@/components/ui/textarea'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
+import { Badge } from '@/components/ui/badge'
 import { getVscode } from '../vscode'
 import type { KeyType } from '../types'
 import { PrivateKey, Mnemonic, HD } from '@bsv/sdk'
@@ -32,6 +33,41 @@ export function AddKeyDialog({ open, onOpenChange }: AddKeyDialogProps) {
   const [sharesInput, setSharesInput] = useState('')
 
   const isVanity = keyType === 'vanity' || keyType === 'vanity-testnet'
+  const canHaveDesignations = keyType === 'wif' || keyType === 'vanity'
+
+  // Auto-detect key type from value
+  const detectKeyType = (val: string): KeyType => {
+    if (!val.trim()) return 'wif'
+
+    try {
+      // Check if it's a mnemonic (BIP39 phrase)
+      if (val.includes(' ')) {
+        const words = val.trim().split(/\s+/)
+        if (words.length >= 12 && words.length <= 24) {
+          return 'mnemonic'
+        }
+      }
+
+      // Check if it's HD key (xprv/xpub)
+      if (val.startsWith('xprv') || val.startsWith('tprv')) {
+        return 'hdprivate'
+      }
+
+      // Check if it's WIF (starts with 5, K, L for mainnet, or c, 9 for testnet)
+      if (val.length >= 51 && val.length <= 52) {
+        if (val.startsWith('5') || val.startsWith('K') || val.startsWith('L')) {
+          return 'wif'
+        }
+        if (val.startsWith('c') || val.startsWith('9')) {
+          return 'wif-testnet'
+        }
+      }
+
+      return 'wif'
+    } catch (e) {
+      return 'wif'
+    }
+  }
 
   // Handle paste detection - switch to import tab
   useEffect(() => {
@@ -42,12 +78,33 @@ export function AddKeyDialog({ open, onOpenChange }: AddKeyDialogProps) {
       if (pastedText && pastedText.length > 10 && activeTab === 'generate') {
         setActiveTab('import')
         setValue(pastedText)
+        setKeyType(detectKeyType(pastedText))
       }
     }
 
     window.addEventListener('paste', handlePaste)
     return () => window.removeEventListener('paste', handlePaste)
   }, [open, activeTab])
+
+  // Auto-detect type when value changes in import tab
+  useEffect(() => {
+    if (activeTab === 'import' && value) {
+      const detectedType = detectKeyType(value)
+      setKeyType(detectedType)
+
+      // Clear designations if the detected type can't have them
+      if (detectedType !== 'wif' && detectedType !== 'vanity') {
+        setDesignations([])
+      }
+    }
+  }, [value, activeTab])
+
+  // Clear designations when key type changes to incompatible type
+  useEffect(() => {
+    if (!canHaveDesignations && designations.length > 0) {
+      setDesignations([])
+    }
+  }, [keyType, canHaveDesignations])
 
   // Listen for generated key
   useEffect(() => {
@@ -205,7 +262,7 @@ export function AddKeyDialog({ open, onOpenChange }: AddKeyDialogProps) {
       if (!open) resetForm()
       onOpenChange(open)
     }}>
-      <DialogContent className="sm:max-w-[500px]">
+      <DialogContent>
         <DialogHeader>
           <DialogTitle>Add New Key</DialogTitle>
         </DialogHeader>
@@ -219,10 +276,10 @@ export function AddKeyDialog({ open, onOpenChange }: AddKeyDialogProps) {
 
           {/* GENERATE TAB */}
           <TabsContent value="generate" className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="gen-keyType">Key Type</Label>
+            <Field>
+              <FieldLabel htmlFor="gen-keyType">Key Type</FieldLabel>
               <Select value={keyType} onValueChange={(v) => setKeyType(v as KeyType)}>
-                <SelectTrigger>
+                <SelectTrigger id="gen-keyType">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -234,11 +291,11 @@ export function AddKeyDialog({ open, onOpenChange }: AddKeyDialogProps) {
                   <SelectItem value="mnemonic">Mnemonic (BIP39 phrase)</SelectItem>
                 </SelectContent>
               </Select>
-            </div>
+            </Field>
 
             {isVanity && (
-              <div className="space-y-2">
-                <Label htmlFor="gen-vanityPrefix">Desired Prefix</Label>
+              <Field>
+                <FieldLabel htmlFor="gen-vanityPrefix">Desired Prefix</FieldLabel>
                 <Input
                   id="gen-vanityPrefix"
                   value={vanityPrefix}
@@ -247,61 +304,69 @@ export function AddKeyDialog({ open, onOpenChange }: AddKeyDialogProps) {
                   placeholder="Prefix (1-5 base58 chars)"
                   autoFocus
                 />
-              </div>
+                <FieldDescription>Enter 1-5 base58 characters (excluding 0, O, I, l)</FieldDescription>
+              </Field>
             )}
 
-            <div className="space-y-2">
-              <Label htmlFor="gen-label">Label (Optional)</Label>
+            <Field>
+              <FieldLabel htmlFor="gen-label">Label (Optional)</FieldLabel>
               <Input
                 id="gen-label"
                 value={label}
                 onChange={(e) => setLabel(e.target.value)}
                 placeholder="e.g., My Wallet Key"
               />
-            </div>
+            </Field>
 
             <Separator />
 
-            <div className="space-y-2">
-              <Label>Key Designations (Optional)</Label>
+            <Field>
+              <FieldLabel>Key Designations (Optional)</FieldLabel>
               <ToggleGroup
                 type="multiple"
                 variant="outline"
                 value={designations}
                 onValueChange={setDesignations}
                 className="justify-start"
+                disabled={!canHaveDesignations}
               >
-                <ToggleGroupItem value="encryption" className="data-[state=on]:bg-chart-5/20 data-[state=on]:text-chart-5">
+                <ToggleGroupItem value="encryption" className="data-[state=on]:bg-chart-5/20 data-[state=on]:text-chart-5" disabled={!canHaveDesignations}>
                   ENC
                 </ToggleGroupItem>
-                <ToggleGroupItem value="wallet" className="data-[state=on]:bg-chart-3/20 data-[state=on]:text-chart-3">
+                <ToggleGroupItem value="wallet" className="data-[state=on]:bg-chart-3/20 data-[state=on]:text-chart-3" disabled={!canHaveDesignations}>
                   WLT
                 </ToggleGroupItem>
-                <ToggleGroupItem value="ordinals" className="data-[state=on]:bg-chart-1/20 data-[state=on]:text-chart-1">
+                <ToggleGroupItem value="ordinals" className="data-[state=on]:bg-chart-1/20 data-[state-on]:text-chart-1" disabled={!canHaveDesignations}>
                   ORD
                 </ToggleGroupItem>
-                <ToggleGroupItem value="identity" className="data-[state=on]:bg-chart-2/20 data-[state=on]:text-chart-2">
+                <ToggleGroupItem value="identity" className="data-[state=on]:bg-chart-2/20 data-[state=on]:text-chart-2" disabled={!canHaveDesignations}>
                   ID
                 </ToggleGroupItem>
               </ToggleGroup>
-            </div>
+              <FieldDescription>
+                {canHaveDesignations
+                  ? 'Mark this key as encryption, wallet, ordinals, or identity'
+                  : 'Key designations are only available for mainnet WIF keys'
+                }
+              </FieldDescription>
+            </Field>
 
             {value && (
               <>
                 <Separator />
-                <div className="space-y-2">
-                  <Label>Generated Key</Label>
+                <Field>
+                  <FieldLabel>Generated Key</FieldLabel>
                   <div className="p-3 bg-muted rounded font-mono text-xs break-all">
                     {value}
                   </div>
-                </div>
+                </Field>
                 {generatedAddress && (
-                  <div className="space-y-2">
-                    <Label>Address</Label>
+                  <Field>
+                    <FieldLabel>Address</FieldLabel>
                     <div className="p-3 bg-muted rounded font-mono text-xs break-all">
                       {generatedAddress}
                     </div>
-                  </div>
+                  </Field>
                 )}
               </>
             )}
@@ -338,70 +403,76 @@ export function AddKeyDialog({ open, onOpenChange }: AddKeyDialogProps) {
 
           {/* IMPORT TAB */}
           <TabsContent value="import" className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="import-keyType">Key Type</Label>
-              <Select value={keyType} onValueChange={(v) => setKeyType(v as KeyType)}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="wif">Private Key (WIF)</SelectItem>
-                  <SelectItem value="wif-testnet">Private Key (WIF - Testnet)</SelectItem>
-                  <SelectItem value="hdprivate">HD Private (xprv)</SelectItem>
-                  <SelectItem value="mnemonic">Mnemonic (BIP39 phrase)</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+            <Field>
+              <div className="flex items-center justify-between">
+                <FieldLabel htmlFor="import-value">Key Value</FieldLabel>
+                {value && (
+                  <Badge variant="outline" className="ml-2">
+                    {keyType === 'wif' && 'WIF'}
+                    {keyType === 'wif-testnet' && 'WIF Testnet'}
+                    {keyType === 'hdprivate' && 'HD Private'}
+                    {keyType === 'mnemonic' && 'Mnemonic'}
+                  </Badge>
+                )}
+              </div>
+              <Textarea
+                id="import-value"
+                value={value}
+                onChange={(e) => setValue(e.target.value)}
+                placeholder="Paste your WIF, xprv, or mnemonic phrase here"
+                autoFocus
+                className="min-h-[80px] font-mono text-xs"
+              />
+              <FieldDescription>
+                {value
+                  ? 'Type detected automatically from the pasted content'
+                  : 'Paste your WIF private key, HD extended key (xprv), or BIP39 mnemonic phrase'
+                }
+              </FieldDescription>
+            </Field>
 
-            <div className="space-y-2">
-              <Label htmlFor="import-label">Label (Optional)</Label>
+            <Field>
+              <FieldLabel htmlFor="import-label">Label (Optional)</FieldLabel>
               <Input
                 id="import-label"
                 value={label}
                 onChange={(e) => setLabel(e.target.value)}
                 placeholder="e.g., My Wallet Key"
               />
-            </div>
+            </Field>
 
             <Separator />
 
-            <div className="space-y-2">
-              <Label>Key Designations (Optional)</Label>
+            <Field>
+              <FieldLabel>Key Designations (Optional)</FieldLabel>
               <ToggleGroup
                 type="multiple"
                 variant="outline"
                 value={designations}
                 onValueChange={setDesignations}
                 className="justify-start"
+                disabled={!canHaveDesignations}
               >
-                <ToggleGroupItem value="encryption" className="data-[state=on]:bg-chart-5/20 data-[state=on]:text-chart-5">
+                <ToggleGroupItem value="encryption" className="data-[state=on]:bg-chart-5/20 data-[state=on]:text-chart-5" disabled={!canHaveDesignations}>
                   ENC
                 </ToggleGroupItem>
-                <ToggleGroupItem value="wallet" className="data-[state=on]:bg-chart-3/20 data-[state=on]:text-chart-3">
+                <ToggleGroupItem value="wallet" className="data-[state=on]:bg-chart-3/20 data-[state=on]:text-chart-3" disabled={!canHaveDesignations}>
                   WLT
                 </ToggleGroupItem>
-                <ToggleGroupItem value="ordinals" className="data-[state=on]:bg-chart-1/20 data-[state=on]:text-chart-1">
+                <ToggleGroupItem value="ordinals" className="data-[state=on]:bg-chart-1/20 data-[state=on]:text-chart-1" disabled={!canHaveDesignations}>
                   ORD
                 </ToggleGroupItem>
-                <ToggleGroupItem value="identity" className="data-[state=on]:bg-chart-2/20 data-[state=on]:text-chart-2">
+                <ToggleGroupItem value="identity" className="data-[state=on]:bg-chart-2/20 data-[state=on]:text-chart-2" disabled={!canHaveDesignations}>
                   ID
                 </ToggleGroupItem>
               </ToggleGroup>
-            </div>
-
-            <Separator />
-
-            <div className="space-y-2">
-              <Label htmlFor="import-value">Key Value</Label>
-              <Input
-                id="import-value"
-                type="password"
-                value={value}
-                onChange={(e) => setValue(e.target.value)}
-                placeholder="Paste your key here"
-                autoFocus
-              />
-            </div>
+              <FieldDescription>
+                {canHaveDesignations
+                  ? 'Mark this key as encryption, wallet, ordinals, or identity'
+                  : 'Key designations are only available for mainnet WIF keys'
+                }
+              </FieldDescription>
+            </Field>
 
             <div className="flex justify-between pt-2">
               <Button variant="outline" onClick={() => onOpenChange(false)}>
@@ -415,18 +486,19 @@ export function AddKeyDialog({ open, onOpenChange }: AddKeyDialogProps) {
 
           {/* SHARES TAB */}
           <TabsContent value="shares" className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="shares-label">Label</Label>
+            <Field>
+              <FieldLabel htmlFor="shares-label">Label</FieldLabel>
               <Input
                 id="shares-label"
                 value={sharesLabel}
                 onChange={(e) => setSharesLabel(e.target.value)}
                 placeholder="Enter a label for the combined key"
               />
-            </div>
+              <FieldDescription>Name for the reconstructed key</FieldDescription>
+            </Field>
 
-            <div className="space-y-2">
-              <Label htmlFor="shares-input">Key Shares (one per line)</Label>
+            <Field>
+              <FieldLabel htmlFor="shares-input">Key Shares</FieldLabel>
               <Textarea
                 id="shares-input"
                 value={sharesInput}
@@ -434,7 +506,8 @@ export function AddKeyDialog({ open, onOpenChange }: AddKeyDialogProps) {
                 placeholder="Paste your key shares here, one per line"
                 className="min-h-[150px] font-mono text-xs"
               />
-            </div>
+              <FieldDescription>Paste your Shamir secret shares, one per line. Lines starting with # will be ignored. At least 2 shares required.</FieldDescription>
+            </Field>
 
             <div className="flex justify-between pt-2">
               <Button variant="outline" onClick={() => onOpenChange(false)}>

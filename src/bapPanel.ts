@@ -1,6 +1,53 @@
 import type { BapProfile } from './bapService';
 import vsApi, { type WebviewPanel, type Disposable } from './vsShim';
 
+/**
+ * Normalize image URLs to ordfs.network format
+ */
+function normalizeImageUrl(url: string | undefined): string | null {
+  if (!url || typeof url !== 'string' || url.trim() === '') {
+    return null;
+  }
+
+  const trimmedUrl = url.trim();
+
+  // Data URI - return as-is
+  if (trimmedUrl.startsWith('data:')) {
+    return trimmedUrl;
+  }
+
+  // Full HTTPS URL - return as-is
+  if (trimmedUrl.startsWith('https://') || trimmedUrl.startsWith('http://')) {
+    return trimmedUrl;
+  }
+
+  // b:// protocol
+  if (trimmedUrl.startsWith('b://')) {
+    const path = trimmedUrl.slice(4);
+    return path ? `https://ordfs.network/${path}` : null;
+  }
+
+  // ord:// protocol
+  if (trimmedUrl.startsWith('ord://')) {
+    const path = trimmedUrl.slice(6);
+    return path ? `https://ordfs.network/${path}` : null;
+  }
+
+  // Relative path starting with /
+  if (trimmedUrl.startsWith('/')) {
+    const path = trimmedUrl.slice(1);
+    return path ? `https://ordfs.network/${path}` : null;
+  }
+
+  // Just a txid or txid_vout
+  if (trimmedUrl.match(/^[a-f0-9]{64}(_\d+)?$/i)) {
+    return `https://ordfs.network/${trimmedUrl}`;
+  }
+
+  // Fallback - prepend ordfs
+  return `https://ordfs.network/${trimmedUrl}`;
+}
+
 export class BapPanel {
   public static currentPanel: BapPanel | undefined;
   private readonly _panel: WebviewPanel;
@@ -34,12 +81,15 @@ export class BapPanel {
 
   private getWebviewContent(profile: BapProfile): string {
     const identity = profile.identity;
+    const normalizedImageUrl = normalizeImageUrl(identity.image);
+    const normalizedBannerUrl = normalizeImageUrl(identity.banner);
 
     return `<!DOCTYPE html>
     <html lang="en">
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src https://ordfs.network data:;">
         <title>BAP Profile</title>
         <style>
             /* CSS Reset */
@@ -108,8 +158,8 @@ export class BapPanel {
     <body>
         <div class="profile-header">
             ${
-              identity.image
-                ? `<img class="profile-image" src="${identity.image}" alt="Profile" />`
+              normalizedImageUrl
+                ? `<img class="profile-image" src="${normalizedImageUrl}" alt="Profile" />`
                 : '<div class="profile-image"></div>'
             }
             <div>

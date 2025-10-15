@@ -8,6 +8,7 @@ import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import type { KeyEntry } from '../types'
 import { getVscode } from '../vscode'
 import { PrivateKey } from '@bsv/sdk'
+import { BAP, MemberID } from 'bsv-bap'
 
 interface KeyCardProps {
   keyEntry: KeyEntry
@@ -32,29 +33,70 @@ export function KeyCard({ keyEntry }: KeyCardProps) {
 
   // Derive address or BAP ID for display
   const deriveAddressOrId = (): string | null => {
-    // For identity keys, show BAP ID
-    if (keyEntry.isIdentityKey) {
-      if (keyEntry.metadata?.bapIds) {
-        try {
-          const idsObj = JSON.parse(keyEntry.metadata.bapIds)
-          const idsList = idsObj.ids || []
-          if (idsList.length > 0) return idsList[0].idKey || null
-        } catch (e) {}
-      }
-      if (keyEntry.metadata?.bapId) {
-        return keyEntry.metadata.bapId
-      }
-    }
+    try {
+      // For identity keys, resolve BAP identity key using bsv-bap library
+      if (keyEntry.isIdentityKey) {
+        // Check for BAP master key (has multiple bapIds)
+        if (keyEntry.metadata?.bapIds) {
+          try {
+            // Initialize BAP based on key type
+            let bap: BAP
+            if (keyEntry.type === 'hdprivate') {
+              // Legacy BIP32 mode - use xprv string
+              bap = new BAP(keyEntry.value)
+            } else {
+              // Type 42 mode - use rootPk
+              bap = new BAP({ rootPk: keyEntry.value })
+            }
 
-    // For WIF keys, derive and show address
-    if (keyEntry.type === 'wif') {
-      try {
-        const pk = PrivateKey.fromWif(keyEntry.value)
-        const isTestnet = keyEntry.metadata?.network === 'testnet'
-        return pk.toAddress(isTestnet ? 'testnet' : 'mainnet')
-      } catch (e) {
-        return null
+            bap.importIds(keyEntry.metadata.bapIds)
+            const ids = bap.listIds()
+            if (ids.length > 0) {
+              // Return the first identity key
+              return ids[0]
+            }
+          } catch (e) {
+            console.warn('Failed to resolve BAP master identity:', e)
+          }
+        }
+
+        // Check for BAP member key (has single bapId)
+        if (keyEntry.metadata?.bapId) {
+          try {
+            const member = MemberID.fromBackup({
+              wif: keyEntry.value,
+              id: keyEntry.metadata.bapId
+            })
+            return member.identityKey || null
+          } catch (e) {
+            console.warn('Failed to resolve BAP member identity:', e)
+          }
+        }
+
+        // Fallback: derive idKey from WIF for new identity keys without BAP data
+        if (keyEntry.type === 'wif') {
+          try {
+            const bap = new BAP({ rootPk: keyEntry.value })
+            const identity = bap.newId('temp')
+            return identity.getIdentityKey() || null
+          } catch (e) {
+            console.warn('Failed to derive identity key:', e)
+          }
+        }
       }
+
+      // For WIF keys (non-identity), derive and show address
+      if (keyEntry.type === 'wif') {
+        try {
+          const pk = PrivateKey.fromWif(keyEntry.value)
+          const isTestnet = keyEntry.metadata?.network === 'testnet'
+          return pk.toAddress(isTestnet ? 'testnet' : 'mainnet')
+        } catch (e) {
+          return null
+        }
+      }
+    } catch (e) {
+      console.error('Error in deriveAddressOrId:', e)
     }
 
     return null
@@ -149,6 +191,8 @@ export function KeyCard({ keyEntry }: KeyCardProps) {
         return 'bg-chart-1/20 text-chart-1 border-chart-1/30'
       case 'encryption':
         return 'bg-chart-5/20 text-chart-5 border-chart-5/30'
+      case 'keyshare':
+        return 'bg-purple-500/20 text-purple-400 border-purple-500/30'
       default:
         return 'bg-secondary/20 text-secondary-foreground border-secondary/30'
     }
@@ -321,6 +365,28 @@ export function KeyCard({ keyEntry }: KeyCardProps) {
 function renderFormatButtons(key: KeyEntry, handleCommand: (cmd: string) => void, setButtonHoverFormat: (format: string | null) => void) {
 
   switch (key.type) {
+    case 'keyshare':
+      return (
+        <ButtonGroup>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                size="icon-sm"
+                variant="outline"
+                onClick={() => {
+                  navigator.clipboard.writeText(key.value)
+                  // Show a toast or notification
+                }}
+                className="min-w-[32px]"
+              >
+                CP
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Copy share value</TooltipContent>
+          </Tooltip>
+        </ButtonGroup>
+      )
+
     case 'mnemonic':
       return (
         <ButtonGroup>
@@ -563,6 +629,23 @@ function renderActionButtons(key: KeyEntry, handleCommand: (cmd: string) => void
   const buttons: React.ReactElement[] = []
   const isSinglePriv = key.type === 'wif' || key.type === 'private' || key.type === 'encryption'
   const isHdType = key.type === 'hdprivate' || key.type === 'hdpublic' || key.type === 'mnemonic'
+  const hasBapData = key.metadata?.bapIds || key.metadata?.bapId
+
+  // For keyshare types, just show delete button
+  if (key.type === 'keyshare') {
+    return null // Delete button is always shown in header
+  }
+
+  // BAP Identity button (if key has BAP data)
+  if (hasBapData) {
+    buttons.push(
+      <Button key="bap" size="sm" variant="outline" onClick={() => handleCommand('viewBapIdentities')} title="View BAP identities" className="bg-chart-2/10 hover:bg-chart-2/20">BAP</Button>
+    )
+    // Add separator if there will be more buttons
+    if (isSinglePriv || isHdType) {
+      buttons.push(<ButtonGroupSeparator key="sep-bap" />)
+    }
+  }
 
   // Single private key derivation buttons
   if (isSinglePriv) {
@@ -590,31 +673,19 @@ function renderActionButtons(key: KeyEntry, handleCommand: (cmd: string) => void
 
   // Add separator before advanced buttons if we have derivation buttons
   if (buttons.length > 0) {
-    // WIF keys: add Split/Shares button
+    // WIF keys: add Split button
     if (key.type === 'wif') {
       buttons.push(<ButtonGroupSeparator key="sep-advanced" />)
-      if (key.keyShares && key.keyShares.length > 0) {
-        buttons.push(
-          <Button key="shares-view" size="sm" variant="outline" onClick={() => handleCommand('viewKeyShares')} title="View key shares">Shares</Button>
-        )
-      } else {
-        buttons.push(
-          <Button key="shares-gen" size="sm" variant="outline" onClick={() => handleCommand('generateKeyShares')} title="Split key into shares (Shamir's Secret Sharing)">Split</Button>
-        )
-      }
+      buttons.push(
+        <Button key="shares-gen" size="sm" variant="outline" onClick={() => handleCommand('generateKeyShares')} title="Split key into shares (Shamir's Secret Sharing)">Split</Button>
+      )
     }
   } else {
     // No derivation buttons, just add advanced buttons without separator
     if (key.type === 'wif') {
-      if (key.keyShares && key.keyShares.length > 0) {
-        buttons.push(
-          <Button key="shares-view" size="sm" variant="outline" onClick={() => handleCommand('viewKeyShares')} title="View key shares">Shares</Button>
-        )
-      } else {
-        buttons.push(
-          <Button key="shares-gen" size="sm" variant="outline" onClick={() => handleCommand('generateKeyShares')} title="Split key into shares (Shamir's Secret Sharing)">Split</Button>
-        )
-      }
+      buttons.push(
+        <Button key="shares-gen" size="sm" variant="outline" onClick={() => handleCommand('generateKeyShares')} title="Split key into shares (Shamir's Secret Sharing)">Split</Button>
+      )
     }
 
     if (key.type === 'public') {
@@ -706,6 +777,114 @@ function renderMetadata(key: KeyEntry) {
           </Badge>
         </TooltipTrigger>
         <TooltipContent>Imported from {key.metadata.backupType} backup</TooltipContent>
+      </Tooltip>
+    )
+  }
+
+  // BAP Identity info
+  if (key.metadata.bapIds) {
+    try {
+      const idsObj = JSON.parse(key.metadata.bapIds)
+      const idsList = idsObj.ids || []
+      if (idsList.length > 0) {
+        // Try to resolve the first identity key
+        let resolvedIdKey: string | null = null
+        try {
+          const bap = new BAP({ rootPk: key.value })
+          bap.importIds(key.metadata.bapIds)
+          const ids = bap.listIds()
+          if (ids.length > 0) {
+            const identity = bap.getId(ids[0])
+            if (identity) {
+              resolvedIdKey = identity.getIdentityKey()
+            }
+          }
+        } catch (e) {
+          // Silent fail
+        }
+
+        items.push(
+          <Tooltip key="bap-master">
+            <TooltipTrigger>
+              <Badge variant="outline" className="text-xs bg-chart-2/20 text-chart-2 border-chart-2/30">
+                BAP Master ({idsList.length})
+              </Badge>
+            </TooltipTrigger>
+            <TooltipContent>
+              <div>BAP Master Key with {idsList.length} identit{idsList.length === 1 ? 'y' : 'ies'}</div>
+              {idsList[0]?.idName && <div className="text-xs mt-1">First: {idsList[0].idName}</div>}
+              {resolvedIdKey && <div className="text-xs mt-1 font-mono">{resolvedIdKey}</div>}
+            </TooltipContent>
+          </Tooltip>
+        )
+      }
+    } catch (e) {
+      // Silent fail - malformed JSON
+    }
+  } else if (key.metadata.bapId) {
+    // Try to resolve member identity key
+    let resolvedIdKey: string | null = null
+    try {
+      const member = MemberID.fromBackup({
+        wif: key.value,
+        id: key.metadata.bapId
+      })
+      resolvedIdKey = member.identityKey
+    } catch (e) {
+      // Silent fail
+    }
+
+    items.push(
+      <Tooltip key="bap-member">
+        <TooltipTrigger>
+          <Badge variant="outline" className="text-xs bg-chart-2/20 text-chart-2 border-chart-2/30">
+            BAP Member
+          </Badge>
+        </TooltipTrigger>
+        <TooltipContent>
+          <div>BAP Member Identity</div>
+          <div className="text-xs mt-1 font-mono">{resolvedIdKey || key.metadata.bapId}</div>
+        </TooltipContent>
+      </Tooltip>
+    )
+  }
+
+  // Keyshare metadata (for share entries themselves)
+  if (key.type === 'keyshare') {
+    items.push(
+      <Tooltip key="keyshare-info">
+        <TooltipTrigger>
+          <Badge variant="outline" className="text-xs bg-purple-500/20 text-purple-400 border-purple-500/30">
+            {key.metadata.shareIndex} of {key.metadata.shareTotal}
+          </Badge>
+        </TooltipTrigger>
+        <TooltipContent>
+          <div>Shamir Secret Share</div>
+          <div className="text-xs mt-1">From: {key.metadata.parentLabel || 'Unknown'}</div>
+          <div className="text-xs">Threshold: {key.metadata.shareThreshold} required</div>
+          {key.metadata.generatedAt && (
+            <div className="text-xs">Generated: {new Date(key.metadata.generatedAt).toLocaleString()}</div>
+          )}
+        </TooltipContent>
+      </Tooltip>
+    )
+  }
+
+  // Parent key with shares generated
+  if (key.metadata.sharesGenerated) {
+    items.push(
+      <Tooltip key="has-shares">
+        <TooltipTrigger>
+          <Badge variant="outline" className="text-xs bg-purple-500/20 text-purple-400 border-purple-500/30">
+            Split into {key.metadata.sharesCount} shares
+          </Badge>
+        </TooltipTrigger>
+        <TooltipContent>
+          <div>Shamir Secret Sharing</div>
+          <div className="text-xs mt-1">{key.metadata.sharesCount} shares generated</div>
+          <div className="text-xs">Threshold: {key.metadata.sharesThreshold} required to reconstruct</div>
+          <div className="text-xs">Generated: {new Date(key.metadata.sharesGenerated).toLocaleString()}</div>
+        </TooltipContent>
       </Tooltip>
     )
   }

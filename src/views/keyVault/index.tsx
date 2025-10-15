@@ -513,6 +513,23 @@ export class KeyPanel {
         }
         break;
 
+      case 'viewBapIdentities':
+        if (msg.id) {
+          const key = await this._vault.getKey(msg.id);
+          if (!key) return;
+
+          // Check if key has BAP data
+          if (!key.metadata?.bapIds && !key.metadata?.bapId) {
+            vsApi.window.showWarningMessage('This key does not have BAP identity data.');
+            return;
+          }
+
+          // Open Bitcoin Tools panel to Identity tab
+          await vsApi.commands.executeCommand('bitcoin.showToolsPanel', { tab: 'identity' });
+          vsApi.window.showInformationMessage('Switched to BAP Identity tab.');
+        }
+        break;
+
       case 'importBackup': {
         // Show file picker for both .bep and .json files
         const result = await vsApi.window.showOpenDialog({
@@ -598,10 +615,26 @@ export class KeyPanel {
           }
           // Type 3: BapMasterBackup (Type 42) - { ids, rootPk, label?, createdAt? }
           else if ('ids' in decrypted && 'rootPk' in decrypted) {
+            // Extract identity name from bapIds
+            let identityLabel = decrypted.label || 'BAP Master Key';
+            try {
+              const tempBap = new BAP({ rootPk: decrypted.rootPk });
+              tempBap.importIds(decrypted.ids);
+              const idKeys = tempBap.listIds();
+              if (idKeys.length > 0) {
+                const firstId = tempBap.getId(idKeys[0]);
+                if (firstId?.idName) {
+                  identityLabel = firstId.idName;
+                }
+              }
+            } catch (e) {
+              console.warn('Could not extract identity name from backup:', e);
+            }
+
             const id = await this._vault.storeKey({
               type: 'wif',
               value: decrypted.rootPk,
-              label: decrypted.label || 'Imported BAP Master Key (Type 42)',
+              label: identityLabel,
               metadata: {
                 ...importMetadata,
                 bapIds: decrypted.ids,
@@ -611,43 +644,55 @@ export class KeyPanel {
 
             // Set as identity key
             await this._vault.setIdentityKey(id);
-            importedKeys.push(decrypted.label || 'BAP Master (Type 42)');
+            importedKeys.push(identityLabel);
           }
           // Type 4: BapMasterBackup (Legacy) - { ids, xprv, mnemonic, label?, createdAt? }
           else if ('ids' in decrypted && 'xprv' in decrypted && 'mnemonic' in decrypted) {
-            // Store mnemonic (which generates xprv internally)
+            // Extract identity name from bapIds
+            let identityLabel = decrypted.label || 'BAP Master Key';
+            try {
+              const tempBap = new BAP(decrypted.xprv);
+              tempBap.importIds(decrypted.ids);
+              const idKeys = tempBap.listIds();
+              if (idKeys.length > 0) {
+                const firstId = tempBap.getId(idKeys[0]);
+                if (firstId?.idName) {
+                  identityLabel = firstId.idName;
+                }
+              }
+            } catch (e) {
+              console.warn('Could not extract identity name from backup:', e);
+            }
+
+            // Store mnemonic as parent
             const mnemonicId = await this._vault.storeKey({
               type: 'mnemonic',
               value: decrypted.mnemonic,
-              label: decrypted.label || 'Imported BAP Master Key (Legacy)',
+              label: `${identityLabel} - Mnemonic`,
+              metadata: {
+                ...importMetadata,
+                backupType: 'legacy'
+              }
+            });
+
+            // Store xprv as child of mnemonic with bapIds
+            const xprvId = await this._vault.storeKey({
+              type: 'hdprivate',
+              value: decrypted.xprv,
+              label: identityLabel,
               metadata: {
                 ...importMetadata,
                 bapIds: decrypted.ids,
                 backupType: 'legacy',
-                mnemonicWords: decrypted.mnemonic
+                parentId: mnemonicId,
+                derivedFrom: 'mnemonic'
               }
             });
 
-            // Derive master key from mnemonic and set as identity
-            const mn = Mnemonic.fromString(decrypted.mnemonic);
-            const hd = HD.fromSeed(mn.toSeed());
-            if (hd.privKey) {
-              const masterPk = PrivateKey.fromHex(hd.privKey.toString());
-              const masterId = await this._vault.storeKey({
-                type: 'wif',
-                value: masterPk.toWif(),
-                label: `${decrypted.label || 'BAP Master'} - Root Key`,
-                metadata: {
-                  ...importMetadata,
-                  parentId: mnemonicId,
-                  derivedFrom: 'mnemonic'
-                }
-              });
+            // Set xprv as the identity key (BAP needs xprv for legacy mode)
+            await this._vault.setIdentityKey(xprvId);
 
-              await this._vault.setIdentityKey(masterId);
-            }
-
-            importedKeys.push(decrypted.label || 'BAP Master (Legacy)');
+            importedKeys.push(identityLabel);
           }
           // Type 5: OneSatBackup - 3-field format { ordPk, payPk, identityPk, label?, createdAt? }
           else if ('ordPk' in decrypted && 'payPk' in decrypted && 'identityPk' in decrypted) {
@@ -849,32 +894,7 @@ export class KeyPanel {
         break;
       }
 
-      case 'viewKeyShares': {
-        if (!msg.id) break;
-        
-        const key = await this._vault.getKey(msg.id);
-        if (!key || !key.keyShares || key.keyShares.length === 0) {
-          vsApi.window.showErrorMessage('No key shares found for this key');
-          return;
-        }
-        
-        const options = key.keyShares.map((share, index) => ({
-          label: `Share ${index + 1}`,
-          description: `${share.substring(0, 20)}...`,
-          share
-        }));
-        
-        const selectedShare = await vsApi.window.showQuickPick(options, {
-          placeHolder: 'Select a key share to copy',
-          canPickMany: false
-        });
-        
-        if (selectedShare) {
-          await vsApi.env.clipboard.writeText(selectedShare.share);
-          vsApi.window.showInformationMessage('Key share copied to clipboard');
-        }
-        break;
-      }
+      // viewKeyShares is no longer needed - shares are now top-level keys
 
       case 'reconstructFromKeyShares': {
         // Get the shares and label from the message

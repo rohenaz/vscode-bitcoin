@@ -64,8 +64,8 @@ export class BapService {
    * Detects master vs member key based on metadata
    */
   async initializeWithKey(keyEntry: KeyEntry): Promise<void> {
-    if (keyEntry.type !== 'wif') {
-      throw new Error('BAP requires a WIF key');
+    if (keyEntry.type !== 'wif' && keyEntry.type !== 'hdprivate') {
+      throw new Error('BAP requires a WIF or HD private key');
     }
 
     // Check if this is a master key (has bapIds) or member key (has bapId)
@@ -75,12 +75,21 @@ export class BapService {
     if (bapIds) {
       // Master key - can create and manage multiple identities
       this.isMasterKey = true;
-      this.bap = new BAP({
-        rootPk: keyEntry.value
-      });
+
+      // Initialize BAP based on key type
+      if (keyEntry.type === 'hdprivate') {
+        // Legacy BIP32 mode - use xprv string directly
+        this.bap = new BAP(keyEntry.value);
+      } else {
+        // Type 42 mode - use rootPk
+        this.bap = new BAP({
+          rootPk: keyEntry.value
+        });
+      }
 
       // Import existing identities
-      this.bap.importIds(bapIds);
+      // Note: bapIds is encrypted by BAP (not bitcoin-backup), so let BAP decrypt it
+      this.bap.importIds(bapIds);  // encrypted defaults to true
 
       // Load identities into local map
       this.loadIdentitiesFromIds(bapIds);
@@ -93,12 +102,12 @@ export class BapService {
       });
 
       // Add this single identity to local map
-      const idKey = this.memberKey.getIdentityKey();
+      const idKey = this.memberKey.identityKey;
       this.localIdentities.set(idKey, {
         idKey,
         name: this.memberKey.idName || 'BAP Member Identity',
         counter: 0,
-        rootAddress: this.memberKey.getRootAddress?.(),
+        rootAddress: this.memberKey.address,
         hasOnChainProfile: false
       });
     } else {
@@ -117,23 +126,24 @@ export class BapService {
     if (!this.bap) return;
 
     try {
-      // Parse the ids structure to get identity count
-      const idsObj = JSON.parse(bapIds);
-      const idsList = idsObj.ids || [];
+      // After importIds(), use listIds() to get the identity keys
+      const idKeys = this.bap.listIds();
 
-      // Load each identity
-      idsList.forEach((id: any, index: number) => {
-        const identity = this.bap!.getId(id.idKey);
+      // Load each identity from the BAP instance
+      idKeys.forEach((idKey: string, index: number) => {
+        const identity = this.bap!.getId(idKey);
         if (identity) {
-          this.localIdentities.set(id.idKey, {
-            idKey: id.idKey,
-            name: id.idName || `Identity ${index}`,
+          this.localIdentities.set(idKey, {
+            idKey: identity.getIdentityKey(),
+            name: identity.idName || `Identity ${index + 1}`,
             counter: index,
-            rootAddress: id.rootAddress,
+            rootAddress: identity.rootAddress,
             hasOnChainProfile: false
           });
         }
       });
+
+      console.log(`Loaded ${this.localIdentities.size} identities from BAP backup`);
     } catch (error) {
       console.error('Error loading identities from bapIds:', error);
     }
@@ -166,7 +176,7 @@ export class BapService {
         idKey,
         name,
         counter: counter ?? this.localIdentities.size,
-        rootAddress: identity.getRootAddress?.(),
+        rootAddress: identity.rootAddress,
         hasOnChainProfile: false
       };
 
@@ -230,7 +240,7 @@ export class BapService {
   /**
    * Generate initial ID transaction for a new identity
    */
-  getInitialIdTransaction(idKey: string): string | null {
+  getInitialIdTransaction(idKey: string): number[][] | null {
     if (!this.bap) return null;
 
     try {
@@ -258,7 +268,7 @@ export class BapService {
    */
   async getProfile(idKey: string): Promise<BapProfile> {
     try {
-      const response = await fetch(`${this.baseUrl}/v1/identity/get`, {
+      const response = await fetch(`${this.baseUrl}/api/v1/identity/get`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -289,7 +299,7 @@ export class BapService {
   async validateByAddress(address: string): Promise<boolean> {
     try {
       const response = await fetch(
-        `${this.baseUrl}/v1/identity/validByAddress`,
+        `${this.baseUrl}/api/v1/identity/validByAddress`,
         {
           method: 'POST',
           headers: {

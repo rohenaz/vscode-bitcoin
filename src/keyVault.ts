@@ -610,10 +610,11 @@ export class KeyVault {
 
   /**
    * Generate key shares for a WIF key
+   * Creates individual top-level keyshare entries for each share
    * @param keyId The ID of the key to generate shares for
    * @param threshold The minimum number of shares required to reconstruct the key
    * @param totalShares The total number of shares to generate
-   * @returns The IDs of the generated key share entries
+   * @returns Array of share strings
    */
   public async generateKeyShares(
     keyId: string,
@@ -637,28 +638,47 @@ export class KeyVault {
     try {
       // Import the PrivateKey class from @bsv/sdk
       const { PrivateKey } = await import('@bsv/sdk');
-      
+
       // Create a PrivateKey instance from the WIF
       const privKey = PrivateKey.fromWif(keyEntry.value);
-      
+
       // Generate backup shares
       const shares = privKey.toBackupShares(threshold, totalShares);
-      
-      // Store the shares in the key entry
-      const updatedKeyEntry = {
-        ...keyEntry,
-        keyShares: shares,
-        keyShareThreshold: threshold
-      };
-      
-      // Update the key entry in the vault
-      this.decryptedKeys = this.decryptedKeys.map((k) => 
-        k.id === keyId ? updatedKeyEntry : k
+
+      const generatedAt = new Date().toISOString();
+
+      // Delete any existing share entries for this parent key
+      const existingShares = this.decryptedKeys.filter(
+        k => k.type === 'keyshare' && k.metadata?.parentId === keyId
       );
-      
-      await this.saveVault();
-      this.onKeyListChanged.fire();
-      
+      for (const share of existingShares) {
+        await this.deleteKey(share.id);
+      }
+
+      // Create individual top-level KeyEntry for each share
+      for (let i = 0; i < shares.length; i++) {
+        await this.storeKey({
+          type: 'keyshare',
+          value: shares[i],
+          label: `Share ${i + 1} of ${totalShares}`,
+          metadata: {
+            parentId: keyId,
+            parentLabel: keyEntry.label || keyEntry.type,
+            shareIndex: String(i + 1),
+            shareTotal: String(totalShares),
+            shareThreshold: String(threshold),
+            generatedAt,
+          }
+        });
+      }
+
+      // Update parent key metadata to track share generation
+      await this.updateKeyMetadata(keyId, {
+        sharesGenerated: generatedAt,
+        sharesCount: String(totalShares),
+        sharesThreshold: String(threshold),
+      });
+
       return shares;
     } catch (error) {
       throw new Error(`Failed to generate key shares: ${error instanceof Error ? error.message : String(error)}`);
