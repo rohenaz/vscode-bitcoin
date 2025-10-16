@@ -357,12 +357,12 @@
 ### Added
 - Raw transaction decoder
 
-[Unreleased]: https://github.com/rohenaz/vscode-bitcoin/compare/v0.1.4...HEAD
-[v0.1.4]: https://github.com/rohenaz/vscode-bitcoin/compare/v0.1.3...v0.1.4
-[v0.1.3]: https://github.com/rohenaz/vscode-bitcoin/compare/v0.1.2...v0.1.3
-[v0.1.2]: https://github.com/rohenaz/vscode-bitcoin/compare/v0.1.1...v0.1.2
-[v0.1.1]: https://github.com/rohenaz/vscode-bitcoin/compare/v0.1.0...v0.1.1
-[v0.1.0]: https://github.com/rohenaz/vscode-bitcoin/compare/v0.0.15...v0.1.0
-[0.0.15]: https://github.com/rohenaz/vscode-bitcoin/compare/v0.0.14...v0.0.15
-[0.0.14]: https://github.com/rohenaz/vscode-bitcoin/compare/v0.0.13...v0.0.14
-[0.0.13]: https://github.com/rohenaz/vscode-bitcoin/releases/tag/v0.0.13
+[Unreleased]: https://github.com/b-open-io/vscode-bitcoin/compare/v0.1.4...HEAD
+[v0.1.4]: https://github.com/b-open-io/vscode-bitcoin/compare/v0.1.3...v0.1.4
+[v0.1.3]: https://github.com/b-open-io/vscode-bitcoin/compare/v0.1.2...v0.1.3
+[v0.1.2]: https://github.com/b-open-io/vscode-bitcoin/compare/v0.1.1...v0.1.2
+[v0.1.1]: https://github.com/b-open-io/vscode-bitcoin/compare/v0.1.0...v0.1.1
+[v0.1.0]: https://github.com/b-open-io/vscode-bitcoin/compare/v0.0.15...v0.1.0
+[0.0.15]: https://github.com/b-open-io/vscode-bitcoin/compare/v0.0.14...v0.0.15
+[0.0.14]: https://github.com/b-open-io/vscode-bitcoin/compare/v0.0.13...v0.0.14
+[0.0.13]: https://github.com/b-open-io/vscode-bitcoin/releases/tag/v0.0.13

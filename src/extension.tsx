@@ -828,7 +828,7 @@ export async function activate(context: ExtensionContext) {
   // Register settings command
   context.subscriptions.push(
     vsApi.commands.registerCommand('bitcoin.openBitcoinSettings', () => {
-      vsApi.commands.executeCommand('workbench.action.openSettings', '@ext:Satchmo.bitcoin');
+      vsApi.commands.executeCommand('workbench.action.openSettings', '@ext:opl.bitcoin');
     })
   );
 
