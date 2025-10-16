@@ -1,12 +1,49 @@
+# Source files (compiled to dist/)
+src/**
+!src/views/webview/dist/**
+*.ts
+*.tsx
+
+# Build configuration
+vite.config.ts
+tsconfig.json
+biome.json
+bunfig.toml
+
+# Development files
 .vscode/**
 .vscode-test/**
-out/test/**
-src/**
+.github/**
+.git/**
 .gitignore
-.yarnrc
+.cursorrules
 vsc-extension-quickstart.md
-**/tsconfig.json
-**/.eslintrc.json
-**/*.map
-**/*.ts
-node_modules
+scripts/**
+assistant_snippet_*.txt
+
+# Temporary files
+.DS_Store
+*.vsix
+*.log
+*.tgz
+*.map
+bun.lockb
+bun.lock
+
+# Tests and test fixtures
+**/__tests__/**
+**/*.test.*
+**/*.spec.*
+**/test/**
+**/tests/**
+
+# Documentation (keep README.md and LICENSE.txt)
+CHANGELOG.md
+
+# Node modules (bundled by Vite, not needed in package)
+node_modules/**
+
+# Images - keep only required
+images/**
+!images/icon.png
+!images/b_icon.svg

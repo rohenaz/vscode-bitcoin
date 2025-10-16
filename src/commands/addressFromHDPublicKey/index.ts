@@ -1,0 +1,71 @@
+import { HD } from '@bsv/sdk';
+import type { OutputManager } from '../../output';
+import vsApi from '../../vsShim';
+
+export async function handleAddressFromHDPublicKeyCommand(
+  outputManager: OutputManager,
+) {
+  const xPub = await vsApi.window.showInputBox({
+    value: '',
+    placeHolder: 'Ex: xpub...',
+    validateInput: (text) => {
+      return text.length !== 111 ? 'Invalid extended public key!' : null;
+    },
+  });
+
+  const path = await vsApi.window.showInputBox({
+    value: 'm/0/0',
+    placeHolder: 'Ex: m/0/0',
+    validateInput: (_text) => {
+      return null;
+    },
+  });
+
+  if (!xPub || !path) {
+    return undefined;
+  }
+
+  const hdPubKey = HD.fromString(xPub);
+  const derivedPubKey = hdPubKey.derive(path);
+  const address = derivedPubKey.pubKey.toAddress('mainnet');
+
+  return {
+    data: address,
+    type: 'addresses',
+    name: `from_hdpubkey_${path.replace(/\//g, '_')}`,
+  };
+}
+
+export async function handleAddressFromHDPublicKeyTestnetCommand(
+  outputManager: OutputManager,
+) {
+  const xPub = await vsApi.window.showInputBox({
+    value: '',
+    placeHolder: 'Ex: xpub...',
+    validateInput: (text) => {
+      return text.length !== 111 ? 'Invalid extended public key!' : null;
+    },
+  });
+
+  const path = await vsApi.window.showInputBox({
+    value: 'm/0/0',
+    placeHolder: 'Ex: m/0/0',
+    validateInput: (_text) => {
+      return null;
+    },
+  });
+
+  if (!xPub || !path) {
+    return undefined;
+  }
+
+  const hdPubKey = HD.fromString(xPub);
+  const derivedPubKey = hdPubKey.derive(path);
+  const address = derivedPubKey.pubKey.toAddress('testnet');
+
+  return {
+    data: address,
+    type: 'addresses',
+    name: `from_hdpubkey_testnet_${path.replace(/\//g, '_')}`,
+  };
+}

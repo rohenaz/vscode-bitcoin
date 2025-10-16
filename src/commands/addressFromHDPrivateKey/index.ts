@@ -1,0 +1,75 @@
+import { HD, PrivateKey } from '@bsv/sdk';
+import type { OutputManager } from '../../output';
+import vsApi from '../../vsShim';
+
+export async function handleAddressFromHDPrivateKeyCommand(
+  outputManager: OutputManager,
+) {
+  const xPriv = await vsApi.window.showInputBox({
+    value: '',
+    placeHolder: 'Ex: xprv...',
+    validateInput: (text) => {
+      return text.length !== 111 ? 'Invalid extended private key!' : null;
+    },
+  });
+
+  const path = await vsApi.window.showInputBox({
+    value: 'm/0/0',
+    placeHolder: 'Ex: m/0/0',
+    validateInput: (_text) => {
+      return null;
+    },
+  });
+
+  if (!xPriv || !path) {
+    return undefined;
+  }
+
+  const hdPrivKey = HD.fromString(xPriv);
+  const derivedKey = hdPrivKey.derive(path);
+  const privKey = PrivateKey.fromHex(derivedKey.privKey.toString());
+  const pubKey = privKey.toPublicKey();
+  const address = pubKey.toAddress('mainnet');
+
+  return {
+    data: address,
+    type: 'addresses',
+    name: `from_hdprivkey_${path.replace(/\//g, '_')}`,
+  };
+}
+
+export async function handleAddressFromHDPrivateKeyTestnetCommand(
+  outputManager: OutputManager,
+) {
+  const xPriv = await vsApi.window.showInputBox({
+    value: '',
+    placeHolder: 'Ex: xprv...',
+    validateInput: (text) => {
+      return text.length !== 111 ? 'Invalid extended private key!' : null;
+    },
+  });
+
+  const path = await vsApi.window.showInputBox({
+    value: 'm/0/0',
+    placeHolder: 'Ex: m/0/0',
+    validateInput: (_text) => {
+      return null;
+    },
+  });
+
+  if (!xPriv || !path) {
+    return undefined;
+  }
+
+  const hdPrivKey = HD.fromString(xPriv);
+  const derivedKey = hdPrivKey.derive(path);
+  const privKey = PrivateKey.fromHex(derivedKey.privKey.toString());
+  const pubKey = privKey.toPublicKey();
+  const address = pubKey.toAddress('testnet');
+
+  return {
+    data: address,
+    type: 'addresses',
+    name: `from_hdprivkey_testnet_${path.replace(/\//g, '_')}`,
+  };
+}

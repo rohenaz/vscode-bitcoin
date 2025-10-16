@@ -3,16 +3,28 @@
 {
 	"version": "2.0.0",
 	"tasks": [{
-		"type": "npm",
-		"script": "webpack",
-		"problemMatcher": "$tsc-watch",
+		"type": "shell",
+		"command": "bun",
+		"args": ["run", "dev"],
+		"problemMatcher": {
+			"pattern": {
+				"regexp": "^.*$"
+			},
+			"background": {
+				"activeOnStart": true,
+				"beginsPattern": "vite v.*building for production",
+				"endsPattern": "built in .*ms"
+			}
+		},
 		"isBackground": true,
 		"presentation": {
-			"reveal": "never"
+			"reveal": "always",
+			"panel": "new"
 		},
 		"group": {
 			"kind": "build",
 			"isDefault": true
-		}
+		},
+		"label": "bun: dev"
 	}]
 }

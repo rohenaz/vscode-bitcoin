@@ -1,155 +1,629 @@
 {
   "name": "bitcoin",
   "displayName": "Bitcoin",
-  "description": "Tools for working with Bitcoin (BSV)",
+  "description": "Bitcoin utilities for VS Code",
   "publisher": "Satchmo",
-  "version": "0.0.15",
+  "version": "0.1.4",
   "icon": "images/icon.png",
+  "type": "commonjs",
   "engines": {
-    "vscode": "^1.49.0"
+    "vscode": "^1.99.3",
+    "node": "^16.0.0"
   },
   "categories": [
     "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished",
+    "onLanguage:typescript",
+    "onLanguage:typescriptreact",
+    "onLanguage:javascript",
+    "onLanguage:javascriptreact",
+    "onLanguage:plaintext",
+    "onLanguage:markdown",
+    "onLanguage:json"
   ],
   "repository": {
     "type": "git",
     "url": "https://github.com/rohenaz/vscode-bitcoin.git"
   },
-  "activationEvents": [
-    "onCommand:bitcoin.asmFromScript",
-    "onCommand:bitcoin.addressFromHDPrivateKey",
-    "onCommand:bitcoin.addressFromHDPublicKey",
-    "onCommand:bitcoin.addressFromPrivateKey",
-    "onCommand:bitcoin.addressFromPublicKey",
-    "onCommand:bitcoin.addressFromWIF",
-    "onCommand:bitcoin.decodeRawTx",
-    "onCommand:bitcoin.extendedPrivateKeyFromMnemonic",
-    "onCommand:bitcoin.generateHDPrivateKey",
-    "onCommand:bitcoin.generateHDPublicKey",
-    "onCommand:bitcoin.generateMnemonic",
-    "onCommand:bitcoin.generatePrivateKey",
-    "onCommand:bitcoin.generatePublicKey",
-    "onCommand:bitcoin.generateWIF",
-    "onCommand:bitcoin.getTx",
-    "onCommand:bitcoin.getUtxosForAddress",
-    "onCommand:bitcoin.publicKeyFromPrivateKey",
-    "onCommand:bitcoin.rawTxToBob",
-    "onCommand:bitcoin.rawTxToTxo",
-    "onCommand:bitcoin.xPubFromxPriv"
-  ],
-  "main": "./dist/extension",
+  "main": "./dist/extension.js",
   "contributes": {
     "commands": [
       {
+        "command": "bitcoin.convertData",
+        "title": "Convert Data",
+        "category": "Bitcoin"
+      },
+      {
         "command": "bitcoin.asmFromScript",
-        "title": "Bitcoin: ASM from Script"
+        "title": "ASM from Script",
+        "category": "Bitcoin"
       },
       {
         "command": "bitcoin.addressFromWIF",
-        "title": "Bitcoin: Address from WIF"
+        "title": "Address from WIF",
+        "category": "Bitcoin"
       },
       {
         "command": "bitcoin.addressFromPublicKey",
-        "title": "Bitcoin: Address from Public Key"
+        "title": "Address from Public Key",
+        "category": "Bitcoin"
+      },
+      {
+        "command": "bitcoin.addressFromPublicKeyTestnet",
+        "title": "Address from Public Key (Testnet)",
+        "category": "Bitcoin"
       },
       {
         "command": "bitcoin.addressFromPrivateKey",
-        "title": "Bitcoin: Address From Private Key"
+        "title": "Address From Private Key",
+        "category": "Bitcoin"
+      },
+      {
+        "command": "bitcoin.addressFromPrivateKeyTestnet",
+        "title": "Address From Private Key (Testnet)",
+        "category": "Bitcoin"
       },
       {
         "command": "bitcoin.addressFromHDPublicKey",
-        "title": "Bitcoin: Address From Extended Public Key"
+        "title": "Address From Extended Public Key",
+        "category": "Bitcoin"
+      },
+      {
+        "command": "bitcoin.addressFromHDPublicKeyTestnet",
+        "title": "Address From Extended Public Key (Testnet)",
+        "category": "Bitcoin"
       },
       {
         "command": "bitcoin.addressFromHDPrivateKey",
-        "title": "Bitcoin: Address From Extended Private Key"
+        "title": "Address From Extended Private Key",
+        "category": "Bitcoin"
+      },
+      {
+        "command": "bitcoin.addressFromHDPrivateKeyTestnet",
+        "title": "Address From Extended Private Key (Testnet)",
+        "category": "Bitcoin"
       },
       {
         "command": "bitcoin.generatePublicKey",
-        "title": "Bitcoin: Generate Public Key"
+        "title": "Generate Public Key",
+        "category": "Bitcoin"
       },
       {
         "command": "bitcoin.generatePrivateKey",
-        "title": "Bitcoin: Generate Private Key"
+        "title": "Generate Private Key",
+        "category": "Bitcoin"
       },
       {
         "command": "bitcoin.generateHDPublicKey",
-        "title": "Bitcoin: Generate Extended Public Key"
+        "title": "Generate Extended Public Key",
+        "category": "Bitcoin"
       },
       {
         "command": "bitcoin.getUtxosForAddress",
-        "title": "Bitcoin: Get UTXOs for Address"
+        "title": "Get UTXOs for Address",
+        "category": "Bitcoin"
       },
       {
         "command": "bitcoin.xPubFromxPriv",
-        "title": "Bitcoin: Extended Public Key from Extended Private Key"
+        "title": "Extended Public Key from Extended Private Key",
+        "category": "Bitcoin"
       },
       {
         "command": "bitcoin.extendedPrivateKeyFromMnemonic",
-        "title": "Bitcoin: Extended Private Key from Mnemonic"
+        "title": "Extended Private Key from Mnemonic",
+        "category": "Bitcoin"
       },
       {
         "command": "bitcoin.generateHDPrivateKey",
-        "title": "Bitcoin: Generate ExtendedPrivate Key"
+        "title": "Generate Extended Private Key",
+        "category": "Bitcoin"
       },
       {
         "command": "bitcoin.generateMnemonic",
-        "title": "Bitcoin: Generate Mnemonic"
+        "title": "Generate Mnemonic",
+        "category": "Bitcoin"
       },
       {
         "command": "bitcoin.generateWIF",
-        "title": "Bitcoin: Generate WIF"
+        "title": "Generate WIF",
+        "category": "Bitcoin"
+      },
+      {
+        "command": "bitcoin.generateWIFVanity",
+        "title": "Generate WIF (Vanity)",
+        "category": "Bitcoin"
+      },
+      {
+        "command": "bitcoin.generateTestnetWIF",
+        "title": "Generate Testnet WIF",
+        "category": "Bitcoin"
+      },
+      {
+        "command": "bitcoin.generateTestnetWIFVanity",
+        "title": "Generate Testnet WIF (Vanity)",
+        "category": "Bitcoin"
       },
       {
         "command": "bitcoin.getTx",
-        "title": "Bitcoin: Fetch a Tx by Transaction ID"
+        "title": "Fetch Transaction",
+        "category": "Bitcoin"
       },
       {
         "command": "bitcoin.publicKeyFromPrivateKey",
-        "title": "Bitcoin: Public Key From Private Key"
+        "title": "Public Key From Private Key",
+        "category": "Bitcoin"
+      },
+      {
+        "command": "bitcoin.publicKeyFromWIF",
+        "title": "Public Key From WIF",
+        "category": "Bitcoin"
       },
       {
         "command": "bitcoin.decodeRawTx",
-        "title": "Bitcoin: Decode Raw Transaction"
-      },
-      {
-        "command": "bitcoin.rawTxToTxo",
-        "title": "Bitcoin: Raw Tx to Txo"
+        "title": "Decode Raw Transaction",
+        "category": "Bitcoin"
       },
       {
         "command": "bitcoin.rawTxToBob",
-        "title": "Bitcoin: Raw Tx to Bob"
+        "title": "Raw Tx to Bob",
+        "category": "Bitcoin"
+      },
+      {
+        "command": "bitcoin.decodeFile",
+        "title": "Decode Base64 Content to File",
+        "category": "Bitcoin"
+      },
+      {
+        "command": "bitcoin.showKeyVault",
+        "title": "Show Key Vault",
+        "category": "Bitcoin"
+      },
+      {
+        "command": "bitcoin.showKeyVaultAndAddKey",
+        "title": "Add Key to Vault",
+        "category": "Bitcoin"
+      },
+      {
+        "command": "bitcoin.showKeyVaultAndImport",
+        "title": "Import Key to Vault",
+        "category": "Bitcoin"
+      },
+      {
+        "command": "bitcoin.encrypt",
+        "title": "Encrypt Data",
+        "category": "Bitcoin"
+      },
+      {
+        "command": "bitcoin.decrypt",
+        "title": "Decrypt Data",
+        "category": "Bitcoin"
+      },
+      {
+        "command": "bitcoin.lookupBapProfile",
+        "title": "Lookup BAP Profile",
+        "category": "Bitcoin"
+      },
+      {
+        "command": "bitcoin.resetWelcomeScreen",
+        "title": "Reset Welcome Screen",
+        "category": "Bitcoin"
+      },
+      {
+        "command": "bitcoin.openConversionTool",
+        "title": "Open Conversion Tool",
+        "category": "Bitcoin"
+      },
+      {
+        "command": "bitcoin.debugSelection",
+        "title": "Debug Selection",
+        "category": "Bitcoin"
+      },
+      {
+        "command": "bitcoin.exploreAddress",
+        "title": "Explore Address on WhatsOnChain",
+        "category": "Bitcoin"
+      },
+      {
+        "command": "bitcoin.fetchOrdinalsInscription",
+        "title": "Fetch Ordinals Inscription",
+        "category": "Bitcoin"
+      },
+      {
+        "command": "bitcoin.convertToHex",
+        "title": "Convert to Hex",
+        "category": "Bitcoin"
+      },
+      {
+        "command": "bitcoin.convertToBase64",
+        "title": "Convert to Base64",
+        "category": "Bitcoin"
+      },
+      {
+        "command": "bitcoin.convertToBinary",
+        "title": "Convert to Binary",
+        "category": "Bitcoin"
+      },
+      {
+        "command": "bitcoin.decodeHex",
+        "title": "Decode Hex",
+        "category": "Bitcoin"
+      },
+      {
+        "command": "bitcoin.decodeBase64",
+        "title": "Decode Base64",
+        "category": "Bitcoin"
+      },
+      {
+        "command": "bitcoin.openBitcoinSettings",
+        "title": "Open Bitcoin Settings",
+        "category": "Bitcoin",
+        "icon": "$(settings-gear)"
+      },
+      {
+        "command": "bitcoin.resetExtension",
+        "title": "Reset Extension",
+        "category": "Bitcoin"
+      },
+      {
+        "command": "bitcoin.encryptToFriend",
+        "title": "Encrypt Message to Friend",
+        "category": "Bitcoin"
+      },
+      {
+        "command": "bitcoin.signOpReturnData",
+        "title": "Sign OP_RETURN Data",
+        "category": "Bitcoin"
+      },
+      {
+        "command": "bitcoin.sendTransaction",
+        "title": "Send Transaction",
+        "category": "Bitcoin"
+      },
+      {
+        "command": "bitcoin.handleOutput",
+        "title": "Handle Output",
+        "category": "Bitcoin"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "bitcoin.openBitcoinSettings",
+          "when": "view == bitcoin.toolsView",
+          "group": "navigation"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "bitcoin.convertToHex",
+          "when": "false"
+        },
+        {
+          "command": "bitcoin.convertToBase64",
+          "when": "false"
+        },
+        {
+          "command": "bitcoin.convertToBinary",
+          "when": "false"
+        },
+        {
+          "command": "bitcoin.decodeHex",
+          "when": "false"
+        },
+        {
+          "command": "bitcoin.decodeBase64",
+          "when": "false"
+        }
+      ],
+      "editor/context": [
+        {
+          "when": "editorHasSelection",
+          "command": "bitcoin.debugSelection",
+          "group": "bitcoin@0"
+        },
+        {
+          "when": "editorHasSelection && selection =~ /^[1][a-km-zA-HJ-NP-Z1-9]{25,34}$/",
+          "command": "bitcoin.getUtxosForAddress",
+          "group": "bitcoin@1"
+        },
+        {
+          "when": "editorHasSelection && selection =~ /^[1][a-km-zA-HJ-NP-Z1-9]{25,34}$/",
+          "command": "bitcoin.exploreAddress",
+          "group": "bitcoin@1"
+        },
+        {
+          "when": "editorHasSelection && selection =~ /^[1][a-km-zA-HJ-NP-Z1-9]{25,34}$/",
+          "command": "bitcoin.convertToHex",
+          "group": "bitcoin@1"
+        },
+        {
+          "when": "editorHasSelection && selection =~ /^[0-9a-fA-F]{64}$/",
+          "command": "bitcoin.getTx",
+          "group": "bitcoin@2"
+        },
+        {
+          "when": "editorHasSelection && selection =~ /^[0-9a-fA-F]{64}_[0-9]+$/",
+          "command": "bitcoin.fetchOrdinalsInscription",
+          "group": "bitcoin@2"
+        },
+        {
+          "when": "editorHasSelection && !(selection =~ /^[1][a-km-zA-HJ-NP-Z1-9]{25,34}$/) && !(selection =~ /^[0-9a-fA-F]+$/)",
+          "command": "bitcoin.convertToHex",
+          "group": "bitcoin.convert@1"
+        },
+        {
+          "when": "editorHasSelection && !(selection =~ /^[A-Za-z0-9+/=]+$/)",
+          "command": "bitcoin.convertToBase64",
+          "group": "bitcoin.convert@2"
+        },
+        {
+          "when": "editorHasSelection && !(selection =~ /^[01]+$/)",
+          "command": "bitcoin.convertToBinary",
+          "group": "bitcoin.convert@3"
+        },
+        {
+          "when": "editorHasSelection && selection =~ /^[0-9a-fA-F]+$/",
+          "command": "bitcoin.decodeHex",
+          "group": "bitcoin.decode@1"
+        },
+        {
+          "when": "editorHasSelection && selection =~ /^[A-Za-z0-9+/=]+$/",
+          "command": "bitcoin.decodeBase64",
+          "group": "bitcoin.decode@2"
+        },
+        {
+          "when": "editorHasSelection",
+          "command": "bitcoin.encrypt",
+          "group": "bitcoin.encrypt@1"
+        },
+        {
+          "when": "editorHasSelection",
+          "command": "bitcoin.decrypt",
+          "group": "bitcoin.encrypt@2"
+        }
+      ],
+      "bitcoin.contextMenu": [
+        {
+          "when": "editorHasSelection && editorTextFocus && selection =~ /^[1][a-km-zA-HJ-NP-Z1-9]{25,34}$/",
+          "command": "bitcoin.getUtxosForAddress",
+          "title": "Get UTXOs for Address",
+          "group": "lookup@2"
+        },
+        {
+          "command": "bitcoin.openConversionTool",
+          "title": "Open Conversion Tool",
+          "group": "conversion@3"
+        }
+      ]
+    },
+    "submenus": [
+      {
+        "id": "bitcoin.contextMenu",
+        "label": "Bitcoin",
+        "icon": "$(symbol-key)"
+      }
+    ],
+    "configuration": {
+      "title": "Bitcoin",
+      "properties": {
+        "bitcoin.workspace.path": {
+          "type": "string",
+          "default": ".bitcoin",
+          "description": "Path to the Bitcoin workspace directory (relative to workspace root)"
+        },
+        "bitcoin.workspace.detectContentType": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically detect content types when saving files"
+        },
+        "bitcoin.workspace.organizeFolders": {
+          "type": "boolean",
+          "default": true,
+          "description": "Organize files into subfolders by type"
+        },
+        "bitcoin.storage.maxSizeMB": {
+          "type": "number",
+          "default": 100,
+          "minimum": 10,
+          "maximum": 10240,
+          "description": "Maximum size in MB for transaction storage (minimum 10MB, maximum 10GB). Oldest transactions will be pruned when limit is reached."
+        },
+        "bitcoin.storage.useProjectLevel": {
+          "type": "boolean",
+          "default": false,
+          "description": "Store transaction cache at project level ([project]/.bitcoin) instead of user level (~/.bitcoin). Useful if you want to commit cached transactions to the project repository."
+        },
+        "bitcoin.outputPreference": {
+          "type": "string",
+          "enum": ["clipboard", "file", "workspace"],
+          "default": "clipboard",
+          "description": "Where to output results (clipboard, file dialog, or workspace)"
+        },
+        "bitcoin.bapIndexerUrl": {
+          "type": "string",
+          "default": "https://api.sigmaidentity.com",
+          "description": "URL of the BAP identity indexer API"
+        },
+        "bitcoin.keyVault.autoStore": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically store generated keys in the vault"
+        },
+        "bitcoin.mnee.apiKey": {
+          "type": "string",
+          "default": "",
+          "description": "MNEE API key from https://developer.mnee.net/"
+        },
+        "bitcoin.mnee.environment": {
+          "type": "string",
+          "enum": ["sandbox", "production"],
+          "default": "sandbox",
+          "description": "MNEE API environment (sandbox for testing, production for mainnet)"
+        },
+        "bitcoin.wallet.showNfts": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show NFTs/Ordinals section in wallet"
+        },
+        "bitcoin.wallet.showTokens": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show BSV-20/BSV-21 tokens section in wallet"
+        },
+        "bitcoin.wallet.showBsv20": {
+          "type": "boolean",
+          "default": false,
+          "description": "Show BSV-20 tokens in wallet"
+        },
+        "bitcoin.wallet.showBsv21": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show BSV-21 tokens in wallet"
+        },
+        "bitcoin.wallet.autoBroadcast": {
+          "type": "boolean",
+          "default": false,
+          "description": "Automatically broadcast transactions (if false, shows preview first)"
+        },
+        "bitcoin.wallet.autoRefresh": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically refresh wallet when funding key changes"
+        },
+        "bitcoin.wallet.refreshInterval": {
+          "type": "number",
+          "default": 60000,
+          "description": "Wallet auto-refresh interval in milliseconds (0 to disable)"
+        },
+        "bitcoin.script.enableOpcodeHighlighting": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable syntax highlighting for Bitcoin Script opcodes (OP_DUP, OP_HASH160, etc.) in code files"
+        },
+        "bitcoin.script.templatesDirectory": {
+          "type": "string",
+          "default": ".bitcoin/script-templates",
+          "description": "Directory containing script template JSON files with regex patterns for detecting script types (relative to workspace root)"
+        },
+        "bitcoin.whatsonchain.apiKey": {
+          "type": "string",
+          "default": "",
+          "description": "WhatOnChain API key for higher rate limits (get one at https://developers.whatsonchain.com)"
+        }
+      }
+    },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "bitcoin-tools",
+          "title": "Bitcoin Tools",
+          "icon": "images/b_icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "bitcoin-tools": [
+        {
+          "type": "webview",
+          "id": "bitcoin.toolsView",
+          "name": "Bitcoin Tools"
+        }
+      ]
+    },
+    "grammars": [
+      {
+        "scopeName": "bitcoin.injection",
+        "path": "./syntaxes/bitcoin-injection.tmLanguage.json",
+        "injectTo": [
+          "source.js",
+          "source.jsx",
+          "source.ts",
+          "source.tsx",
+          "source.mts",
+          "source.cts",
+          "source.python",
+          "source.go",
+          "source.rust",
+          "source.java",
+          "source.c",
+          "source.cpp",
+          "source.csharp",
+          "source.ruby",
+          "source.php",
+          "source.swift",
+          "text.html.markdown",
+          "text.plain",
+          "source.json",
+          "source.yaml",
+          "source.toml"
+        ]
+      }
+    ],
+    "semanticTokenTypes": [
+      {
+        "id": "opcode",
+        "superType": "keyword",
+        "description": "Bitcoin opcodes"
+      }
+    ],
+    "semanticTokenScopes": [
+      {
+        "scopes": {
+          "opcode": ["keyword.other.opcode.bitcoin"]
+        }
       }
     ]
   },
   "scripts": {
-    "vscode:prepublish": "webpack --mode production",
-    "webpack": "webpack --mode development",
-    "webpack-dev": "webpack --mode development --watch",
-    "test-compile": "tsc -p ./",
-    "lint": "eslint . --ext .ts,.tsx"
+    "build": "bun run build:webview && VITE_CJS_IGNORE_WARNING=true vite build",
+    "build:webview": "cd src/views/webview && bun run build",
+    "build:test": "tsc -p ./",
+    "dev": "vite build --watch",
+    "lint": "biome lint .",
+    "lint:fix": "biome check --apply .",
+    "format": "biome format . --write",
+    "check": "biome check --apply .",
+    "test": "xss-scan && bun test",
+    "package": "vsce package",
+    "package:pre": "vsce package --pre-release",
+    "publish": "vsce publish",
+    "publish:pre": "vsce publish --pre-release",
+    "clean": "rm -rf dist node_modules *.vsix out",
+    "clear-vault": "bun run scripts/clearVault.ts",
+    "nuke-vault": "bun run scripts/clearVault.ts --force && rm -rf node_modules && bun install"
   },
   "devDependencies": {
-    "@types/glob": "^7.1.3",
-    "@types/mocha": "^8.0.0",
-    "@types/node": "^14.0.27",
-    "@types/vscode": "^1.49.0",
-    "@typescript-eslint/eslint-plugin": "^4.1.1",
-    "@typescript-eslint/parser": "^4.1.1",
-    "eslint": "^7.9.0",
-    "glob": "^7.1.6",
-    "mocha": "^8.1.3",
-    "ts-loader": "^7.0.5",
-    "typescript": "^4.0.2",
-    "vscode-test": "^1.4.0",
-    "webpack": "^4.43.0",
-    "webpack-cli": "^3.3.11"
+    "@biomejs/biome": "^2.2.5",
+    "@types/glob": "^9.0.0",
+    "@types/node": "^24.7.2",
+    "@types/node-fetch": "^2.6.13",
+    "@types/vscode": "^1.99.1",
+    "@vscode/test-electron": "^2.5.2",
+    "@vscode/vsce": "^3.6.2",
+    "bun-types": "^1.3.0",
+    "glob": "^11.0.3",
+    "source-map-explorer": "^2.5.3",
+    "typescript": "^5.9.3",
+    "vite": "^7.1.9",
+    "vscode": "^1.1.37"
   },
+  "extensionDependencies": [],
+  "extensionKind": ["workspace"],
   "dependencies": {
-    "@libitx/shapeshifter.js": "^0.1.0",
-    "@types/node-fetch": "^2.5.7",
-    "bsv": "^2.0.0-beta.42",
-    "core-js": "^3.6.5",
-    "node-fetch": "^2.6.1"
+    "@bsv/sdk": "^1.8.2",
+    "@kitajs/html": "^4.2.10",
+    "@kitajs/ts-html-plugin": "^4.1.3",
+    "@mnee/ts-sdk": "^1.0.1",
+    "@types/bun": "^1.3.0",
+    "bitcoin-backup": "^0.0.3",
+    "bsv-bap": "^0.1.12",
+    "js-1sat-ord": "^0.1.82",
+    "node-fetch": "^3.3.2"
+  },
+  "optionalDependencies": {
+    "bmapjs": "^0.4.0",
+    "bpu-ts": "^0.0.26"
   }
 }
