@@ -1,6 +1,7 @@
 import * as vscode from 'vscode'
 import fetch from 'node-fetch'
 import { txCache } from '../../services/txCache'
+import { buildAsmFromChunks } from '../../utils/scriptParser'
 
 interface CachedTransaction {
   decodedTx: any
@@ -159,12 +160,17 @@ export class TransactionDecoderPanel {
               sequence: input.sequence || 0xffffffff
             }
           }),
-          outputs: tx.outputs.map((output, index) => ({
-            index,
-            satoshis: output.satoshis || 0,
-            lockingScript: output.lockingScript.toHex(),
-            lockingScriptAsm: output.lockingScript.toASM()
-          }))
+          outputs: tx.outputs.map((output, index) => {
+            const hex = output.lockingScript.toHex()
+            let asm = buildAsmFromChunks(output.lockingScript)
+
+            return {
+              index,
+              satoshis: output.satoshis || 0,
+              lockingScript: hex,
+              lockingScriptAsm: asm
+            }
+          })
         }
 
         this._panel.webview.postMessage({

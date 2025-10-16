@@ -12,7 +12,7 @@ import { mintService } from '../../services/mintService';
 import { PrivateKey, Script, Transaction, LockingScript, UnlockingScript, Utils, OP, P2PKH } from '@bsv/sdk';
 import type { VaultBackup } from 'bitcoin-backup';
 import { encryptBackup, decryptBackup } from 'bitcoin-backup';
-import { detectFormat, convertData } from '../../utils';
+import { detectFormat, convertData, buildAsmFromChunks } from '../../utils';
 import { ScriptDebugger } from '../../utils/scriptDebugger';
 import { BapService } from '../../bapService';
 import { BapPanel } from '../../bapPanel';
@@ -1206,46 +1206,6 @@ export class BitcoinToolsViewProvider implements vscode.WebviewViewProvider {
   }
 
   /**
-   * Build proper ASM from script chunks
-   * Fixes BSV SDK bug where OP_0 OP_RETURN scripts merge pushdatas into one blob
-   */
-  private buildAsmFromChunks(script: LockingScript | UnlockingScript): string {
-    const chunks = script.chunks;
-    const parts: string[] = [];
-
-    for (const chunk of chunks) {
-      // Handle opcodes
-      if (chunk.op === 0) {
-        parts.push('OP_0');
-      } else if (chunk.op === 106) {
-        // OP_RETURN - check if data field has merged pushdatas
-        parts.push('OP_RETURN');
-        if (chunk.data && chunk.data.length > 0) {
-          // Parse the merged data field to extract individual pushdatas
-          let i = 0;
-          while (i < chunk.data.length) {
-            const len = chunk.data[i];
-            i++;
-            if (len > 0 && i + len <= chunk.data.length) {
-              const data = chunk.data.slice(i, i + len);
-              parts.push(Utils.toHex(data));
-              i += len;
-            }
-          }
-        }
-      } else if (chunk.data) {
-        // Regular data push
-        parts.push(Utils.toHex(chunk.data));
-      } else {
-        // Other opcodes
-        parts.push(`OP_${chunk.op}`);
-      }
-    }
-
-    return parts.join(' ');
-  }
-
-  /**
    * Handle transaction decode request
    */
   private async handleTransactionDecode(
@@ -1281,7 +1241,7 @@ export class BitcoinToolsViewProvider implements vscode.WebviewViewProvider {
 
           // Only use custom parser for OP_RETURN scripts (starts with 006a or 6a)
           if (hex.startsWith('006a') || hex.startsWith('6a')) {
-            asm = this.buildAsmFromChunks(output.lockingScript);
+            asm = buildAsmFromChunks(output.lockingScript);
           }
 
           return {

@@ -8,6 +8,7 @@ import type {
   IFStackChange,
   SpendParams
 } from '../types/scriptExecution'
+import { getOpcodeName } from './scriptParser'
 
 /**
  * ScriptDebugger wraps the BSV SDK's Spend class to provide
@@ -164,7 +165,7 @@ export class ScriptDebugger {
         context: afterChunk.context,
         programCounter: afterChunk.pc,
         opcode: opcode,
-        opcodeName: this.getOpcodeName(opcode),
+        opcodeName: getOpcodeName(opcode),
         opcodeHex: `0x${opcode.toString(16).padStart(2, '0')}`,
         data: data,
         stack: this.deepCopyStack(afterState.stack),
@@ -532,24 +533,6 @@ export class ScriptDebugger {
   }
 
   /**
-   * Get opcode name from opcode number
-   */
-  private getOpcodeName(opcode: number): string {
-    // Opcodes 1-75 are implicit data pushes - just show the data, not an opcode name
-    if (opcode >= 1 && opcode <= 75) {
-      return `<${opcode} bytes>`
-    }
-
-    // Find the opcode name by searching through OP object keys
-    for (const [key, value] of Object.entries(OP)) {
-      if (value === opcode) {
-        return key
-      }
-    }
-    return `OP_UNKNOWN_${opcode}`
-  }
-
-  /**
    * Generate human-readable description of what happened
    */
   private generateDescription(
@@ -558,7 +541,7 @@ export class ScriptDebugger {
     before: ExecutionState,
     after: ExecutionState
   ): string {
-    const opname = this.getOpcodeName(opcode)
+    const opname = getOpcodeName(opcode)
 
     // Data push operations
     if (opcode >= 0 && opcode <= 96) {
