@@ -2,6 +2,47 @@
 
 ## [Unreleased]
 
+## [v0.1.4] - 2025-10-15
+
+### Added
+- **Script Parsing Utilities**:
+  - Created `scriptParser.ts` utility module with shared script parsing functions
+  - Added `getOpcodeName()` function for unified opcode name lookup across codebase
+  - Added `buildAsmFromChunks()` function for proper OP_RETURN script ASM generation
+  - Exported utilities from `utils/index.ts` for easy access throughout extension
+- **BAP Service Enhancements**:
+  - Added public `exportIds()` method to BapService for safe access to BAP exported IDs
+  - Improved master key identity management with proper ID export functionality
+
+### Changed
+- **OP_RETURN Script Parsing**:
+  - Fixed OP_RETURN scripts to display individual pushdatas instead of merged hex blob
+  - Transaction decoder now correctly shows `OP_0 OP_RETURN <hex1> <hex2> <hex3>` format
+  - Separate window transaction decoder now uses shared OP_RETURN parsing logic
+  - All script types (P2PKH, OP_RETURN, etc.) now display correct opcode names
+- **Code Organization**:
+  - Unified opcode name lookup logic across ScriptDebugger and transaction decoders
+  - Removed duplicate `getOpcodeName` implementations
+  - Improved code maintainability with single source of truth for script parsing
+
+### Fixed
+- **Transaction Decoder**:
+  - Fixed OP_RETURN scripts showing as single blob instead of separate pushdatas
+  - Fixed opcode display showing `OP_118` instead of `OP_DUP`, `OP_169` instead of `OP_HASH160`, etc.
+  - Fixed "buildAsmFromChunks is not defined" error in separate transaction decoder window
+  - Fixed P2PKH and other script types displaying correctly alongside OP_RETURN fixes
+- **BAP Identity Discovery**:
+  - Fixed accessing private `bap` property by using new public `exportIds()` method
+  - Improved vault metadata updates with discovered identities
+- **Build Process**:
+  - Removed redundant dynamic imports that were causing build warnings
+  - Added missing static imports for `P2PKH` and `fetchPayUtxos`
+  - Eliminated "module is dynamically imported but also statically imported" warnings
+- **TypeScript Errors**:
+  - Fixed VaultBackup interface usage (removed non-existent `keyCount` property)
+  - Added proper `scheme` field to vault backups
+  - Fixed vault import warnings to show backup scheme instead of key count
+
 ## [v0.1.3] - 2025-01-17
 
 ### Added
@@ -316,7 +357,9 @@
 ### Added
 - Raw transaction decoder
 
-[Unreleased]: https://github.com/rohenaz/vscode-bitcoin/compare/v0.1.2...HEAD
+[Unreleased]: https://github.com/rohenaz/vscode-bitcoin/compare/v0.1.4...HEAD
+[v0.1.4]: https://github.com/rohenaz/vscode-bitcoin/compare/v0.1.3...v0.1.4
+[v0.1.3]: https://github.com/rohenaz/vscode-bitcoin/compare/v0.1.2...v0.1.3
 [v0.1.2]: https://github.com/rohenaz/vscode-bitcoin/compare/v0.1.1...v0.1.2
 [v0.1.1]: https://github.com/rohenaz/vscode-bitcoin/compare/v0.1.0...v0.1.1
 [v0.1.0]: https://github.com/rohenaz/vscode-bitcoin/compare/v0.0.15...v0.1.0
