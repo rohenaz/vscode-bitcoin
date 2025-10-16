@@ -3,7 +3,7 @@
   "displayName": "Bitcoin",
   "description": "Bitcoin utilities for VS Code",
   "publisher": "opl",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "icon": "images/icon.png",
   "type": "commonjs",
   "engines": {
