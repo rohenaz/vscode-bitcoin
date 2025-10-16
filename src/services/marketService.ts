@@ -119,6 +119,7 @@ export interface MarketData {
   contract?: "pow-20" | "LockToMintBsv20" | undefined;
   difficulty?: string | undefined;
   startingreward?: string | undefined;
+  lastSaleHeight?: number;
 }
 
 export type SortBy = 'marketCap' | 'price' | 'holders' | 'pctChange' | 'recentSale';

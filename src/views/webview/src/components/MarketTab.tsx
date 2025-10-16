@@ -64,8 +64,8 @@ export function MarketTab() {
       type: 'market:getListings',
       data: {
         assetType,
-        limit: 50,
-        sort: 'marketCap',
+        limit: 100,
+        sort: 'most_recent_sale',
         dir: 'desc'
       }
     })

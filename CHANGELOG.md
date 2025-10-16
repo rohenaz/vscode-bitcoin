@@ -11,6 +11,13 @@
   - Updated all repository references in documentation and codebase
   - This marks the beginning of development under the OPL (Open Programming Library) organization
 
+### Fixed
+- **Market Tab**:
+  - Fixed market listings not loading due to incorrect sort parameter
+  - Changed sort from `marketCap` to `most_recent_sale` to match API expectations
+  - Increased default listing limit from 50 to 100 items
+  - Added `lastSaleHeight` field to MarketData type for proper recent sales sorting
+
 ### Notes
 - **Important**: Due to publisher change, this creates a new extension listing on VS Code Marketplace
 - Extension ID changed from `Satchmo.bitcoin` to `opl.bitcoin`
