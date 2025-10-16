@@ -2,6 +2,21 @@
 
 ## [Unreleased]
 
+## [v0.1.5] - 2025-10-15
+
+### Changed
+- **Organization Migration**:
+  - Migrated extension publisher from `Satchmo` to `opl`
+  - Moved repository from `rohenaz/vscode-bitcoin` to `b-open-io/vscode-bitcoin`
+  - Updated all repository references in documentation and codebase
+  - This marks the beginning of development under the OPL (Open Programming Library) organization
+
+### Notes
+- **Important**: Due to publisher change, this creates a new extension listing on VS Code Marketplace
+- Extension ID changed from `Satchmo.bitcoin` to `opl.bitcoin`
+- Users will need to uninstall the old extension and install the new one manually
+- Previous versions (0.0.x - 0.1.4) remain available under the original publisher
+
 ## [v0.1.4] - 2025-10-15
 
 ### Added
@@ -357,7 +372,8 @@
 ### Added
 - Raw transaction decoder
 
-[Unreleased]: https://github.com/b-open-io/vscode-bitcoin/compare/v0.1.4...HEAD
+[Unreleased]: https://github.com/b-open-io/vscode-bitcoin/compare/v0.1.5...HEAD
+[v0.1.5]: https://github.com/b-open-io/vscode-bitcoin/compare/v0.1.4...v0.1.5
 [v0.1.4]: https://github.com/b-open-io/vscode-bitcoin/compare/v0.1.3...v0.1.4
 [v0.1.3]: https://github.com/b-open-io/vscode-bitcoin/compare/v0.1.2...v0.1.3
 [v0.1.2]: https://github.com/b-open-io/vscode-bitcoin/compare/v0.1.1...v0.1.2
