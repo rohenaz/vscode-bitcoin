@@ -13,8 +13,10 @@
 
 ### Fixed
 - **Market Tab**:
-  - Fixed market listings not loading due to incorrect sort parameter
-  - Changed sort from `marketCap` to `most_recent_sale` to match API expectations
+  - Fixed ordinals market tab not loading by using correct GorillaPool API endpoint
+  - Ordinals now use `https://ordinals.gorillapool.io/api/market` (GorillaPool API)
+  - BSV20/BSV21 continue to use `https://api.1sat.market/market/:type` (1sat-api)
+  - Changed sort from `marketCap` to `most_recent_sale` for token markets
   - Increased default listing limit from 50 to 100 items
   - Added `lastSaleHeight` field to MarketData type for proper recent sales sorting
 

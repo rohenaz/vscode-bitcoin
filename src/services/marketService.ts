@@ -1,11 +1,11 @@
 /**
  * Market Service
- * Fetches market data from 1sat.market API
+ * Fetches market data from 1sat.market API and GorillaPool Ordinals API
  *
  * Types match 1sat-website/src/types/
  */
 
-import { MARKET_API_HOST } from '../constants';
+import { API_HOST, MARKET_API_HOST } from '../constants';
 
 export type AssetType = 'ordinals' | 'bsv20' | 'bsv21';
 
@@ -128,6 +128,8 @@ class MarketService {
   /**
    * Fetch market listings for a given asset type
    * Returns MarketData[] for bsv20/bsv21, OrdUtxo[] for ordinals
+   *
+   * Note: Ordinals use GorillaPool API, BSV20/BSV21 use 1sat-api
    */
   async getMarketListings(
     assetType: AssetType,
@@ -138,13 +140,25 @@ class MarketService {
       dir?: 'asc' | 'desc';
     }
   ): Promise<MarketData[] | OrdUtxo[]> {
+    let url: string;
     const params = new URLSearchParams();
-    if (options?.limit) params.append('limit', String(options.limit));
-    if (options?.offset) params.append('offset', String(options.offset));
-    if (options?.sort) params.append('sort', options.sort);
-    if (options?.dir) params.append('dir', options.dir);
 
-    const url = `${MARKET_API_HOST}/market/${assetType}?${params.toString()}`;
+    if (assetType === 'ordinals') {
+      // Ordinals use GorillaPool API with /api/market endpoint
+      if (options?.limit) params.append('limit', String(options.limit));
+      if (options?.offset) params.append('offset', String(options.offset));
+      if (options?.dir) params.append('dir', options.dir.toUpperCase());
+
+      url = `${API_HOST}/market?${params.toString()}`;
+    } else {
+      // BSV20/BSV21 use 1sat-api with /market/:type endpoint
+      if (options?.limit) params.append('limit', String(options.limit));
+      if (options?.offset) params.append('offset', String(options.offset));
+      if (options?.sort) params.append('sort', options.sort);
+      if (options?.dir) params.append('dir', options.dir);
+
+      url = `${MARKET_API_HOST}/market/${assetType}?${params.toString()}`;
+    }
 
     const response = await fetch(url);
     if (!response.ok) {

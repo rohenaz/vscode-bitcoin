@@ -60,14 +60,23 @@ export function MarketTab() {
       error: { ...prev.error, [assetType]: null }
     }))
 
+    // Ordinals use different API parameters (no sort param)
+    const data = assetType === 'ordinals'
+      ? {
+          assetType,
+          limit: 100,
+          dir: 'desc' as const
+        }
+      : {
+          assetType,
+          limit: 100,
+          sort: 'most_recent_sale' as const,
+          dir: 'desc' as const
+        }
+
     vscode.postMessage({
       type: 'market:getListings',
-      data: {
-        assetType,
-        limit: 100,
-        sort: 'most_recent_sale',
-        dir: 'desc'
-      }
+      data
     })
   }
 
