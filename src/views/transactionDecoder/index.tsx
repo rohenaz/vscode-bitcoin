@@ -53,6 +53,12 @@ export class TransactionDecoderPanel {
       return
     }
 
+    // Handle opening transaction in parser
+    if (message.type === 'transaction:openParser') {
+      vscode.commands.executeCommand('bitcoin.openTransactionParser', message.data?.rawTxHex)
+      return
+    }
+
     // Handle WhatOnChain query hooks
     if (message.type === 'whatsonchain:fetchTransactionHex') {
       return this.handleFetchTransactionHex(message.txid, message.network)
@@ -530,7 +536,7 @@ export class TransactionDecoderPanel {
           ...input,
           resolved: true,
           lockingScript: sourceOutput.lockingScript.toHex(),
-          lockingScriptAsm: sourceOutput.lockingScript.toASM(),
+          lockingScriptAsm: buildAsmFromChunks(sourceOutput.lockingScript),
           satoshis: sourceOutput.satoshis || 0
         }
       })
@@ -676,7 +682,7 @@ export class TransactionDecoderPanel {
           ...input,
           resolved: true,
           lockingScript: sourceOutput.lockingScript.toHex(),
-          lockingScriptAsm: sourceOutput.lockingScript.toASM(),
+          lockingScriptAsm: buildAsmFromChunks(sourceOutput.lockingScript),
           satoshis: sourceOutput.satoshis || 0
         }
       })

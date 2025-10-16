@@ -2,6 +2,7 @@ import vsApi from './vsShim';
 import { BAP, MemberID } from 'bsv-bap';
 import type { KeyEntry } from './keyVault';
 import type { ProfileStorageService, DraftProfile } from './profileStorage';
+import { Utils } from '@bsv/sdk';
 
 export interface BapIdentity {
   '@context': string;
@@ -353,7 +354,7 @@ export class BapService {
    * Create ALIAS transaction (profile publishing)
    * Returns the OP_RETURN data array signed with AIP
    */
-  createAliasTransaction(idKey: string, profileData: Partial<BapIdentity>): number[][] | null {
+  createAliasData(idKey: string, profileData: Partial<BapIdentity>): number[][] | null {
     if (!this.bap) {
       throw new Error('BAP not initialized');
     }
@@ -374,10 +375,10 @@ export class BapService {
       // Create OP_RETURN structure for ALIAS
       // Format: OP_RETURN | BAP_ADDR | ALIAS | idKey | JSON
       const opReturn: number[][] = [
-        Buffer.from('1BAPSuaPnfGnSBM3GLV9yhxUdYe4vGbdMT', 'utf8').toJSON().data,
-        Buffer.from('ALIAS', 'utf8').toJSON().data,
-        Buffer.from(idKey, 'utf8').toJSON().data,
-        Buffer.from(JSON.stringify(aliasData), 'utf8').toJSON().data
+        Utils.toArray('1BAPSuaPnfGnSBM3GLV9yhxUdYe4vGbdMT', 'utf8'),
+        Utils.toArray('ALIAS', 'utf8'),
+        Utils.toArray(idKey, 'utf8'),
+        Utils.toArray(JSON.stringify(aliasData), 'utf8')
       ];
 
       // Sign with AIP

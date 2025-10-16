@@ -33,7 +33,8 @@ export function buildAsmFromChunks(script: LockingScript | UnlockingScript): str
       parts.push('OP_0');
     } else if (chunk.op === 106) {
       // OP_RETURN - check if data field has merged pushdatas
-      parts.push('OP_RETURN');
+      parts.push("OP_RETURN");
+      
       if (chunk.data && chunk.data.length > 0) {
         // Parse the merged data field to extract individual pushdatas
         const returnScript = Script.fromBinary(chunk.data);

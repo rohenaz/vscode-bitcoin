@@ -2,9 +2,9 @@ import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion'
 import { Item, ItemActions, ItemContent, ItemTitle, ItemDescription } from '@/components/ui/item'
-import { Search, Eye, ArrowRightLeft, History } from 'lucide-react'
+import { InputGroup, InputGroupAddon, InputGroupTextarea, InputGroupButton, InputGroupText, InputGroupInput } from '@/components/ui/input-group'
+import { Search, Eye, ArrowRightLeft, History, ScanBarcode, ScanQrCode, Trash2, Bug } from 'lucide-react'
 import { getVscode } from '../vscode'
-import { DecodeTransaction } from './DecodeTransaction'
 import { DecodeHistory, type DecodeHistoryEntry } from './DecodeHistory'
 
 interface TransactionsTabProps {
@@ -15,10 +15,36 @@ interface TransactionsTabProps {
 export default function TransactionsTab({ openItems, onOpenChange }: TransactionsTabProps) {
   const vscode = getVscode()
   const [rawTxHex, setRawTxHex] = useState('')
+  const [parserHex, setParserHex] = useState('')
+  const [txid, setTxid] = useState('')
   const [history, setHistory] = useState<DecodeHistoryEntry[]>([])
 
   const execute = (command: string) => {
     vscode.postMessage({ command })
+  }
+
+  const handleDecodeTransaction = () => {
+    if (!rawTxHex.trim()) return
+    vscode.postMessage({
+      type: 'transaction:openInWindow',
+      data: { rawTxHex: rawTxHex.trim() }
+    })
+  }
+
+  const handleParseTransaction = () => {
+    if (!parserHex.trim()) return
+    vscode.postMessage({
+      command: 'bitcoin.openTransactionParser',
+      args: [parserHex.trim()]
+    })
+  }
+
+  const handleLoadTxid = () => {
+    if (!txid.trim()) return
+    vscode.postMessage({
+      command: 'bitcoin.openScriptDebugger',
+      args: [{ txid: txid.trim(), network: 'main' }]
+    })
   }
 
   // Load history on mount
@@ -50,6 +76,14 @@ export default function TransactionsTab({ openItems, onOpenChange }: Transaction
     vscode.postMessage({
       command: 'bitcoin.openTransactionDecoder',
       args: [{ txid: entry.txid, network }]
+    })
+  }
+
+  const handleParseFromHistory = (entry: DecodeHistoryEntry) => {
+    // Open transaction parser with raw tx hex
+    vscode.postMessage({
+      type: 'decodeHistory:getRawTx',
+      data: { txid: entry.txid, action: 'parse' }
     })
   }
 
@@ -124,6 +158,7 @@ export default function TransactionsTab({ openItems, onOpenChange }: Transaction
           <DecodeHistory
             history={history}
             onDecode={handleDecodeFromHistory}
+            onParse={handleParseFromHistory}
             onDebug={handleDebugFromHistory}
           />
         </AccordionContent>
@@ -136,28 +171,123 @@ export default function TransactionsTab({ openItems, onOpenChange }: Transaction
             Decode & Inspect
           </div>
         </AccordionTrigger>
-        <AccordionContent>
-          <DecodeTransaction
-            rawTxHex={rawTxHex}
-            onRawTxHexChange={setRawTxHex}
-            openInWindow
-          />
-          <div className="mt-4 space-y-2">
-            <div className="text-xs font-medium text-muted-foreground">Script Execution</div>
-            <div className="space-y-2">
-              <Item size="sm">
-                <ItemContent>
-                  <ItemTitle>Visualize Scripts</ItemTitle>
-                  <ItemDescription>Step through script execution</ItemDescription>
-                </ItemContent>
-                <ItemActions>
-                  <Button variant="outline" size="sm" onClick={() => execute('bitcoin.openScriptDebugger')}>
-                    Open
-                  </Button>
-                </ItemActions>
-              </Item>
-            </div>
-          </div>
+        <AccordionContent className="space-y-3 px-0">
+          {/* Decode Raw Transaction */}
+          <InputGroup>
+            <InputGroupTextarea
+              value={rawTxHex}
+              onChange={(e) => setRawTxHex(e.target.value)}
+              placeholder="Paste raw transaction hex..."
+              className="min-h-[120px] font-mono text-xs"
+            />
+            <InputGroupAddon align="block-end" className="border-t">
+              <InputGroupText className="text-xs">
+                {rawTxHex.trim() ? `${rawTxHex.replace(/\s/g, '').length / 2} bytes` : 'No data'}
+              </InputGroupText>
+              <InputGroupButton
+                onClick={handleDecodeTransaction}
+                disabled={!rawTxHex.trim()}
+                className="ml-auto"
+                variant="default"
+                size="sm"
+              >
+                Decode Transaction
+              </InputGroupButton>
+            </InputGroupAddon>
+            <InputGroupAddon align="block-start" className="border-b">
+              <InputGroupText className="font-medium text-xs">
+                <ScanQrCode className="w-3 h-3" />
+                Decode Raw Transaction
+              </InputGroupText>
+              <InputGroupButton
+                onClick={() => setRawTxHex('')}
+                disabled={!rawTxHex.trim()}
+                variant="ghost"
+                size="icon-xs"
+                className="ml-auto"
+                title="Clear input"
+              >
+                <Trash2 className="w-3 h-3" />
+              </InputGroupButton>
+            </InputGroupAddon>
+          </InputGroup>
+
+          {/* Transaction Parser */}
+          <InputGroup>
+            <InputGroupTextarea
+              value={parserHex}
+              onChange={(e) => setParserHex(e.target.value)}
+              placeholder="Paste raw transaction hex..."
+              className="min-h-[120px] font-mono text-xs"
+            />
+            <InputGroupAddon align="block-end" className="border-t">
+              <InputGroupText className="text-xs">
+                {parserHex.trim() ? `${parserHex.replace(/\s/g, '').length / 2} bytes` : 'No data'}
+              </InputGroupText>
+              <InputGroupButton
+                onClick={handleParseTransaction}
+                disabled={!parserHex.trim()}
+                className="ml-auto"
+                variant="default"
+                size="sm"
+              >
+                Parse Transaction
+              </InputGroupButton>
+            </InputGroupAddon>
+            <InputGroupAddon align="block-start" className="border-b">
+              <InputGroupText className="font-medium text-xs">
+                <ScanBarcode className="w-3 h-3" />
+                Transaction Parser
+              </InputGroupText>
+              <InputGroupButton
+                onClick={() => setParserHex('')}
+                disabled={!parserHex.trim()}
+                variant="ghost"
+                size="icon-xs"
+                className="ml-auto"
+                title="Clear input"
+              >
+                <Trash2 className="w-3 h-3" />
+              </InputGroupButton>
+            </InputGroupAddon>
+          </InputGroup>
+
+          {/* Debug Script */}
+          <InputGroup>
+            <InputGroupInput
+              value={txid}
+              onChange={(e) => setTxid(e.target.value)}
+              placeholder="Enter transaction ID (TXID)..."
+              className="font-mono text-xs"
+            />
+            <InputGroupAddon align="block-end" className="border-t">
+              <InputGroupButton
+                onClick={handleLoadTxid}
+                disabled={!txid.trim()}
+                className="ml-auto"
+                variant="default"
+                size="sm"
+              >
+                Debug Script
+              </InputGroupButton>
+            </InputGroupAddon>
+            <InputGroupAddon align="block-start" className="border-b">
+              <InputGroupText className="font-medium text-xs">
+                <Bug className="w-3 h-3" />
+                Debug Script
+              </InputGroupText>
+              <InputGroupButton
+                onClick={() => setTxid('')}
+                disabled={!txid.trim()}
+                variant="ghost"
+                size="icon-xs"
+                className="ml-auto"
+                title="Clear input"
+              >
+                <Trash2 className="w-3 h-3" />
+              </InputGroupButton>
+            </InputGroupAddon>
+          </InputGroup>
         </AccordionContent>
       </AccordionItem>
 

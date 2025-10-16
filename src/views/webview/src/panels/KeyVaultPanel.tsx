@@ -66,11 +66,27 @@ export function KeyVaultPanel() {
       if (msg.command === 'triggerImport') {
         vscode.postMessage({ command: 'importBackup' })
       }
+
+      // Handle scroll to key by designation
+      if (msg.command === 'scrollToKey' && msg.designation) {
+        // Find first key with this designation
+        const designationMap: Record<string, keyof KeyEntry> = {
+          'WLT': 'isFundingKey',
+          'ORD': 'isOrdinalsKey',
+          'ID': 'isIdentityKey',
+          'ENC': 'isEncryptionKey'
+        }
+        const flagKey = designationMap[msg.designation]
+        const key = keys.find(k => flagKey && k[flagKey])
+        if (key) {
+          handleScrollToKey(key.id)
+        }
+      }
     }
 
     window.addEventListener('message', handleMessage)
     return () => window.removeEventListener('message', handleMessage)
-  }, [])
+  }, [keys])
 
   // Build parent-child hierarchy
   const buildKeyHierarchy = (allKeys: KeyEntry[]): Array<KeyEntry & { children: KeyEntry[] }> => {

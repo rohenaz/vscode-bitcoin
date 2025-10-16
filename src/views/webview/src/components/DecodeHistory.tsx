@@ -27,7 +27,7 @@ import {
   ItemTitle,
 } from '@/components/ui/item'
 import { TxAvatar } from './TxAvatar'
-import { MoreHorizontal, Copy, Bug, Edit, Trash2, Badge } from 'lucide-react'
+import { MoreHorizontal, Copy, Bug, Edit, Trash2, Badge, ScanQrCode, ScanBarcode } from 'lucide-react'
 import { getVscode } from '../vscode'
 import { formatBytes } from '../utils/scriptParser'
 
@@ -44,10 +44,11 @@ export interface DecodeHistoryEntry {
 interface DecodeHistoryProps {
   history: DecodeHistoryEntry[]
   onDecode: (entry: DecodeHistoryEntry) => void
+  onParse: (entry: DecodeHistoryEntry) => void
   onDebug: (entry: DecodeHistoryEntry) => void
 }
 
-export function DecodeHistory({ history, onDecode, onDebug }: DecodeHistoryProps) {
+export function DecodeHistory({ history, onDecode, onParse, onDebug }: DecodeHistoryProps) {
   const vscode = getVscode()
   const [renameDialogOpen, setRenameDialogOpen] = useState(false)
   const [selectedEntry, setSelectedEntry] = useState<DecodeHistoryEntry | null>(null)
@@ -148,15 +149,23 @@ export function DecodeHistory({ history, onDecode, onDebug }: DecodeHistoryProps
                     <MoreHorizontal className="h-3 w-3" />
                   </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent className="w-40" align="end">
+                <DropdownMenuContent className="w-48" align="end">
                   <DropdownMenuGroup>
-                    <DropdownMenuItem onSelect={() => handleCopy(entry.txid)}>
-                      <Copy className="h-3 w-3 mr-2" />
-                      Copy Raw Tx
+                    <DropdownMenuItem onSelect={() => onDecode(entry)}>
+                      <ScanQrCode className="h-3 w-3 mr-2" />
+                      Decode Transaction
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => onParse(entry)}>
+                      <ScanBarcode className="h-3 w-3 mr-2" />
+                      Parse Transaction
                     </DropdownMenuItem>
                     <DropdownMenuItem onSelect={() => onDebug(entry)}>
                       <Bug className="h-3 w-3 mr-2" />
                       Debug Script
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => handleCopy(entry.txid)}>
+                      <Copy className="h-3 w-3 mr-2" />
+                      Copy Raw Tx
                     </DropdownMenuItem>
                     <DropdownMenuItem onSelect={() => handleRename(entry)}>
                       <Edit className="h-3 w-3 mr-2" />

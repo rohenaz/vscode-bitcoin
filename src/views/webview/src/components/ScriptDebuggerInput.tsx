@@ -1,9 +1,8 @@
 import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Loader2 } from 'lucide-react'
+import { InputGroup, InputGroupAddon, InputGroupInput, InputGroupButton, InputGroupText } from '@/components/ui/input-group'
+import { Card, CardContent } from '@/components/ui/card'
+import { Loader2, Bug, Trash2 } from 'lucide-react'
 import { getVscode } from '../vscode'
 
 interface ScriptDebuggerInputProps {
@@ -70,6 +69,11 @@ export function ScriptDebuggerInput({ initialTxid = '', initialNetwork = 'main' 
     console.log('[ScriptDebuggerInput] Sent transaction:loadByTxid message')
   }
 
+  const handleClear = () => {
+    setTxid('')
+    setTransaction(null)
+  }
+
   const handleSelectInput = (inputIndex: number) => {
     const input = transaction.inputs[inputIndex]
 
@@ -89,47 +93,58 @@ export function ScriptDebuggerInput({ initialTxid = '', initialNetwork = 'main' 
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-base">Load Transaction by TXID</CardTitle>
-        <p className="text-xs text-muted-foreground mt-1">
-          Enter a transaction ID to load and debug its inputs
-        </p>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        {!transaction ? (
-          <>
-            <div className="space-y-2">
-              <Label htmlFor="txid">Transaction ID</Label>
-              <Input
-                id="txid"
-                placeholder="Enter TXID..."
-                value={txid}
-                onChange={(e) => setTxid(e.target.value)}
-                className="font-mono text-xs"
-                disabled={isLoading}
-              />
-            </div>
+    <div className="space-y-4">
+      {/* TXID Input */}
+      <InputGroup>
+        <InputGroupInput
+          value={txid}
+          onChange={(e) => setTxid(e.target.value)}
+          placeholder="Enter transaction ID (TXID)..."
+          className="font-mono text-xs"
+          disabled={isLoading || !!transaction}
+        />
+        <InputGroupAddon align="block-end" className="border-t">
+          <InputGroupButton
+            onClick={handleLoadTransaction}
+            disabled={isLoading || !txid.trim() || !!transaction}
+            className="ml-auto"
+            variant="default"
+            size="sm"
+          >
+            {isLoading ? (
+              <>
+                <Loader2 className="mr-2 h-3 w-3 animate-spin" />
+                Loading...
+              </>
+            ) : (
+              'Load Transaction'
+            )}
+          </InputGroupButton>
+        </InputGroupAddon>
+        <InputGroupAddon align="block-start" className="border-b">
+          <InputGroupText className="font-medium text-xs">
+            <Bug className="w-3 h-3" />
+            Debug Script
+          </InputGroupText>
+          <InputGroupButton
+            onClick={handleClear}
+            disabled={!txid.trim() && !transaction}
+            variant="ghost"
+            size="icon-xs"
+            className="ml-auto"
+            title="Clear input"
+          >
+            <Trash2 className="w-3 h-3" />
+          </InputGroupButton>
+        </InputGroupAddon>
+      </InputGroup>
 
-            <Button
-              onClick={handleLoadTransaction}
-              disabled={!txid.trim() || isLoading}
-              className="w-full"
-            >
-              {isLoading ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Loading Transaction...
-                </>
-              ) : (
-                'Load Transaction'
-              )}
-            </Button>
-          </>
-        ) : (
-          <>
+      {/* Input Selection */}
+      {transaction && (
+        <Card>
+          <CardContent className="space-y-4 pt-4">
             <div className="space-y-2">
-              <Label>Select Input to Debug</Label>
+              <p className="text-xs text-muted-foreground">Select Input to Debug</p>
               <div className="space-y-2">
                 {transaction.inputs.map((input: any, index: number) => (
                   <button
@@ -158,9 +173,9 @@ export function ScriptDebuggerInput({ initialTxid = '', initialNetwork = 'main' 
             >
               Load Different Transaction
             </Button>
-          </>
-        )}
-      </CardContent>
-    </Card>
+          </CardContent>
+        </Card>
+      )}
+    </div>
   )
 }

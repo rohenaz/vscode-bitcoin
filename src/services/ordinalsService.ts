@@ -8,6 +8,7 @@ import {
   type TokenUtxo
 } from 'js-1sat-ord';
 import { PrivateKey } from '@bsv/sdk';
+import { syncManager } from './syncManager';
 import { API_HOST, MARKET_API_HOST } from '../constants';
 
 export interface TokenBalance {
@@ -37,10 +38,33 @@ class OrdinalsService {
 
   /**
    * Fetch payment UTXOs (base64 encoded scripts by default)
+   * Uses txCache for caching and source transaction management
    */
   async getPaymentUtxos(address: string): Promise<Utxo[]> {
     try {
-      return await fetchPayUtxos(address, 'base64');
+      const { getSpvService } = await import('./spvService');
+      const spvService = getSpvService();
+
+      // Check if address changed - need to reinitialize (following yours-wallet switchAccount pattern)
+      if (spvService.needsReinit([address])) {
+        console.log('[ordinalsService] Address changed, reinitializing SPV store...');
+        await spvService.reinitialize('default', [address], 'mainnet');
+        // Start sync in background with progress tracking
+        spvService.startSync(syncManager.getProgressHandler()).catch(err => console.error('[ordinalsService] Sync error:', err));
+      } else if (!spvService.isInitialized()) {
+        // Initialize SPV store (sync will be started separately in background)
+        await spvService.initialize('default', [address], 'mainnet');
+        // Start sync in background with progress tracking - don't await to avoid blocking
+        spvService.startSync(syncManager.getProgressHandler()).catch(err => console.error('[ordinalsService] Sync error:', err));
+      }
+
+      const spvUtxos = await spvService.getUtxos(address);
+      return spvUtxos.map(txo => ({
+        txid: txo.outpoint.txid,
+        vout: txo.outpoint.vout,
+        satoshis: Number(txo.satoshis), // Convert bigint to number
+        script: Buffer.from(txo.script).toString('base64')
+      }));
     } catch (error) {
       console.error('Error fetching payment UTXOs:', error);
       return [];

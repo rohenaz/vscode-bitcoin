@@ -1,14 +1,14 @@
 import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { ButtonGroup } from '@/components/ui/button-group'
-import { Textarea } from '@/components/ui/textarea'
+import { InputGroup, InputGroupAddon, InputGroupTextarea, InputGroupButton, InputGroupText } from '@/components/ui/input-group'
 import { Card } from '@/components/ui/card'
 import {
   ResizableHandle,
   ResizablePanel,
   ResizablePanelGroup,
 } from '@/components/ui/resizable'
-import { Copy, Loader2, Radio, ExternalLink } from 'lucide-react'
+import { Copy, Loader2, Radio, ExternalLink, ScanQrCode, Trash2, ScanBarcode } from 'lucide-react'
 import type { DecodedTransaction } from '../../types/decodedTransaction'
 import { TransactionInputs } from './TransactionInputs'
 import { TransactionOutputs } from './TransactionOutputs'
@@ -81,6 +81,21 @@ export function DecodeTransaction({ rawTxHex, onRawTxHexChange, openInWindow = f
     })
   }
 
+  const handleClear = () => {
+    onRawTxHexChange('')
+    setDecodedTx(null)
+    setError(null)
+    setOnChain(null)
+  }
+
+  const handleOpenParser = () => {
+    if (!rawTxHex || !rawTxHex.trim()) return
+    vscode.postMessage({
+      type: 'transaction:openParser',
+      data: { rawTxHex: rawTxHex.trim() }
+    })
+  }
+
   // Listen for messages from extension
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
@@ -93,45 +108,50 @@ export function DecodeTransaction({ rawTxHex, onRawTxHexChange, openInWindow = f
         setError(null)
         setOnChain(null) // Reset status, will be updated by onChainStatus message
       } else if (message.type === 'transaction:spendingInfo') {
-        // Update outputs with spending information
-        if (decodedTx && message.data.txid === decodedTx.txid) {
-          const updatedOutputs = decodedTx.outputs.map(output => {
-            const spendingInfo = message.data.spending[output.index]
-            if (spendingInfo) {
-              return {
-                ...output,
-                spendingTxid: spendingInfo.txid,
-                spendingVout: spendingInfo.vout
+        // Update outputs with spending information - use functional update
+        setDecodedTx(prevTx => {
+          if (prevTx && message.data.txid === prevTx.txid) {
+            const updatedOutputs = prevTx.outputs.map(output => {
+              const spendingInfo = message.data.spending[output.index]
+              if (spendingInfo) {
+                return {
+                  ...output,
+                  spendingTxid: spendingInfo.txid,
+                  spendingVout: spendingInfo.vout
+                }
               }
+              return output
+            })
+            return {
+              ...prevTx,
+              outputs: updatedOutputs
             }
-            return output
-          })
-          setDecodedTx({
-            ...decodedTx,
-            outputs: updatedOutputs
-          })
-        }
-      } else if (message.type === 'transaction:inputsResolved') {
-        // Update inputs with resolved information
-        console.log('Received inputsResolved:', message.data)
-        try {
-          if (decodedTx && message.data.txid === decodedTx.txid && message.data.inputs) {
-            console.log('Updating inputs, count:', message.data.inputs.length)
-            setDecodedTx({
-              ...decodedTx,
-              inputs: message.data.inputs
-            })
-            console.log('Inputs updated successfully')
-          } else {
-            console.warn('Cannot update inputs:', {
-              hasDecodedTx: !!decodedTx,
-              txidMatch: decodedTx?.txid === message.data.txid,
-              hasInputs: !!message.data.inputs
-            })
           }
-        } catch (error) {
-          console.error('Error updating inputs:', error)
-        }
+          return prevTx
+        })
+      } else if (message.type === 'transaction:inputsResolved') {
+        // Update inputs with resolved information - use functional update
+        console.log('Received inputsResolved:', message.data)
+        console.log('First resolved input:', message.data.inputs?.[0])
+        setDecodedTx(prevTx => {
+          console.log('Functional update - prevTx:', prevTx)
+          if (prevTx && message.data.txid === prevTx.txid && message.data.inputs) {
+            console.log('Updating inputs, count:', message.data.inputs.length)
+            console.log('Current prevTx.inputs:', prevTx.inputs)
+            const updated = {
+              ...prevTx,
+              inputs: message.data.inputs
+            }
+            console.log('Updated tx with new inputs:', updated)
+            return updated
+          }
+          console.warn('Cannot update inputs:', {
+            hasPrevTx: !!prevTx,
+            txidMatch: prevTx?.txid === message.data.txid,
+            hasInputs: !!message.data.inputs
+          })
+          return prevTx
+        })
       } else if (message.type === 'transaction:decode:error') {
         setError(message.data.error)
         setIsDecoding(false)
@@ -160,7 +180,7 @@ export function DecodeTransaction({ rawTxHex, onRawTxHexChange, openInWindow = f
 
     window.addEventListener('message', handleMessage)
     return () => window.removeEventListener('message', handleMessage)
-  }, [decodedTx, vscode])
+  }, [vscode])
 
   // Create SpendParams from scriptDebuggerData
   const spendParams: SpendParams | null = scriptDebuggerData ? {
@@ -191,27 +211,52 @@ export function DecodeTransaction({ rawTxHex, onRawTxHexChange, openInWindow = f
 
       {/* Input Area - Only shown when no decoded transaction */}
       {!decodedTx && (
-        <div className="p-4 space-y-2">
-          <Textarea
-            placeholder="Paste raw transaction hex..."
-            value={rawTxHex}
-            onChange={(e) => onRawTxHexChange(e.target.value)}
-            className="font-mono text-xs min-h-[100px] max-h-[160px]"
-          />
-          <Button
-            onClick={handleDecode}
-            disabled={isDecoding || !rawTxHex || !rawTxHex.trim()}
-            className="w-full"
-          >
-            {isDecoding ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Decoding...
-              </>
-            ) : (
-              'Decode Transaction'
-            )}
-          </Button>
+        <div className="p-4">
+          <InputGroup>
+            <InputGroupTextarea
+              value={rawTxHex}
+              onChange={(e) => onRawTxHexChange(e.target.value)}
+              placeholder="Paste raw transaction hex..."
+              className="min-h-[160px] font-mono text-xs"
+            />
+            <InputGroupAddon align="block-end" className="border-t">
+              <InputGroupText className="text-xs">
+                {rawTxHex.trim() ? `${rawTxHex.replace(/\s/g, '').length / 2} bytes` : 'No data'}
+              </InputGroupText>
+              <InputGroupButton
+                onClick={handleDecode}
+                disabled={isDecoding || !rawTxHex.trim()}
+                className="ml-auto"
+                variant="default"
+                size="sm"
+              >
+                {isDecoding ? (
+                  <>
+                    <Loader2 className="mr-2 h-3 w-3 animate-spin" />
+                    Decoding...
+                  </>
+                ) : (
+                  'Decode Transaction'
+                )}
+              </InputGroupButton>
+            </InputGroupAddon>
+            <InputGroupAddon align="block-start" className="border-b">
+              <InputGroupText className="font-medium text-xs">
+                <ScanQrCode className="w-3 h-3" />
+                Decode Raw Transaction
+              </InputGroupText>
+              <InputGroupButton
+                onClick={handleClear}
+                disabled={!rawTxHex.trim()}
+                variant="ghost"
+                size="icon-xs"
+                className="ml-auto"
+                title="Clear input"
+              >
+                <Trash2 className="w-3 h-3" />
+              </InputGroupButton>
+            </InputGroupAddon>
+          </InputGroup>
         </div>
       )}
 
@@ -326,6 +371,15 @@ export function DecodeTransaction({ rawTxHex, onRawTxHexChange, openInWindow = f
               {onChain === null && <div />}
 
               <ButtonGroup>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="text-xs"
+                  onClick={handleOpenParser}
+                >
+                  <ScanBarcode className="mr-2 h-3 w-3" />
+                  Parse
+                </Button>
                 <Button
                   variant="outline"
                   size="sm"

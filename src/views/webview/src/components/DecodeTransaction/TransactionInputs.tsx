@@ -233,12 +233,12 @@ export function TransactionInputs({ inputs, outputs, transactionVersion, transac
             {isExpanded && (
               <div className="px-3 pb-3 space-y-3">
                 <Tabs defaultValue="scriptpubkey" className="w-full">
-                  <TabsList className="grid w-full grid-cols-2 h-7">
+                  <TabsList className="grid w-full grid-cols-2">
                     <TooltipProvider>
                       <Tooltip>
                         <TooltipTrigger asChild>
-                          <TabsTrigger value="scriptpubkey" disabled={input.resolved === false} className="text-[10px] h-6">
-                            SCRIPTPUBKEY
+                          <TabsTrigger value="scriptpubkey" disabled={input.resolved === false} className="text-[10px]">
+                            ScriptPubKey
                           </TabsTrigger>
                         </TooltipTrigger>
                         <TooltipContent>
@@ -252,7 +252,7 @@ export function TransactionInputs({ inputs, outputs, transactionVersion, transac
                     <TooltipProvider>
                       <Tooltip>
                         <TooltipTrigger asChild>
-                          <TabsTrigger value="scriptsig" className="text-[10px] h-6">SCRIPTSIG</TabsTrigger>
+                          <TabsTrigger value="scriptsig" className="text-[10px]">ScriptSig</TabsTrigger>
                         </TooltipTrigger>
                         <TooltipContent>
                           <p className="text-xs max-w-xs">
@@ -271,10 +271,10 @@ export function TransactionInputs({ inputs, outputs, transactionVersion, transac
                           onValueChange={(v) => setInputEncodingView(input.index, v)}
                           className="w-full"
                         >
-                          <TabsList className="grid w-full grid-cols-3 h-7">
-                            <TabsTrigger value="ascii" className="text-[10px] h-6">ASCII</TabsTrigger>
-                            <TabsTrigger value="script" className="text-[10px] h-6">SCRIPT</TabsTrigger>
-                            <TabsTrigger value="hex" className="text-[10px] h-6">HEX</TabsTrigger>
+                          <TabsList className="grid w-full grid-cols-3">
+                            <TabsTrigger value="ascii" className="text-[10px]">ASCII</TabsTrigger>
+                            <TabsTrigger value="script" className="text-[10px]">Script</TabsTrigger>
+                            <TabsTrigger value="hex" className="text-[10px]">Hex</TabsTrigger>
                           </TabsList>
 
                           <TabsContent value="ascii">
@@ -307,10 +307,10 @@ export function TransactionInputs({ inputs, outputs, transactionVersion, transac
                       onValueChange={(v) => setInputEncodingView(input.index, v)}
                       className="w-full"
                     >
-                      <TabsList className="grid w-full grid-cols-3 h-7">
-                        <TabsTrigger value="ascii" className="text-[10px] h-6">ASCII</TabsTrigger>
-                        <TabsTrigger value="script" className="text-[10px] h-6">SCRIPT</TabsTrigger>
-                        <TabsTrigger value="hex" className="text-[10px] h-6">HEX</TabsTrigger>
+                      <TabsList className="grid w-full grid-cols-3">
+                        <TabsTrigger value="ascii" className="text-[10px]">ASCII</TabsTrigger>
+                        <TabsTrigger value="script" className="text-[10px]">Script</TabsTrigger>
+                        <TabsTrigger value="hex" className="text-[10px]">Hex</TabsTrigger>
                       </TabsList>
 
                       <TabsContent value="ascii">

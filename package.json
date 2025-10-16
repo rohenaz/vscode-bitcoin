@@ -191,6 +191,11 @@
         "category": "Bitcoin"
       },
       {
+        "command": "bitcoin.insertKey",
+        "title": "Insert Key at Cursor",
+        "category": "Bitcoin"
+      },
+      {
         "command": "bitcoin.encrypt",
         "title": "Encrypt Data",
         "category": "Bitcoin"
@@ -619,8 +624,10 @@
     "@types/bun": "^1.3.0",
     "bitcoin-backup": "^0.0.3",
     "bsv-bap": "^0.1.12",
+    "fake-indexeddb": "^6.2.3",
     "js-1sat-ord": "^0.1.82",
-    "node-fetch": "^3.3.2"
+    "node-fetch": "^3.3.2",
+    "spv-store": "^0.1.86"
   },
   "optionalDependencies": {
     "bmapjs": "^0.4.0",

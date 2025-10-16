@@ -6,10 +6,11 @@ import { AppRoutes, getInitialRouterEntry } from './router'
 // Declare global panel type and initial data
 declare global {
   interface Window {
-    PANEL_TYPE?: 'key-vault' | 'bitcoin-tools' | 'transaction-decoder' | 'script-executor';
+    PANEL_TYPE?: 'key-vault' | 'bitcoin-tools' | 'transaction-decoder' | 'transaction-parser' | 'script-executor';
     INITIAL_DATA?: {
       txid?: string;
       inputIndex?: number;
+      rawTxHex?: string;
       [key: string]: any;
     };
   }

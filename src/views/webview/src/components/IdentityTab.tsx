@@ -79,9 +79,11 @@ interface LocalIdentity {
 export function IdentityTab() {
   const [identities, setIdentities] = useState<LocalIdentity[]>([]);
   const [isDiscovering, setIsDiscovering] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [newIdentityName, setNewIdentityName] = useState('');
   const [hasIdentityKey, setHasIdentityKey] = useState(true);
   const [isMasterKey, setIsMasterKey] = useState(true);
+  const [identityKeyLabel, setIdentityKeyLabel] = useState<string>('Identity Key');
 
   useEffect(() => {
     // Request current identities on mount
@@ -95,6 +97,8 @@ export function IdentityTab() {
           setIdentities(message.identities);
           setHasIdentityKey(message.hasIdentityKey ?? true);
           setIsMasterKey(message.isMasterKey ?? true);
+          setIdentityKeyLabel(message.identityKeyLabel || 'Identity Key');
+          setIsRefreshing(false);
           break;
         case 'identityUpdated':
           // Update a specific identity in the list
@@ -151,26 +155,76 @@ export function IdentityTab() {
     });
   };
 
+  const handleRefresh = () => {
+    if (isRefreshing) return;
+    setIsRefreshing(true);
+    vscode.postMessage({ type: 'getIdentities' });
+  };
+
+  const handleOpenKeyVault = () => {
+    vscode.postMessage({
+      type: 'openKeyVault',
+      data: { scrollTo: 'ID' }
+    });
+  };
+
   return (
     <div className="identity-container">
-      {/* Header Bar */}
+      {/* Header Bar with Key and Refresh Buttons */}
       <div className="flex items-center justify-between mb-2 pb-2 border-b">
         <div className="flex items-center gap-2">
-          <UserCircle className="h-4 w-4" />
-          <span className="text-xs font-medium">BAP Identities</span>
+          {/* Identity Key Button */}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleOpenKeyVault}
+            className="relative"
+          >
+            <div className="flex items-center gap-2">
+              {/* ID designation indicator */}
+              <div className={`h-2 w-2 rounded-full ${
+                isRefreshing
+                  ? 'bg-chart-2 animate-pulse'
+                  : hasIdentityKey
+                    ? 'bg-chart-2'
+                    : 'bg-muted-foreground/30'
+              }`} />
+              <UserCircle className="h-3 w-3" />
+              <span className="text-xs">
+                {hasIdentityKey ? identityKeyLabel : 'No Identity Key'}
+              </span>
+            </div>
+          </Button>
         </div>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={handleDiscoverIdentities}
-          disabled={isDiscovering}
-        >
-          {isDiscovering ? (
-            <RefreshCw className="h-3 w-3 animate-spin" />
-          ) : (
-            <Search className="h-3 w-3" />
-          )}
-        </Button>
+
+        <div className="flex items-center gap-2">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleDiscoverIdentities}
+            disabled={isDiscovering}
+            title="Discover identities on-chain"
+          >
+            {isDiscovering ? (
+              <Loader2 className="h-3 w-3 animate-spin" />
+            ) : (
+              <Search className="h-3 w-3" />
+            )}
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleRefresh}
+            disabled={isRefreshing}
+            title="Refresh identities"
+          >
+            {isRefreshing ? (
+              <RefreshCw className="h-3 w-3 animate-spin" />
+            ) : (
+              <RefreshCw className="h-3 w-3" />
+            )}
+          </Button>
+        </div>
       </div>
 
       {/* No Identity Key Warning */}

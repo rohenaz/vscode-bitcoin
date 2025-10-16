@@ -1,6 +1,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { Transaction, Utils } from '@bsv/sdk';
+import { fetchPayUtxos } from 'js-1sat-ord';
 import vsApi from '../vsShim';
 import { JUNGLEBUS_API_HOST } from '../constants';
 
@@ -76,6 +77,14 @@ export interface CacheStats {
   maxSizeMB: number;
   transactionCount: number;
   utilizationPercent: number;
+}
+
+export interface Utxo {
+  txid: string;
+  vout: number;
+  satoshis: number;
+  script: string; // base64 encoded
+  lock?: { address: string; until: number };
 }
 
 /**
@@ -548,12 +557,29 @@ export class TxCache {
           sourceTXID = input.sourceTransaction.id('hex') as string;
         }
 
+        // Get locking script and satoshis from source transaction output
+        let lockingScript = '';
+        let lockingScriptAsm = '';
+        let satoshis = 0;
+
+        if (input.sourceTransaction && input.sourceOutputIndex !== undefined) {
+          const sourceOutput = input.sourceTransaction.outputs[input.sourceOutputIndex];
+          if (sourceOutput) {
+            lockingScript = sourceOutput.lockingScript ? sourceOutput.lockingScript.toHex() : '';
+            lockingScriptAsm = sourceOutput.lockingScript ? sourceOutput.lockingScript.toASM() : '';
+            satoshis = sourceOutput.satoshis || 0;
+          }
+        }
+
         return {
           index,
           sourceTXID,
           sourceOutputIndex: input.sourceOutputIndex,
           unlockingScript: input.unlockingScript ? input.unlockingScript.toHex() : '',
           unlockingScriptAsm: input.unlockingScript ? input.unlockingScript.toASM() : '',
+          lockingScript,
+          lockingScriptAsm,
+          satoshis,
           sequence: input.sequence || 0xffffffff
         };
       }),
@@ -730,6 +756,42 @@ export class TxCache {
    */
   getCacheDir(): string {
     return this.transactionsDir;
+  }
+
+  // ============================================================================
+  // UTXO MANAGEMENT
+  // Fetches from API and caches source transactions (no redundant UTXO storage)
+  // ============================================================================
+
+  /**
+   * Get UTXOs for address - fetches from API and caches source transactions
+   */
+  async getUtxos(address: string): Promise<Utxo[]> {
+    console.log(`[TxCache] Fetching UTXOs for ${address}`);
+
+    // Fetch UTXOs from API
+    const utxos = await fetchPayUtxos(address, 'base64');
+
+    // Cache source transactions
+    const uniqueTxids = [...new Set(utxos.map(u => u.txid))];
+    console.log(`[TxCache] Caching ${uniqueTxids.length} source transactions`);
+
+    for (const txid of uniqueTxids) {
+      if (this.get(txid)) {
+        console.log(`[TxCache] Source tx ${txid} already cached, skipping`);
+        continue;
+      }
+
+      console.log(`[TxCache] Fetching source tx ${txid}...`);
+      try {
+        await this.fetch(txid, 'main');
+        console.log(`[TxCache] Successfully cached source tx ${txid}`);
+      } catch (error) {
+        console.error(`[TxCache] Failed to cache source tx ${txid}:`, error);
+      }
+    }
+
+    return utxos;
   }
 }
 

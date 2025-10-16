@@ -49,6 +49,20 @@ export function BitcoinToolsPanel() {
     }
   }, [])
 
+  // Listen for tab switching commands from backend
+  useEffect(() => {
+    const handleMessage = (event: MessageEvent) => {
+      const { command, tab } = event.data
+
+      if (command === 'switchToTab' && tab) {
+        setActiveTab(tab)
+      }
+    }
+
+    window.addEventListener('message', handleMessage)
+    return () => window.removeEventListener('message', handleMessage)
+  }, [])
+
   return (
     <VaultProvider>
       <div className="w-full">

@@ -1,5 +1,6 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { TransactionDecoderPanel } from './panels/TransactionDecoderPanel'
+import { TransactionParserPanel } from './panels/TransactionParserPanel'
 import { ScriptDebuggerPanel } from './panels/ScriptDebuggerPanel'
 import { KeyVaultPanel } from './panels/KeyVaultPanel'
 import { BitcoinToolsPanel } from './panels/BitcoinToolsPanel'
@@ -16,6 +17,9 @@ export function AppRoutes() {
       {/* Transaction Decoder Routes */}
       <Route path="/decoder" element={<TransactionDecoderPanel />} />
       <Route path="/decoder/:txid" element={<TransactionDecoderPanel />} />
+
+      {/* Transaction Parser Route */}
+      <Route path="/parser" element={<TransactionParserPanel />} />
 
       {/* Script Debugger Routes */}
       <Route path="/debugger" element={<ScriptDebuggerPanel />} />
@@ -41,6 +45,8 @@ function getDefaultRoute(): string {
       return '/tools'
     case 'transaction-decoder':
       return '/decoder'
+    case 'transaction-parser':
+      return '/parser'
     case 'script-executor':
       return '/debugger'
     default:

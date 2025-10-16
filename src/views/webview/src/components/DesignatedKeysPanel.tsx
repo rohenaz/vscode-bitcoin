@@ -6,6 +6,7 @@ import { Copy } from 'lucide-react'
 import type { KeyEntry } from '../types'
 import { getVscode } from '../vscode'
 import { PrivateKey } from '@bsv/sdk'
+import { BAP, MemberID } from 'bsv-bap'
 
 interface DesignatedKeysPanelProps {
   keys: KeyEntry[]
@@ -41,16 +42,58 @@ export function DesignatedKeysPanel({ keys, onScrollToKey }: DesignatedKeysPanel
   }
 
   const getBapId = (key: KeyEntry): string | null => {
-    if (key.metadata?.bapIds) {
-      try {
-        const idsObj = JSON.parse(key.metadata.bapIds)
-        const idsList = idsObj.ids || []
-        if (idsList.length > 0) return idsList[0].idKey || null
-      } catch (e) {}
+    try {
+      // Check for BAP master key (has multiple bapIds)
+      if (key.metadata?.bapIds) {
+        try {
+          // Initialize BAP based on key type
+          let bap: BAP
+          if (key.type === 'hdprivate') {
+            // Legacy BIP32 mode - use xprv string
+            bap = new BAP(key.value)
+          } else {
+            // Type 42 mode - use rootPk
+            bap = new BAP({ rootPk: key.value })
+          }
+
+          bap.importIds(key.metadata.bapIds)
+          const ids = bap.listIds()
+          if (ids.length > 0) {
+            // Return the first identity key
+            return ids[0]
+          }
+        } catch (e) {
+          console.warn('Failed to resolve BAP master identity:', e)
+        }
+      }
+
+      // Check for BAP member key (has single bapId)
+      if (key.metadata?.bapId) {
+        try {
+          const member = MemberID.fromBackup({
+            wif: key.value,
+            id: key.metadata.bapId
+          })
+          return member.identityKey || null
+        } catch (e) {
+          console.warn('Failed to resolve BAP member identity:', e)
+        }
+      }
+
+      // Fallback: derive idKey from WIF for new identity keys without BAP data
+      if (key.type === 'wif') {
+        try {
+          const bap = new BAP({ rootPk: key.value })
+          const identity = bap.newId('temp')
+          return identity.getIdentityKey() || null
+        } catch (e) {
+          console.warn('Failed to derive identity key:', e)
+        }
+      }
+    } catch (e) {
+      console.error('Error in getBapId:', e)
     }
-    if (key.metadata?.bapId) {
-      return key.metadata.bapId
-    }
+
     return null
   }
 

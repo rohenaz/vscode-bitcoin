@@ -222,7 +222,7 @@ export function KeyCard({ keyEntry }: KeyCardProps) {
 
           <CardAction>
             <div className="flex items-center gap-1">
-              {(keyEntry.type === 'wif' || keyEntry.type === 'private' || keyEntry.type === 'encryption') && (
+              {(keyEntry.type === 'wif' || keyEntry.type === 'private' || keyEntry.type === 'encryption' || keyEntry.type === 'hdprivate') && (
                 <ToggleGroup
                   type="multiple"
                   variant="outline"
@@ -258,15 +258,19 @@ export function KeyCard({ keyEntry }: KeyCardProps) {
                     }
                   }}
                 >
-                  <ToggleGroupItem
-                    value="encryption"
-                    aria-label="Toggle encryption"
-                    title={keyEntry.isEncryptionKey ? 'Clear encryption key' : 'Set as encryption key'}
-                    className="text-xs data-[state=on]:bg-chart-5/20 data-[state=on]:text-chart-5"
-                  >
-                    ENC
-                  </ToggleGroupItem>
+                  {/* ENC: Only show for wif/private/encryption, not hdprivate */}
+                  {keyEntry.type !== 'hdprivate' && (
+                    <ToggleGroupItem
+                      value="encryption"
+                      aria-label="Toggle encryption"
+                      title={keyEntry.isEncryptionKey ? 'Clear encryption key' : 'Set as encryption key'}
+                      className="text-xs data-[state=on]:bg-chart-5/20 data-[state=on]:text-chart-5"
+                    >
+                      ENC
+                    </ToggleGroupItem>
+                  )}
 
+                  {/* WLT/ORD: Only for wif keys */}
                   {keyEntry.type === 'wif' && (
                     <>
                       <ToggleGroupItem
@@ -286,16 +290,19 @@ export function KeyCard({ keyEntry }: KeyCardProps) {
                       >
                         ORD
                       </ToggleGroupItem>
-
-                      <ToggleGroupItem
-                        value="identity"
-                        aria-label="Toggle identity"
-                        title={keyEntry.isIdentityKey ? 'Clear identity key' : 'Set as identity key'}
-                        className="text-xs data-[state=on]:bg-chart-2/20 data-[state=on]:text-chart-2"
-                      >
-                        ID
-                      </ToggleGroupItem>
                     </>
+                  )}
+
+                  {/* ID: Show for wif and hdprivate */}
+                  {(keyEntry.type === 'wif' || keyEntry.type === 'hdprivate') && (
+                    <ToggleGroupItem
+                      value="identity"
+                      aria-label="Toggle identity"
+                      title={keyEntry.isIdentityKey ? 'Clear identity key' : 'Set as identity key'}
+                      className="text-xs data-[state=on]:bg-chart-2/20 data-[state=on]:text-chart-2"
+                    >
+                      ID
+                    </ToggleGroupItem>
                   )}
                 </ToggleGroup>
               )}

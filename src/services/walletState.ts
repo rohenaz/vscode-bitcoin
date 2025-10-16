@@ -4,6 +4,7 @@ import { ordinalsService } from './ordinalsService';
 import type { NftUtxo } from 'js-1sat-ord';
 import type { TokenBalance, Collection } from './ordinalsService';
 import vsApi from '../vsShim';
+import { syncManager } from './syncManager';
 
 export interface WalletState {
   fundingKey: {
@@ -82,6 +83,9 @@ class WalletStateManager {
     // Update vault lock status immediately using direct property check
     this.state.isVaultLocked = !vault.isUnlocked;
     this.pushState();
+
+    // Register for periodic balance refreshes during sync (yours-wallet pattern)
+    syncManager.registerBalanceRefresh(() => this.refreshBalance());
 
     // Don't load funding key automatically - wait for explicit request from wallet tab
     // await this.loadFundingKey();
@@ -242,6 +246,38 @@ class WalletStateManager {
     this.bsv20AbortController = null;
     this.bsv21AbortController?.abort();
     this.bsv21AbortController = null;
+  }
+
+  private async registerSyncListeners(): Promise<void> {
+    try {
+      const { getSpvService } = await import('./spvService');
+      const spvService = getSpvService();
+
+      if (spvService.isInitialized()) {
+        spvService.registerSyncListeners((data) => {
+          const progress = data.currentHeight > 0
+            ? Math.round((data.lastHeight / data.currentHeight) * 100)
+            : 0;
+
+          this.state.syncStatus = {
+            isSyncing: progress < 100,
+            currentHeight: data.currentHeight,
+            targetHeight: data.lastHeight,
+            progress
+          };
+
+          this.pushState();
+
+          // Mark as not syncing when complete
+          if (progress >= 100) {
+            this.state.syncStatus.isSyncing = false;
+            this.pushState();
+          }
+        });
+      }
+    } catch (error) {
+      console.error('[WalletState] Error registering sync listeners:', error);
+    }
   }
 
   async refreshBalance(): Promise<void> {

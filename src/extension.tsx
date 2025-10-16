@@ -1,3 +1,6 @@
+// IMPORTANT: This must be the FIRST import to enable IndexedDB in Node.js
+import 'fake-indexeddb/auto';
+
 import { ECIES, HD, P2PKH, PrivateKey, PublicKey, Utils } from '@bsv/sdk';
 import vsApi from 'vscode';
 import { BitcoinHoverProvider } from './hoverProvider';
@@ -31,6 +34,7 @@ import { API_HOST } from './constants';
 import { EncryptionService } from './encryption';
 import { KeyPanel } from './views/keyVault/index';
 import { TransactionDecoderPanel } from './views/transactionDecoder/index';
+import { TransactionParserPanel } from './views/transactionParser/index';
 import { ScriptDebuggerPanel } from './views/scriptDebugger/index';
 import { KeyVault } from './keyVault';
 import { OutputManager } from './output';
@@ -50,6 +54,10 @@ import { generateHDPrivateKey } from './commands/generateHDPrivateKey';
 import { resetExtension } from './commands/resetExtension';
 import { signOpReturnData } from './commands/signOpReturnData';
 import { sendTransaction } from './commands/sendTransaction';
+import { insertKey } from './commands/insertKey';
+import { initSpvService, destroySpvService, getSpvService } from './services/spvService';
+import { syncManager } from './services/syncManager';
+import { SpvCacheService } from './services/spvCache';
 
 const { fromBase58Check, toBase64, toArray } = Utils;
 
@@ -264,6 +272,49 @@ export async function activate(context: ExtensionContext) {
   const encryptionService = new EncryptionService(keyVault);
   const outputManager = new OutputManager();
 
+  // Initialize SPV service for UTXO tracking and transaction caching
+  // Note: Service is initialized here, but actual SPV store initialization happens
+  // lazily when first needed (when we have user addresses)
+  initSpvService('mainnet');
+
+  // Initialize SPV cache service for backup/restore
+  const spvCache = new SpvCacheService(context);
+  getSpvService().setCacheService(spvCache);
+
+  // Create status bar item for SPV sync progress
+  const syncStatusBar = vsApi.window.createStatusBarItem(vsApi.StatusBarAlignment.Left, 100);
+  syncStatusBar.hide();
+  context.subscriptions.push(syncStatusBar);
+
+  // Register sync progress handler
+  const handleSyncProgress = (data: { currentHeight: number; lastHeight: number }) => {
+    const percent = data.currentHeight > 0
+      ? Math.round((data.lastHeight / data.currentHeight) * 100)
+      : 0;
+
+    if (percent < 100) {
+      // Start periodic balance refresh if not already started
+      if (!syncManager.getIsSyncing()) {
+        syncManager.startPeriodicRefresh();
+      }
+
+      syncStatusBar.text = `$(sync~spin) Syncing blocks: ${data.lastHeight.toLocaleString()}/${data.currentHeight.toLocaleString()} (${percent}%)`;
+      syncStatusBar.show();
+    } else {
+      // Stop periodic refresh and do final refresh
+      syncManager.stopPeriodicRefresh();
+
+      syncStatusBar.text = `$(check) SPV sync complete`;
+      syncStatusBar.show();
+      setTimeout(() => {
+        syncStatusBar.hide();
+      }, 3000);
+    }
+  };
+
+  // Set the global sync progress handler
+  syncManager.setProgressHandler(handleSyncProgress);
+
   // Lazy workspace manager getter
   let _workspaceManager: WorkspaceManager | undefined;
   const getWorkspaceManager = () => {
@@ -280,6 +331,19 @@ export async function activate(context: ExtensionContext) {
       BitcoinToolsViewProvider.viewType,
       bitcoinToolsViewProvider,
     ),
+  );
+
+  // Register showToolsPanel command - reveals view and optionally switches to a specific tab
+  context.subscriptions.push(
+    vsApi.commands.registerCommand('bitcoin.showToolsPanel', async (options?: { tab?: string }) => {
+      // Reveal the Bitcoin Tools panel
+      await vsApi.commands.executeCommand('bitcoin.toolsView.focus');
+
+      // If a tab is specified, send message to switch to that tab
+      if (options?.tab) {
+        bitcoinToolsViewProvider.switchToTab(options.tab);
+      }
+    }),
   );
 
   // Register openConversionTool command - just opens the tool with selected text
@@ -349,6 +413,15 @@ export async function activate(context: ExtensionContext) {
     },
   );
   context.subscriptions.push(openTransactionDecoderCommand);
+
+  // Register transaction parser panel command
+  const openTransactionParserCommand = vsApi.commands.registerCommand(
+    'bitcoin.openTransactionParser',
+    async (rawTxHex?: string) => {
+      TransactionParserPanel.show(context.extensionUri, rawTxHex);
+    },
+  );
+  context.subscriptions.push(openTransactionParserCommand);
 
   // Register script executor panel command
   const openScriptDebuggerCommand = vsApi.commands.registerCommand(
@@ -746,6 +819,19 @@ export async function activate(context: ExtensionContext) {
     }),
   );
 
+  // Register insert key command
+  context.subscriptions.push(
+    vsApi.commands.registerCommand('bitcoin.insertKey', async () => {
+      try {
+        await insertKey(keyVault);
+      } catch (error) {
+        vsApi.window.showErrorMessage(
+          `Failed to insert key: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+    }),
+  );
+
   // Register BAP profile lookup command
   registerCommand(
     context,
@@ -962,4 +1048,7 @@ export async function activate(context: ExtensionContext) {
 }
 
 // this method is called when your extension is deactivated
-export function deactivate() { }
+export async function deactivate() {
+  // Cleanup SPV service
+  await destroySpvService();
+}

@@ -4,12 +4,13 @@ import * as path from 'path';
 import * as fs from 'fs';
 import type { KeyVault } from '../../keyVault';
 import { walletState } from '../../services/walletState';
+import { syncManager } from '../../services/syncManager';
 import { transactionService, TransactionError } from '../../services/transactionService';
 import { ordinalsService } from '../../services/ordinalsService';
 import { tokenTransferService } from '../../services/tokenTransferService';
 import { ordinalTransferService } from '../../services/ordinalTransferService';
 import { mintService } from '../../services/mintService';
-import { PrivateKey, Script, Transaction, LockingScript, UnlockingScript, Utils, OP, P2PKH } from '@bsv/sdk';
+import { PrivateKey, Script, Transaction, LockingScript, UnlockingScript, OP, P2PKH, SatoshisPerKilobyte, TransactionOutput } from '@bsv/sdk';
 import type { VaultBackup } from 'bitcoin-backup';
 import { encryptBackup, decryptBackup } from 'bitcoin-backup';
 import { detectFormat, convertData, buildAsmFromChunks } from '../../utils';
@@ -20,7 +21,6 @@ import { MARKET_API_HOST } from '../../constants';
 import { createIdentitySigner } from '../../utils/identitySigner';
 import type { LocalSigner } from 'js-1sat-ord';
 import { txCache } from '../../services/txCache';
-import { fetchPayUtxos } from '../../commands/sendTransaction';
 
 export class BitcoinToolsViewProvider implements vscode.WebviewViewProvider {
   public static readonly viewType = 'bitcoin.toolsView';
@@ -39,11 +39,12 @@ export class BitcoinToolsViewProvider implements vscode.WebviewViewProvider {
       }
     });
 
-    // Listen for key changes to update vault stats
+    // Listen for key changes to update vault stats and identities
     this._vault.onDidChangeKeys(() => {
       if (this._view) {
-        console.log('[BitcoinToolsView] Keys changed, broadcasting vault stats');
+        console.log('[BitcoinToolsView] Keys changed, broadcasting vault stats and identities');
         this.handleGetVaultStats(this._view);
+        this.handleGetIdentities(this._view);
       }
     });
   }
@@ -66,6 +67,28 @@ export class BitcoinToolsViewProvider implements vscode.WebviewViewProvider {
       console.warn('[BitcoinToolsView] Failed to get identity signer:', error);
       return undefined;
     }
+  }
+
+  /**
+   * Switch to a specific tab in the Bitcoin Tools panel
+   */
+  public switchToTab(tabName: string): void {
+    if (!this._view) {
+      console.warn('[BitcoinToolsView] Cannot switch tab: view not initialized');
+      return;
+    }
+
+    this._view.webview.postMessage({
+      command: 'switchToTab',
+      tab: tabName
+    });
+  }
+
+  public refreshBalance(): void {
+    // Trigger a balance refresh when SPV sync completes
+    walletState.refreshAllData().catch(err => {
+      console.error('[BitcoinToolsView] Error refreshing balance:', err);
+    });
   }
 
   public resolveWebviewView(
@@ -231,6 +254,12 @@ export class BitcoinToolsViewProvider implements vscode.WebviewViewProvider {
           return;
         }
 
+        // Handle open transaction in parser
+        if (message.type === 'transaction:openParser') {
+          vscode.commands.executeCommand('bitcoin.openTransactionParser', message.data?.rawTxHex);
+          return;
+        }
+
         // Handle decode history messages
         if (message.type === 'decodeHistory:get') {
           const history = txCache.listAll().map(tx => ({
@@ -321,6 +350,9 @@ export class BitcoinToolsViewProvider implements vscode.WebviewViewProvider {
                 type: 'decodeHistory:rawTx',
                 data: { txid, rawTx }
               });
+            } else if (action === 'parse') {
+              // Open transaction parser with raw tx hex
+              vscode.commands.executeCommand('bitcoin.openTransactionParser', rawTx);
             } else {
               // Copy to clipboard
               await vscode.env.clipboard.writeText(rawTx);
@@ -1931,7 +1963,8 @@ export class BitcoinToolsViewProvider implements vscode.WebviewViewProvider {
           type: 'identitiesUpdated',
           identities: [],
           hasIdentityKey: false,
-          isMasterKey: false
+          isMasterKey: false,
+          identityKeyLabel: 'Identity Key'
         });
         return;
       }
@@ -1955,7 +1988,8 @@ export class BitcoinToolsViewProvider implements vscode.WebviewViewProvider {
         type: 'identitiesUpdated',
         identities: initialIdentities,
         hasIdentityKey: true,
-        isMasterKey
+        isMasterKey,
+        identityKeyLabel: identityKey.label || 'Identity Key'
       });
 
       // Enrich each identity progressively
@@ -2296,7 +2330,7 @@ export class BitcoinToolsViewProvider implements vscode.WebviewViewProvider {
           progress.report({ message: 'Creating ALIAS transaction' });
 
           // Create ALIAS transaction
-          const signedOpReturn = bapService.createAliasTransaction(idKey, draft.identity);
+          const signedOpReturn = bapService.createAliasData(idKey, draft.identity);
           if (!signedOpReturn) {
             throw new Error('Failed to create ALIAS transaction');
           }
@@ -2334,70 +2368,127 @@ export class BitcoinToolsViewProvider implements vscode.WebviewViewProvider {
             lockingScript: opReturnScript
           });
 
-          // Fetch UTXOs
-          const utxos = await fetchPayUtxos(address, 'hex');
-          if (utxos.length === 0) {
-            throw new Error('No UTXOs available for funding');
+          // Initialize SPV service if not already initialized
+          const { getSpvService } = await import('../../services/spvService');
+          const spvService = getSpvService();
+          if (!spvService.isInitialized()) {
+            progress.report({ message: 'Initializing wallet storage' });
+            await spvService.initialize('default', [address], 'mainnet');
+            // Start sync in background with progress tracking
+            spvService.startSync(syncManager.getProgressHandler()).catch(err => console.error('[BAP] Sync error:', err));
           }
 
-          // Sort and select UTXOs
+          // Fetch UTXOs from SPV store
+          progress.report({ message: 'Fetching UTXOs' });
+          const spvUtxos = await spvService.getUtxos(address);
+
+          if (spvUtxos.length === 0) {
+            throw new Error('No UTXOs available for funding. Please fund your wallet.');
+          }
+
+          // Convert spv-store Txo format to our UTXO format (bigint → number)
+          const utxos = spvUtxos.map(txo => ({
+            txid: txo.outpoint.txid,
+            vout: txo.outpoint.vout,
+            satoshis: Number(txo.satoshis), // Convert bigint to number
+            script: Buffer.from(txo.script).toString('base64')
+          }));
+
+          // Sort UTXOs largest first
           const sortedUtxos = utxos.sort((a, b) => b.satoshis - a.satoshis);
-          const estimatedFee = 500; // Estimate fee
-          let selectedAmount = 0;
-          const selectedUtxos = [];
+
+          // Add inputs iteratively until we have enough (pattern from js-1sat-ord sendUtxos.ts)
+          progress.report({ message: 'Selecting UTXOs' });
+          const selectedUtxos: typeof utxos = [];
+          let totalSatsIn = 0;
+          const totalSatsOut = tx.outputs.reduce((sum, out) => sum + (out.satoshis || 0), 0);
+          console.log(`[BitcoinTools] Initial state - totalSatsOut: ${totalSatsOut}, OP_RETURN satoshis: ${tx.outputs[0]?.satoshis}`);
+
+          const feeModel = new SatoshisPerKilobyte(10);
+          let currentFee = 0;
 
           for (const utxo of sortedUtxos) {
-            selectedUtxos.push(utxo);
-            selectedAmount += utxo.satoshis;
-            if (selectedAmount >= estimatedFee) break;
-          }
+            console.log(`[BitcoinTools] Processing UTXO: ${utxo.txid}_${utxo.vout}, satoshis: ${utxo.satoshis}`);
 
-          if (selectedAmount < estimatedFee) {
-            throw new Error(`Insufficient funds. Required: ${estimatedFee}, Available: ${selectedAmount}`);
-          }
-
-          // Fetch source transactions for each UTXO
-          progress.report({ message: 'Fetching source transactions' });
-          const sourceTransactions = new Map<string, Transaction>();
-
-          for (const utxo of selectedUtxos) {
-            if (!sourceTransactions.has(utxo.txid)) {
-              // Fetch the source transaction
-              const txRes = await fetch(`https://api.whatsonchain.com/v1/bsv/main/tx/${utxo.txid}/hex`);
-              if (!txRes.ok) {
-                throw new Error(`Failed to fetch source transaction ${utxo.txid}`);
-              }
-              const txHex = await txRes.text();
-              const sourceTx = Transaction.fromHex(txHex);
-              sourceTransactions.set(utxo.txid, sourceTx);
-            }
-          }
-
-          // Add inputs with source transactions
-          for (const utxo of selectedUtxos) {
-            const sourceTransaction = sourceTransactions.get(utxo.txid);
+            // Fetch source transaction from SPV store
+            console.log(`[BitcoinTools] Fetching source tx ${utxo.txid} from SPV store...`);
+            const sourceTx = await spvService.getTx(utxo.txid);
             tx.addInput({
               sourceTXID: utxo.txid,
               sourceOutputIndex: utxo.vout,
-              sourceTransaction: sourceTransaction,
+              sourceTransaction: sourceTx,
               unlockingScriptTemplate: new P2PKH().unlock(privateKey),
               sequence: 0xffffffff
             });
+
+            selectedUtxos.push(utxo);
+            totalSatsIn += utxo.satoshis;
+            console.log(`[BitcoinTools] Added input, totalSatsIn now: ${totalSatsIn}`);
+
+            // Compute fee after adding this input
+            console.log(`[BitcoinTools] Computing fee...`);
+            currentFee = await feeModel.computeFee(tx);
+            console.log(`[BitcoinTools] Fee computed: ${currentFee}, totalSatsIn: ${totalSatsIn}, totalSatsOut: ${totalSatsOut}, need: ${totalSatsOut + currentFee}`);
+
+            // Stop if we have enough to cover outputs + fee
+            if (totalSatsIn >= totalSatsOut + currentFee) {
+              console.log(`[BitcoinTools] Sufficient funds, stopping UTXO selection`);
+              break;
+            }
           }
 
-          // Add change output
-          const change = selectedAmount - estimatedFee;
-          if (change > 0) {
-            tx.addOutput({
-              satoshis: change,
-              lockingScript: new P2PKH().lock(address)
-            });
+          // Check if we have enough funds
+          if (totalSatsIn < totalSatsOut + currentFee) {
+            throw new Error(
+              `Not enough funds. Need ${totalSatsOut + currentFee} satoshis (outputs: ${totalSatsOut}, fee: ${currentFee}), have ${totalSatsIn}`
+            );
           }
 
-          // Sign all inputs
+          // Add change output with change: true (SDK will calculate amount)
+          tx.addOutput({
+            lockingScript: new P2PKH().lock(address),
+            change: true
+          });
+
+          // Calculate fee and distribute change
+          progress.report({ message: 'Calculating fees' });
+          console.log(`[BitcoinTools] Before fee calculation - change output satoshis:`, tx.outputs.find(o => o.change)?.satoshis);
+          await tx.fee(feeModel);
+          console.log(`[BitcoinTools] After fee calculation - change output satoshis:`, tx.outputs.find(o => o.change)?.satoshis);
+
+          // Sign transaction
           await tx.sign();
+          console.log(`[BitcoinTools] After signing - change output satoshis:`, tx.outputs.find(o => o.change)?.satoshis);
+
+          // Log change output details for debugging
+          const changeOutputIdx = tx.outputs.findIndex(o => o.change === true);
+          console.log(`[BitcoinTools] Change output details:`, {
+            idx: changeOutputIdx,
+            satoshis: changeOutputIdx >= 0 ? tx.outputs[changeOutputIdx].satoshis : 'N/A',
+            type: changeOutputIdx >= 0 ? typeof tx.outputs[changeOutputIdx].satoshis : 'N/A',
+            totalInputs: totalSatsIn,
+            totalOutputs: totalSatsOut,
+            calculatedChange: totalSatsIn - totalSatsOut - currentFee
+          });
+
+          // Note: SPV store will automatically track this transaction when it's broadcast
+          // and update UTXO states accordingly
+          console.log(`[BitcoinTools] Transaction ready for broadcast: ${tx.id('hex')}`);
 
           const rawTx = tx.toHex();
+
+          // Debug: inspect all outputs before serialization
+          console.log(`[BitcoinTools] Transaction outputs BEFORE toHex():`);
+          tx.outputs.forEach((out, idx) => {
+            console.log(`  Output ${idx}:`, {
+              satoshis: out.satoshis,
+              satoshisType: typeof out.satoshis,
+              change: out.change,
+              scriptLength: out.lockingScript?.toBinary()?.length || 0
+            });
+          });
+
+          console.log(`[BitcoinTools] Raw transaction: ${rawTx}`);
 
           progress.report({ message: 'Checking broadcast setting' });
 

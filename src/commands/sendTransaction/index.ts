@@ -3,6 +3,7 @@ import type { KeyVault } from '../../keyVault';
 import type { OutputManager } from '../../output';
 import vsApi from '../../vsShim';
 import { API_HOST } from '../../constants';
+import { syncManager } from '../../services/syncManager';
 
 const { toArray, toHex, fromBase58Check } = Utils;
 
@@ -109,8 +110,21 @@ export async function sendTransaction(
     const estimatedFee = 300; // Estimate fee initially
     const totalRequired = outputTotal + estimatedFee;
 
-    // Fetch UTXOs using our new function
-    const utxos = await fetchPayUtxos(address, scriptEncoding);
+    // Fetch UTXOs using SPV store
+    const { getSpvService } = await import('../../services/spvService');
+    const spvService = getSpvService();
+    if (!spvService.isInitialized()) {
+      await spvService.initialize('default', [address], 'mainnet');
+      // Start sync in background with progress tracking
+      spvService.startSync(syncManager.getProgressHandler()).catch(err => console.error('[sendTx] Sync error:', err));
+    }
+    const spvUtxos = await spvService.getUtxos(address);
+    const utxos = spvUtxos.map(txo => ({
+      txid: txo.outpoint.txid,
+      vout: txo.outpoint.vout,
+      satoshis: Number(txo.satoshis), // Convert bigint to number
+      script: Buffer.from(txo.script).toString('base64')
+    }));
 
     // Sort UTXOs by value descending
     const sortedUtxos = utxos.sort((a, b) => b.satoshis - a.satoshis);
