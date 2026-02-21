@@ -1,5 +1,6 @@
 {
   "lockfileVersion": 1,
+  "configVersion": 0,
   "workspaces": {
     "": {
       "name": "bitcoin",
@@ -10,7 +11,7 @@
         "@mnee/ts-sdk": "^1.0.1",
         "@types/bun": "^1.2.23",
         "bitcoin-backup": "^0.0.3",
-        "bsv-bap": "^0.1.12",
+        "bsv-bap": "0.1.21",
         "js-1sat-ord": "^0.1.82",
         "node-fetch": "^3.3.2",
       },
@@ -352,7 +353,7 @@
 
     "bs58": ["bs58@4.0.1", "", { "dependencies": { "base-x": "^3.0.2" } }, "sha512-Ok3Wdf5vOIlBrgCvTq96gBkJw+JUEzdBgyaza5HLtPm7yTHkjRy8+JzNyHF7BHa0bNWOQIp3m5YF0nnFcOIKLw=="],
 
-    "bsv-bap": ["bsv-bap@0.1.12", "", { "dependencies": { "schema-dts": "^1.1.5" }, "peerDependencies": { "@bsv/sdk": "^1.6.1" } }, "sha512-pWFI6DWXtv6iedTgO17/3FO8SorN/1oj+g7iXvILb+51ldR0xbsUzXdvGUYArWSjX6IMXZ5m5fNNzeDLBJeQYg=="],
+    "bsv-bap": ["bsv-bap@0.1.21", "", { "dependencies": { "schema-dts": "^1.1.5" }, "peerDependencies": { "@bsv/sdk": "^1.3.18 || ^2.0.0" }, "bin": { "bap": "src/cli.ts" } }, "sha512-RVgP3yfIu11qmj3iuubC9BsUjjqdlmlhsw73j5VRh7BSDIrXAzGWy1yLly2p/jBPVxe26uYqR+jXhAGKbjR3dg=="],
 
     "btoa": ["btoa@1.2.1", "", { "bin": { "btoa": "bin/btoa.js" } }, "sha512-SB4/MIGlsiVkMcHmT+pSmIPoNDoHg+7cMzmt3Uxt628MTz2487DKSqK/fuhFBrkuqrYv5UCEnACpF4dTFNKc/g=="],
 
